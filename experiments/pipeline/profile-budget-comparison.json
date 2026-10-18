@@ -1,0 +1,276 @@
+{
+  "scope": "Separate profiled cohorts, not a paired throughput estimate. B132 and C96 native sources are identical; the benchmark harness adds the expert-GEMM SM budget.",
+  "limits": [
+    "Reply kernel intervals include GIN completion waits; their overlap is not continuous wire transfer.",
+    "Incoming RDMA can overlap expert GEMMs without a resident FFN transfer kernel; this analysis does not measure it.",
+    "PackRows intervals overlap GEMMs, but exact expert row counts were not saved; this remains candidate rather than strict nonempty proof.",
+    "Different profile lengths and times can change tail frequency; no root cause is assigned to an environmental difference."
+  ],
+  "workloads": [
+    {
+      "workload": "large",
+      "native_source_hashes_identical": true,
+      "common_prefix_requests": 36,
+      "common_prefix_request_metadata_identical": true,
+      "profiles": [
+        {
+          "profile": "nsight-requests-large",
+          "actual_gemm_grid_sizes": [
+            132
+          ],
+          "request_count": 36,
+          "requests_over_30ms": 0,
+          "strict_cross_request_reply_gemm_overlap_percent_by_ffn": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "pure_local_reduce_gemm_overlap_percent_by_ffn": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "candidate_pack_gemm_overlap_percent_by_ffn": [
+            10.249239708343309,
+            10.928235379558899,
+            10.98739533246059,
+            10.576368118517372
+          ],
+          "maximum_timed_ffn_kernel": {
+            "rank": 1,
+            "request": 17,
+            "slot": 1,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 2685.974,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "maximum_timed_source_kernel": {
+            "rank": 6,
+            "request": 10,
+            "slot": 0,
+            "phase": "collect",
+            "operation": "WaitRepliesReady",
+            "duration_us": 6821.976,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "profile": "nsight-budget96-large",
+          "actual_gemm_grid_sizes": [
+            96
+          ],
+          "request_count": 48,
+          "requests_over_30ms": 14,
+          "strict_cross_request_reply_gemm_overlap_percent_by_ffn": [
+            40.522503471539565,
+            38.28113681168903,
+            38.83069870349771,
+            38.18156442425723
+          ],
+          "pure_local_reduce_gemm_overlap_percent_by_ffn": [
+            1.8546145576789494,
+            1.6137734083515893,
+            1.898824561526386,
+            1.6652888183017314
+          ],
+          "candidate_pack_gemm_overlap_percent_by_ffn": [
+            3.7032514320728183,
+            3.936910022693949,
+            4.020232199319695,
+            3.8776518645762543
+          ],
+          "maximum_timed_ffn_kernel": {
+            "rank": 2,
+            "request": 8,
+            "slot": 0,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 96743.218,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "maximum_timed_source_kernel": {
+            "rank": 7,
+            "request": 8,
+            "slot": 0,
+            "phase": "collect",
+            "operation": "WaitRepliesReady",
+            "duration_us": 97418.886,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "workload": "mixed",
+      "native_source_hashes_identical": true,
+      "common_prefix_requests": 90,
+      "common_prefix_request_metadata_identical": true,
+      "profiles": [
+        {
+          "profile": "nsight-requests-mixed",
+          "actual_gemm_grid_sizes": [
+            132
+          ],
+          "request_count": 90,
+          "requests_over_30ms": 0,
+          "strict_cross_request_reply_gemm_overlap_percent_by_ffn": [
+            4.340341523159133,
+            5.0191046455234325,
+            4.711068356237812,
+            4.654404866565622
+          ],
+          "pure_local_reduce_gemm_overlap_percent_by_ffn": [
+            1.0277964242190134,
+            1.0698821925559499,
+            0.7225688049749264,
+            0.9003708840901034
+          ],
+          "candidate_pack_gemm_overlap_percent_by_ffn": [
+            3.118880954080773,
+            3.6218652545274908,
+            3.4529646686222737,
+            3.027355922384912
+          ],
+          "maximum_timed_ffn_kernel": {
+            "rank": 2,
+            "request": 87,
+            "slot": 1,
+            "phase": "reply",
+            "operation": "PublishPartialAndWait",
+            "duration_us": 5804.936,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "maximum_timed_source_kernel": {
+            "rank": 7,
+            "request": 24,
+            "slot": 0,
+            "phase": "collect",
+            "operation": "WaitRepliesReady",
+            "duration_us": 5951.01,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "profile": "nsight-budget96-mixed",
+          "actual_gemm_grid_sizes": [
+            96
+          ],
+          "request_count": 120,
+          "requests_over_30ms": 0,
+          "strict_cross_request_reply_gemm_overlap_percent_by_ffn": [
+            14.101951164133858,
+            15.086633773946575,
+            13.752668347791722,
+            14.919652394692676
+          ],
+          "pure_local_reduce_gemm_overlap_percent_by_ffn": [
+            3.426042933074976,
+            3.5425927528070784,
+            3.424673867435271,
+            3.662102265660847
+          ],
+          "candidate_pack_gemm_overlap_percent_by_ffn": [
+            3.868807589716184,
+            4.357695201052311,
+            3.987460728807146,
+            3.8967513174774293
+          ],
+          "maximum_timed_ffn_kernel": {
+            "rank": 1,
+            "request": 83,
+            "slot": 1,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 22035.78,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "maximum_timed_source_kernel": {
+            "rank": 7,
+            "request": 83,
+            "slot": 1,
+            "phase": "collect",
+            "operation": "WaitRepliesReady",
+            "duration_us": 23058.118,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "source_name": "budget96/nsight-budget96-large-neighbors-16-19.png",
+      "available_in_public_repo": false,
+      "sha256": "9629f32fd27f0c54c595ae1ce292d87952e267c0a9264148537855ca64f6d450"
+    },
+    {
+      "source_name": "budget96/nsight-budget96-large-neighbors-16-19.svg",
+      "available_in_public_repo": false,
+      "sha256": "58c69ba0b53f179a0c4a3c325b75fbf1317deb96774f507b5b4ca1ff53c55ecf"
+    },
+    {
+      "source_name": "budget96/nsight-budget96-mixed-neighbors-16-19.png",
+      "available_in_public_repo": false,
+      "sha256": "8ef49559cc3f08ea565cc331cd6ff3769c049e6ee14e70c711fa0efa1925f2e0"
+    },
+    {
+      "source_name": "budget96/nsight-budget96-mixed-neighbors-16-19.svg",
+      "available_in_public_repo": false,
+      "sha256": "8d0d681dbc767f5e38996f07761144a4f54fee299040d5872ad18e96a831cabc"
+    },
+    {
+      "file": "profiles-budget96.json",
+      "sha256": "7e2d6589e664daeb1434d20fc04df7cd88edb988cd88a636f73a805322c0c7cb"
+    },
+    {
+      "source_name": "budget96/source-send-tail-evidence.json",
+      "available_in_public_repo": false,
+      "sha256": "d12a348739238ef75b85335eb95f6899b2f1376602ae99b44d9f0eca86c14a44"
+    },
+    {
+      "source_name": "budget96/source-send-tail.png",
+      "available_in_public_repo": false,
+      "sha256": "815462636d3798823dbc2ccec274d246a7d5a68baa48c1a113b1b18b5486b7a6"
+    },
+    {
+      "source_name": "budget96/source-send-tail.svg",
+      "available_in_public_repo": false,
+      "sha256": "448943039aa6cec4abfcedea01ec022f89ee65c6ae5afab333f5ce6e37595c71"
+    }
+  ]
+}

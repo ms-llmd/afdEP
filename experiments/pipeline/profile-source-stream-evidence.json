@@ -1,0 +1,256 @@
+{
+  "profile": "nsight-collect96-mixed",
+  "rank": 6,
+  "scope": "Same source GPU and node clock. Native graph-kernel phase envelopes; resident input staging/output assembly outside native graphs are not shown.",
+  "limits": "Dispatch/send intervals include local GIN completion waits. This is stream-dependency evidence, not continuous wire activity or a serving-latency claim.",
+  "request_window": [
+    20,
+    23
+  ],
+  "phases": [
+    {
+      "request": 20,
+      "slot": 0,
+      "phase": "dispatch",
+      "cuda_stream_id": 53,
+      "start_us": 0.0,
+      "end_us": 861.6
+    },
+    {
+      "request": 20,
+      "slot": 0,
+      "phase": "collect",
+      "cuda_stream_id": 57,
+      "start_us": 869.248,
+      "end_us": 4718.207
+    },
+    {
+      "request": 21,
+      "slot": 1,
+      "phase": "dispatch",
+      "cuda_stream_id": 53,
+      "start_us": 880.096,
+      "end_us": 1468.576
+    },
+    {
+      "request": 21,
+      "slot": 1,
+      "phase": "collect",
+      "cuda_stream_id": 57,
+      "start_us": 4881.759,
+      "end_us": 5031.551
+    },
+    {
+      "request": 22,
+      "slot": 0,
+      "phase": "dispatch",
+      "cuda_stream_id": 53,
+      "start_us": 4846.111,
+      "end_us": 5264.127
+    },
+    {
+      "request": 22,
+      "slot": 0,
+      "phase": "collect",
+      "cuda_stream_id": 57,
+      "start_us": 5267.583,
+      "end_us": 9776.862
+    },
+    {
+      "request": 23,
+      "slot": 1,
+      "phase": "dispatch",
+      "cuda_stream_id": 53,
+      "start_us": 5286.783,
+      "end_us": 6031.551
+    },
+    {
+      "request": 23,
+      "slot": 1,
+      "phase": "collect",
+      "cuda_stream_id": 57,
+      "start_us": 9932.35,
+      "end_us": 11389.758
+    }
+  ],
+  "all_profile_collect_copy_overlapping_next_send": [
+    {
+      "collected_request": 19,
+      "next_dispatch_request": 20,
+      "copy_kernel_us": 1.824,
+      "copy_overlap_with_next_send_us": 1.824,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 21,
+      "next_dispatch_request": 22,
+      "copy_kernel_us": 6.08,
+      "copy_overlap_with_next_send_us": 6.08,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 26,
+      "next_dispatch_request": 27,
+      "copy_kernel_us": 6.496,
+      "copy_overlap_with_next_send_us": 6.496,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 28,
+      "next_dispatch_request": 29,
+      "copy_kernel_us": 5.088,
+      "copy_overlap_with_next_send_us": 5.088,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 44,
+      "next_dispatch_request": 45,
+      "copy_kernel_us": 1.76,
+      "copy_overlap_with_next_send_us": 1.76,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 47,
+      "next_dispatch_request": 48,
+      "copy_kernel_us": 2.112,
+      "copy_overlap_with_next_send_us": 2.112,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 51,
+      "next_dispatch_request": 52,
+      "copy_kernel_us": 6.88,
+      "copy_overlap_with_next_send_us": 6.88,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 53,
+      "next_dispatch_request": 54,
+      "copy_kernel_us": 4.64,
+      "copy_overlap_with_next_send_us": 4.64,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 55,
+      "next_dispatch_request": 56,
+      "copy_kernel_us": 4.736,
+      "copy_overlap_with_next_send_us": 4.736,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 57,
+      "next_dispatch_request": 58,
+      "copy_kernel_us": 2.816,
+      "copy_overlap_with_next_send_us": 2.816,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 81,
+      "next_dispatch_request": 82,
+      "copy_kernel_us": 3.84,
+      "copy_overlap_with_next_send_us": 3.84,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 106,
+      "next_dispatch_request": 107,
+      "copy_kernel_us": 2.368,
+      "copy_overlap_with_next_send_us": 2.368,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 108,
+      "next_dispatch_request": 109,
+      "copy_kernel_us": 1.824,
+      "copy_overlap_with_next_send_us": 1.824,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 112,
+      "next_dispatch_request": 113,
+      "copy_kernel_us": 3.488,
+      "copy_overlap_with_next_send_us": 3.488,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 114,
+      "next_dispatch_request": 115,
+      "copy_kernel_us": 6.144,
+      "copy_overlap_with_next_send_us": 6.144,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 116,
+      "next_dispatch_request": 117,
+      "copy_kernel_us": 4.224,
+      "copy_overlap_with_next_send_us": 4.224,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 118,
+      "next_dispatch_request": 119,
+      "copy_kernel_us": 4.032,
+      "copy_overlap_with_next_send_us": 4.032,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 141,
+      "next_dispatch_request": 142,
+      "copy_kernel_us": 5.088,
+      "copy_overlap_with_next_send_us": 5.088,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 143,
+      "next_dispatch_request": 144,
+      "copy_kernel_us": 5.888,
+      "copy_overlap_with_next_send_us": 5.888,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 146,
+      "next_dispatch_request": 147,
+      "copy_kernel_us": 4.768,
+      "copy_overlap_with_next_send_us": 4.768,
+      "copy_finished_before_next_send_completion": true
+    },
+    {
+      "collected_request": 148,
+      "next_dispatch_request": 149,
+      "copy_kernel_us": 3.296,
+      "copy_overlap_with_next_send_us": 3.296,
+      "copy_finished_before_next_send_completion": true
+    }
+  ],
+  "attributed_kernel_nodes": 7200,
+  "unmatched_phase_ranges": 0,
+  "selected_payload_overlap_proof": {
+    "collected_request": 21,
+    "next_dispatch_request": 22,
+    "copy_kernel_us": 6.08,
+    "copy_overlap_with_next_send_us": 6.08,
+    "copy_finished_before_next_send_completion": true,
+    "copy_start_us": 4998.207,
+    "copy_end_us": 5004.287,
+    "send_start_us": 4855.199,
+    "send_end_us": 5264.127
+  },
+  "figures": [
+    {
+      "file": "pipeline-source-stream.svg",
+      "sha256": "3fd031c511195d529c71af167cc986346267c31e212ef9b296f3055f7b566626"
+    }
+  ],
+  "figure_provenance": [
+    {
+      "source_name": "source-stream-timeline.png",
+      "available_in_public_repo": false,
+      "sha256": "6f70a1800ecb42c1a98e14b08dc3771ffe03fd4a075e909b0ce046dae7d37520"
+    }
+  ],
+  "analysis_script": {
+    "source_name": "plot_source_pipeline.py",
+    "available_in_public_repo": false,
+    "sha256": "162db48ddec5e509d888bde8e2c8e0ae5cd29338ebc193c016ea69ae3669a314"
+  }
+}

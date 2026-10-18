@@ -1,63 +1,66 @@
-# Coordinated microbatch overlap
+# Full-request overlap
 
-Two H100 nodes: four Attention sources, four FFN workers, and **one BF16 DeepGEMM
-SwiGLU layer**. Overlap is within an original request; Attention computation and
-serving scheduling are excluded.
+Two H100 nodes, four Attention sources, four FFN workers, **one BF16 DeepGEMM
+SwiGLU layer**. The baseline is serialized afdEP (`whole_graph`), not a new
+Masked DeepEP comparison. Attention computation and serving scheduling are excluded.
 
-| Variant | Execution |
+| Variant | Scheduling |
 |---|---|
-| `whole_graph` | One maximum-capacity slot and receive → GEMMs → reply graph |
-| `split_serial` | Two chunks, separate phase graphs, completed serially |
-| `pipeline` | Same chunks; receive/reply overlap one ordered GEMM stream |
-| `pipeline_graph` | Same two slots; one captured concurrent GPU DAG per request |
+| `whole_graph` | One full-capacity slot; complete each request |
+| `request_serial` | Two full-capacity slots; same phase graphs, serial completion |
+| `request_pipeline` | Two full-capacity slots; dispatch A/B, independently collect A; one GEMM stream |
+| `pipeline_graph` | Two half-capacity chunks of one original request |
 
-Slots share weights and own separate transport state, receive pools, and arenas.
+Full-size requests retain efficient GEMMs. A separate control found **21.6%**
+extra FFN time when splitting identical expert rows. [GEMM evidence](gemm-only-control.json).
 
-**No consistent throughput win.** At 2,048 tokens/source, `pipeline_graph` reduced median
-GPU response by approximately **11%**, but median paired throughput fell
-**34.6%** versus `whole_graph` (traffic class 3). A separate class-0 control fell
-**37.0%**; long stalls remained. Mixed-size gains were inconsistent.
+![Matched throughput, GPU intervals, and memory](pipeline-full-request.svg)
 
-![Matched two-chunk throughput](pipeline-matched-c2.svg)
+In **hybrid mode**, a 96-SM DeepGEMM budget improved throughput in all six repeats:
+**71.3–86.4%** (median **75.7%**)
+for 2,048 tokens/source and **6.8–37.7%** for changing sizes/routes. Mixed requests
+still reached **103 ms**. Two full slots roughly double buffers: pooled FFN
+tensors grow from 2.13 to 4.25 GiB/GPU. The budget caps DeepGEMM's worker grid,
+not a pinned physical SM partition.
 
-![Typical response and tail latency](pipeline-matched-c2-latency.svg)
+The separate direct-mode control **lost 28.8% median throughput** (five of six
+repeats); this optional caller-scheduled pipeline is not a general default win.
 
-![Cross-slot GPU overlap](pipeline-overlap-timeline.svg)
+GPU first-staging → output intervals start earlier under pipelining and include
+queueing; host completion upper bounds are stored separately. These are component
+measurements, not serving latency.
 
-![Readiness and credit stalls](pipeline-progress-stall.svg)
+![Independent source collection](pipeline-source-stream.svg)
 
-With `pipeline_graph`, nonempty reply-kernel intervals overlap **3.19–4.50% of
-GEMM time per FFN GPU** (large) and **6.35–6.76%** (mixed); whole/serial have
-zero. Total GEMM time rises
-**1.38–1.43× / 1.72–1.80×**, respectively. Intervals include GIN flush waits,
-not wire-only transfer. Approximately 90 ms stalls occur in readiness/credit/
-completion, with no GEMM above 30 ms; their cause remains unresolved. Short
-profiles do not establish tail frequency. [Profile evidence](pipeline-nsight-digest.json).
+Nsight confirms an earlier reply copy progresses while the next request sends.
+Communication-kernel intervals overlap expert GEMMs, but include completion waits;
+intermittent transport tails remain. [Profile evidence](profiles-final.json).
 
-Startup, weights, and resident-input generation are excluded; runtime staging,
-replay, assembly, and completion are included. GPU response spans source
-submission through assembled output, not serving latency. All CPU64 cases had
-zero cgroup throttling; eight GPU validation jobs passed.
-[Measurements and provenance](results-pipeline-h100.json) retain every tail and
-keep sweeps, matched C2 runs, and traffic-class controls separate.
+[All measurements and source hashes](results-pipeline-followup-h100.json) retain
+every tail and keep diagnostic cohorts separate. Source fingerprint: `baf867082abf`.
+The [historical slow run](results-pipeline-h100.json) recovered on fresh unchanged
+transport; later changes do not establish its cause.
+[Earlier budget sweep](pipeline-budget-history.svg) ·
+[CPU/recovery controls](pipeline-recovery-history.svg).
 
 ## Reproduce
 
-Requires the optional [DeepGEMM backend](../prefill/README.md). Set `NODE_RANK`
-and `MASTER_ADDR` per host: node 0 FFN, node 1 Attention. Use a 64-CPU quota per
-four-GPU pod. H=2048, intermediate=4096, experts=128, top-k=8.
+Requires the optional [DeepGEMM backend](../prefill/README.md), two four-GPU hosts,
+and 64 CPUs/host. Set `NODE_RANK`/`MASTER_ADDR`; node 0 runs FFN.
 
 ```bash
+export OMP_NUM_THREADS=1 NCCL_SET_THREAD_NAME=1
 launch=(torchrun --nnodes=2 --nproc-per-node=4 --node-rank="$NODE_RANK"
   --master-addr="$MASTER_ADDR" --master-port=29501
   --module experiments.pipeline.benchmark
-  --mode hybrid --capacity 2048 --microbatches 2 --slots 2
-  --variants whole_graph split_serial pipeline pipeline_graph
-  --num-sms 132 --rdma-traffic-class 3 --request-window 1
-  --warmup 3 --repeats 4 --skip-correctness)
+  --mode hybrid --capacity 2048 --microbatches 1 --slots 2
+  --variants whole_graph request_pipeline --gemm-sms 132 96
+  --num-sms 132 --request-window 2 --rdma-traffic-class 3
+  --warmup 3 --repeats 6 --skip-correctness)
 "${launch[@]}" --requests 900
 "${launch[@]}" --requests 300 --fixed-tokens 2048
 ```
 
-Use `--rdma-traffic-class 0` for the separate control. Omit
-`--skip-correctness` for oracle checks; use `--nvtx --repeats 1` for separate profiles.
+Startup/capture/input generation and teardown are excluded; runtime staging,
+replay, and source-window drain are included. Omit `--skip-correctness` for
+oracle checks; use `--nvtx` for separate profiles.

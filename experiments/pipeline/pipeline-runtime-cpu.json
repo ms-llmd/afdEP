@@ -1,0 +1,79 @@
+{
+  "scope": "One-second live CPU samples on the same allocation; both have two communication slots. This validates unused RMA-thread removal, not causality of prior GPU stalls.",
+  "before": [
+    {
+      "node": 0,
+      "rank_count": 4,
+      "gin_progress_threads": 8,
+      "rma_proxy_threads": 8,
+      "sampled_cpu_cores": 19.897855807331773,
+      "gin_cpu_cores": 7.982972090366638,
+      "rma_cpu_cores": 7.943255811310089
+    },
+    {
+      "node": 1,
+      "rank_count": 4,
+      "gin_progress_threads": 8,
+      "rma_proxy_threads": 8,
+      "sampled_cpu_cores": 19.95426309915303,
+      "gin_cpu_cores": 7.993636039720496,
+      "rma_cpu_cores": 7.9737513729550225
+    }
+  ],
+  "numRmaCtx0": [
+    {
+      "node": 0,
+      "rank_count": 4,
+      "gin_progress_threads": 8,
+      "rma_proxy_threads": 0,
+      "sampled_cpu_cores": 11.958725409295447,
+      "gin_cpu_cores": 7.982424358823146,
+      "rma_cpu_cores": 0
+    },
+    {
+      "node": 1,
+      "rank_count": 4,
+      "gin_progress_threads": 8,
+      "rma_proxy_threads": 0,
+      "sampled_cpu_cores": 11.846350011577094,
+      "gin_cpu_cores": 7.887620116860315,
+      "rma_cpu_cores": 0
+    }
+  ],
+  "sampled_job_candidates": [
+    {
+      "node": 0,
+      "jobs": [
+        "runtime-large"
+      ]
+    },
+    {
+      "node": 1,
+      "jobs": [
+        "runtime-large"
+      ]
+    }
+  ],
+  "provenance": [
+    {
+      "source_name": "sample_progress_threads.py",
+      "available_in_public_repo": false,
+      "sha256": "c7dfdbd58effc9ab36ddca556dae2e7dcdcbb88d343cb082dad3b94fa234f7ef"
+    },
+    {
+      "source_name": "sample_runtime_fix_threads.py",
+      "available_in_public_repo": false,
+      "sha256": "a1beb90da07feb7f6baa6afabae8aa73b457663d8a5b467e040ae6a816339bc2"
+    },
+    {
+      "source_name": "live-progress-thread-sample.json",
+      "available_in_public_repo": false,
+      "sha256": "8344d44b35319104b868f56431c62e6abd3c4d8bf2e188611f42fe3b7016150b"
+    },
+    {
+      "source_name": "live-progress-runtime-fix-two-slot-sample.json",
+      "available_in_public_repo": false,
+      "sha256": "137d9c28a8f1235a9eba29b69f967e64f282504c24786d354850ce6f6f1bb7d5"
+    }
+  ]
+}

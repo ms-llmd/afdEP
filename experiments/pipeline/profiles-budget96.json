@@ -1,0 +1,5024 @@
+{
+  "analysis_scripts": [
+    {
+      "source_name": "analyze_overlap.py",
+      "available_in_public_repo": false,
+      "sha256": "cc8e5d9fb82d29401cc9ff1ea63698cfbc3e0df46142e00b297f70bbd89683dc"
+    },
+    {
+      "source_name": "analyze_request_profiles.py",
+      "available_in_public_repo": false,
+      "sha256": "6721d1556fb247336b781a177719a218962514a32fb2e433ff68e5e18e0c58d1"
+    }
+  ],
+  "profiles": [
+    {
+      "profile": "nsight-budget96-large",
+      "mode": "hybrid",
+      "source_working_tree_fingerprint": "8167606cf2154aa4214190e7ee82a0c8d982c57c05afb4a9fe1f8e00b3cca230",
+      "scope": "Profiled one-layer component GPU intervals, not unprofiled throughput or serving latency.",
+      "definitions": {
+        "cross_request": "Positive-row payload kernel intervals from a different request and different slot intersecting ExpertGEMM intervals on the same GPU; union intersections avoid double counting.",
+        "cross_slot": "Includes intra-request chunk overlap for pipeline_graph and inter-request overlap for request_pipeline.",
+        "transport_limit": "GIN SendRequest/SendReply intervals include flush/completion waits; nonempty payload proves bytes exist, not continuous wire transfer throughout the interval.",
+        "pure_local_payload": "ReduceReply is FFN-local NVLink reduction with no readiness polling loop; positive source rows prove useful local work.",
+        "unproven_payload": "PackRows requires exact expert counts to establish nonempty work and is conservatively absent from strict proof.",
+        "clocks": "All overlap comparisons are within one process/device; no cross-node timestamp alignment."
+      },
+      "artifacts": [
+        {
+          "source_name": "node0.nsys-rep",
+          "available_in_public_repo": false,
+          "sha256": "d0421a86f8c6465f76214f8cf558955c56166a3aaa38ec5c2b99beb671c916ae"
+        },
+        {
+          "source_name": "node0.sqlite",
+          "available_in_public_repo": false,
+          "sha256": "82ddb791d11db8a3792620e458707a765ea8602809557c855e1e46df95045761"
+        },
+        {
+          "source_name": "node1.nsys-rep",
+          "available_in_public_repo": false,
+          "sha256": "f4e11da61d3ee5ba714fc29f87d0b42a96e917c9595d8d9c585265a9ab5530da"
+        },
+        {
+          "source_name": "node1.sqlite",
+          "available_in_public_repo": false,
+          "sha256": "0ba7caee631863348cff86876ffa2e5971fc05c583fb645df4a7556e2145b501"
+        },
+        {
+          "source_name": "result-private.json",
+          "available_in_public_repo": false,
+          "sha256": "9b46e5421586826224aab3e7306044945360edec29cca7a4b13f658a94f88e9e"
+        }
+      ],
+      "association": [
+        {
+          "source_name": "node0.sqlite",
+          "available_in_public_repo": false,
+          "timed_attributed_kernel_nodes": 7296,
+          "unmatched_phase_range_count": 0,
+          "unmapped_consolidated_kernel_nodes": 0
+        },
+        {
+          "source_name": "node1.sqlite",
+          "available_in_public_repo": false,
+          "timed_attributed_kernel_nodes": 2304,
+          "unmatched_phase_range_count": 0,
+          "unmapped_consolidated_kernel_nodes": 0
+        }
+      ],
+      "variants": [
+        {
+          "variant": "whole_graph",
+          "microbatches": 1,
+          "gemm_sms": 96,
+          "slots": 1,
+          "request_count": 48,
+          "requests_over_30ms": [],
+          "timed_kernels_over_30ms": [],
+          "largest_ffn_kernel": {
+            "rank": 2,
+            "request": 0,
+            "slot": 0,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 1311.955,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 7,
+            "request": 20,
+            "slot": 0,
+            "phase": "exchange",
+            "operation": "WaitRepliesReady",
+            "duration_us": 3898.728,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "polling_gate_grids": {
+            "WaitRequestsReady": {
+              "nodes": 192,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            },
+            "WaitPartialsConsumed": {
+              "nodes": 192,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            },
+            "WaitRepliesReady": {
+              "nodes": 192,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            }
+          },
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_union_us": 63395.291,
+              "gemm_kernel_nodes": 96,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_other_request_payload": 0.0,
+              "candidate_payload_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.0,
+              "candidate_pack_rows_cross_request_overlap_us": 0.0,
+              "strict_nonempty_cross_slot_overlap_us": 0.0,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 0.0
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 144,
+                  "sum_us": 153.054,
+                  "max_us": 1.12,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 48,
+                  "sum_us": 53952.456,
+                  "max_us": 1197.938,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 48,
+                  "sum_us": 213.504,
+                  "max_us": 7.04,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 48,
+                  "sum_us": 408.317,
+                  "max_us": 8.704,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 48,
+                  "sum_us": 178.46200000000002,
+                  "max_us": 3.776,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 48,
+                  "sum_us": 13030.569,
+                  "max_us": 293.372,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 48,
+                  "sum_us": 4145.041,
+                  "max_us": 106.879,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 96,
+                  "sum_us": 63395.291,
+                  "max_us": 895.893,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 48,
+                  "sum_us": 6287.288,
+                  "max_us": 135.486,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 48,
+                  "sum_us": 1951.874,
+                  "max_us": 43.231,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 48,
+                  "sum_us": 252.51,
+                  "max_us": 7.104,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 48,
+                  "sum_us": 28738.419,
+                  "max_us": 617.849,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 48,
+                  "sum_us": 1142.0720000000001,
+                  "max_us": 63.008,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 48,
+                  "sum_us": 7798.051,
+                  "max_us": 163.87,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 48,
+                  "sum_us": 181.43800000000002,
+                  "max_us": 4.0,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 48,
+                  "sum_us": 56156.113,
+                  "max_us": 1195.986,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_union_us": 63929.549,
+              "gemm_kernel_nodes": 96,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_other_request_payload": 0.0,
+              "candidate_payload_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.0,
+              "candidate_pack_rows_cross_request_overlap_us": 0.0,
+              "strict_nonempty_cross_slot_overlap_us": 0.0,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 0.0
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 144,
+                  "sum_us": 154.751,
+                  "max_us": 1.152,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 48,
+                  "sum_us": 54014.038,
+                  "max_us": 1290.619,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 48,
+                  "sum_us": 225.21599999999998,
+                  "max_us": 37.088,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 48,
+                  "sum_us": 444.191,
+                  "max_us": 9.632,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 48,
+                  "sum_us": 180.096,
+                  "max_us": 3.776,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 48,
+                  "sum_us": 15688.644,
+                  "max_us": 343.071,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 48,
+                  "sum_us": 1466.232,
+                  "max_us": 46.079,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 96,
+                  "sum_us": 63929.549,
+                  "max_us": 907.196,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 48,
+                  "sum_us": 6288.172,
+                  "max_us": 135.52,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 48,
+                  "sum_us": 1951.74,
+                  "max_us": 42.048,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 48,
+                  "sum_us": 232.768,
+                  "max_us": 5.184,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 48,
+                  "sum_us": 28939.797,
+                  "max_us": 618.973,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 48,
+                  "sum_us": 380.956,
+                  "max_us": 38.783,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 48,
+                  "sum_us": 7849.217,
+                  "max_us": 164.703,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 48,
+                  "sum_us": 177.696,
+                  "max_us": 3.936,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 48,
+                  "sum_us": 56183.505,
+                  "max_us": 1192.987,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_union_us": 63556.588,
+              "gemm_kernel_nodes": 96,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_other_request_payload": 0.0,
+              "candidate_payload_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.0,
+              "candidate_pack_rows_cross_request_overlap_us": 0.0,
+              "strict_nonempty_cross_slot_overlap_us": 0.0,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 0.0
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 144,
+                  "sum_us": 156.191,
+                  "max_us": 1.152,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 48,
+                  "sum_us": 53871.242,
+                  "max_us": 1311.955,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 48,
+                  "sum_us": 321.183,
+                  "max_us": 26.72,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 48,
+                  "sum_us": 490.93600000000004,
+                  "max_us": 10.688,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 48,
+                  "sum_us": 181.757,
+                  "max_us": 3.808,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 48,
+                  "sum_us": 16141.153,
+                  "max_us": 348.957,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 48,
+                  "sum_us": 1084.695,
+                  "max_us": 27.84,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 96,
+                  "sum_us": 63556.588,
+                  "max_us": 898.84,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 48,
+                  "sum_us": 6281.148,
+                  "max_us": 133.855,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 48,
+                  "sum_us": 1945.748,
+                  "max_us": 42.176,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 48,
+                  "sum_us": 233.343,
+                  "max_us": 5.632,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 48,
+                  "sum_us": 28922.436999999998,
+                  "max_us": 620.826,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 48,
+                  "sum_us": 704.283,
+                  "max_us": 48.991,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 48,
+                  "sum_us": 7758.557,
+                  "max_us": 162.911,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 48,
+                  "sum_us": 181.563,
+                  "max_us": 4.0,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 48,
+                  "sum_us": 56290.02,
+                  "max_us": 1198.549,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_union_us": 63550.606,
+              "gemm_kernel_nodes": 96,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_other_request_payload": 0.0,
+              "candidate_payload_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.0,
+              "candidate_pack_rows_cross_request_overlap_us": 0.0,
+              "strict_nonempty_cross_slot_overlap_us": 0.0,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 0.0
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 144,
+                  "sum_us": 156.51,
+                  "max_us": 1.184,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 48,
+                  "sum_us": 53802.322,
+                  "max_us": 1271.151,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 48,
+                  "sum_us": 12921.268,
+                  "max_us": 325.372,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 48,
+                  "sum_us": 456.98699999999997,
+                  "max_us": 9.951,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 48,
+                  "sum_us": 183.517,
+                  "max_us": 3.84,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 48,
+                  "sum_us": 15666.258,
+                  "max_us": 339.291,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 48,
+                  "sum_us": 1380.781,
+                  "max_us": 48.831,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 96,
+                  "sum_us": 63550.606,
+                  "max_us": 898.26,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 48,
+                  "sum_us": 6260.59,
+                  "max_us": 134.814,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 48,
+                  "sum_us": 1940.233,
+                  "max_us": 41.728,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 48,
+                  "sum_us": 260.125,
+                  "max_us": 7.2,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 48,
+                  "sum_us": 28739.265,
+                  "max_us": 613.72,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 48,
+                  "sum_us": 1092.461,
+                  "max_us": 59.999,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 48,
+                  "sum_us": 6732.1,
+                  "max_us": 142.59,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 48,
+                  "sum_us": 177.471,
+                  "max_us": 3.968,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 48,
+                  "sum_us": 44526.196,
+                  "max_us": 953.011,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "variant": "request_pipeline",
+          "microbatches": 1,
+          "gemm_sms": 96,
+          "slots": 2,
+          "request_count": 48,
+          "requests_over_30ms": [
+            {
+              "request": 0,
+              "gpu_response_ms": 41.74528121948242
+            },
+            {
+              "request": 1,
+              "gpu_response_ms": 45.24409484863281
+            },
+            {
+              "request": 2,
+              "gpu_response_ms": 42.82246398925781
+            },
+            {
+              "request": 7,
+              "gpu_response_ms": 99.6296615600586
+            },
+            {
+              "request": 8,
+              "gpu_response_ms": 101.66214752197266
+            },
+            {
+              "request": 9,
+              "gpu_response_ms": 100.88326263427734
+            },
+            {
+              "request": 39,
+              "gpu_response_ms": 77.96736145019531
+            },
+            {
+              "request": 40,
+              "gpu_response_ms": 79.94703674316406
+            },
+            {
+              "request": 41,
+              "gpu_response_ms": 79.12166595458984
+            },
+            {
+              "request": 43,
+              "gpu_response_ms": 47.59632110595703
+            },
+            {
+              "request": 44,
+              "gpu_response_ms": 46.43840026855469
+            },
+            {
+              "request": 45,
+              "gpu_response_ms": 53.04326248168945
+            },
+            {
+              "request": 46,
+              "gpu_response_ms": 93.62850952148438
+            },
+            {
+              "request": 47,
+              "gpu_response_ms": 88.79193878173828
+            }
+          ],
+          "timed_kernels_over_30ms": [
+            {
+              "rank": 3,
+              "request": 1,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 41402.368,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 2,
+              "request": 1,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 38518.134,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 1,
+              "request": 1,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 38516.787,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 0,
+              "request": 1,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 38511.172,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 3,
+              "request": 2,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 36682.686,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 2,
+              "request": 2,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 35548.241,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 1,
+              "request": 2,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 35452.83,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 0,
+              "request": 2,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 35451.91,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 3,
+              "request": 8,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 95041.311,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 2,
+              "request": 8,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 96743.218,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 1,
+              "request": 8,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 95116.997,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 3,
+              "request": 9,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 93304.278,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 0,
+              "request": 8,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 95125.526,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 2,
+              "request": 9,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 94421.288,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 1,
+              "request": 9,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 93283.307,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 0,
+              "request": 9,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 93281.675,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 3,
+              "request": 40,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 73306.973,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 2,
+              "request": 40,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 74964.639,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 3,
+              "request": 41,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 71594.611,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 1,
+              "request": 40,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 73390.452,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 2,
+              "request": 41,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 72712.948,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 0,
+              "request": 40,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 73384.049,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 1,
+              "request": 41,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 71563.994,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 0,
+              "request": 41,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 71562.15,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 3,
+              "request": 44,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 40403.181,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 2,
+              "request": 44,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 42547.856,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 3,
+              "request": 45,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 47138.996,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 1,
+              "request": 44,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 40505.516,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 2,
+              "request": 45,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 41007.198,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 0,
+              "request": 43,
+              "slot": 1,
+              "phase": "reply",
+              "operation": "SendReply",
+              "duration_us": 50917.908,
+              "grid": [
+                8,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 1,
+              "request": 45,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 47122.74,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 0,
+              "request": 44,
+              "slot": 0,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 40409.837,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 3,
+              "request": 47,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 51673.913,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 3,
+              "request": 47,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 33348.746,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 2,
+              "request": 47,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 82683.447,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 1,
+              "request": 47,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "BeginWorker",
+              "duration_us": 84934.506,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 0,
+              "request": 47,
+              "slot": 1,
+              "phase": "receive",
+              "operation": "WaitRequestsReady",
+              "duration_us": 82760.965,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 7,
+              "request": 1,
+              "slot": 1,
+              "phase": "dispatch",
+              "operation": "SendRequest",
+              "duration_us": 40382.834,
+              "grid": [
+                8,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 6,
+              "request": 1,
+              "slot": 1,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 39579.798,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 4,
+              "request": 1,
+              "slot": 1,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 39509.303,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 5,
+              "request": 1,
+              "slot": 1,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 39450.054,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 6,
+              "request": 8,
+              "slot": 0,
+              "phase": "dispatch",
+              "operation": "SendRequest",
+              "duration_us": 96590.672,
+              "grid": [
+                8,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 7,
+              "request": 8,
+              "slot": 0,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 97418.886,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 5,
+              "request": 8,
+              "slot": 0,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 97225.463,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 4,
+              "request": 8,
+              "slot": 0,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 97380.992,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 6,
+              "request": 40,
+              "slot": 0,
+              "phase": "dispatch",
+              "operation": "SendRequest",
+              "duration_us": 74803.452,
+              "grid": [
+                8,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 7,
+              "request": 40,
+              "slot": 0,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 75705.561,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 5,
+              "request": 40,
+              "slot": 0,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 75555.932,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 4,
+              "request": 40,
+              "slot": 0,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 75654.721,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 6,
+              "request": 44,
+              "slot": 0,
+              "phase": "dispatch",
+              "operation": "SendRequest",
+              "duration_us": 42366.349,
+              "grid": [
+                8,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 7,
+              "request": 44,
+              "slot": 0,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 42832.599,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 5,
+              "request": 44,
+              "slot": 0,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 42837.367,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 4,
+              "request": 44,
+              "slot": 0,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 42833.059,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 5,
+              "request": 47,
+              "slot": 1,
+              "phase": "dispatch",
+              "operation": "SendRequest",
+              "duration_us": 84543.442,
+              "grid": [
+                8,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 7,
+              "request": 47,
+              "slot": 1,
+              "phase": "dispatch",
+              "operation": "SendRequest",
+              "duration_us": 51139.047,
+              "grid": [
+                8,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 4,
+              "request": 47,
+              "slot": 1,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 86651.68,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 6,
+              "request": 47,
+              "slot": 1,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 86623.058,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "rank": 7,
+              "request": 47,
+              "slot": 1,
+              "phase": "collect",
+              "operation": "WaitRepliesReady",
+              "duration_us": 37225.163,
+              "grid": [
+                1,
+                1,
+                1
+              ]
+            }
+          ],
+          "largest_ffn_kernel": {
+            "rank": 2,
+            "request": 8,
+            "slot": 0,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 96743.218,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 7,
+            "request": 8,
+            "slot": 0,
+            "phase": "collect",
+            "operation": "WaitRepliesReady",
+            "duration_us": 97418.886,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "polling_gate_grids": {
+            "WaitRequestsReady": {
+              "nodes": 192,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            },
+            "WaitPartialsConsumed": {
+              "nodes": 192,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            },
+            "WaitRepliesReady": {
+              "nodes": 192,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            }
+          },
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_union_us": 65242.667,
+              "gemm_kernel_nodes": 96,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 26437.962,
+              "fraction_gemm_overlapping_other_request_payload": 0.40522503471539567,
+              "candidate_payload_cross_request_overlap_us": 28854.062,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.44225754903612385,
+              "candidate_pack_rows_cross_request_overlap_us": 2416.1,
+              "strict_nonempty_cross_slot_overlap_us": 26437.962,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1210.0,
+                "SendReply": 25227.962,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 10193.062
+                },
+                {
+                  "payload_slot": 1,
+                  "strict_nonempty_cross_request_overlap_us": 16244.9
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 144,
+                  "sum_us": 175.55100000000002,
+                  "max_us": 2.624,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 48,
+                  "sum_us": 83134.078,
+                  "max_us": 2799.935,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 48,
+                  "sum_us": 546288.287,
+                  "max_us": 95125.526,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 48,
+                  "sum_us": 907.9879999999999,
+                  "max_us": 153.79,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 48,
+                  "sum_us": 198.173,
+                  "max_us": 7.456,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 48,
+                  "sum_us": 14436.25,
+                  "max_us": 363.772,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 48,
+                  "sum_us": 8699.257,
+                  "max_us": 528.378,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 96,
+                  "sum_us": 65242.667,
+                  "max_us": 1474.383,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 48,
+                  "sum_us": 6414.584,
+                  "max_us": 141.374,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 48,
+                  "sum_us": 2038.376,
+                  "max_us": 53.535,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 48,
+                  "sum_us": 237.501,
+                  "max_us": 6.208,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 48,
+                  "sum_us": 31541.368,
+                  "max_us": 836.022,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 48,
+                  "sum_us": 3132.632,
+                  "max_us": 653.176,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 48,
+                  "sum_us": 8724.187,
+                  "max_us": 254.429,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 48,
+                  "sum_us": 220.031,
+                  "max_us": 12.992,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 48,
+                  "sum_us": 132679.937,
+                  "max_us": 50917.908,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_union_us": 65357.069,
+              "gemm_kernel_nodes": 96,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 25019.429,
+              "fraction_gemm_overlapping_other_request_payload": 0.3828113681168903,
+              "candidate_payload_cross_request_overlap_us": 27592.478,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.4221804683438298,
+              "candidate_pack_rows_cross_request_overlap_us": 2573.049,
+              "strict_nonempty_cross_slot_overlap_us": 25019.429,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1054.715,
+                "SendReply": 23964.714,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 10067.164
+                },
+                {
+                  "payload_slot": 1,
+                  "strict_nonempty_cross_request_overlap_us": 14952.265
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 144,
+                  "sum_us": 177.119,
+                  "max_us": 2.208,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 48,
+                  "sum_us": 182044.351,
+                  "max_us": 84934.506,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 48,
+                  "sum_us": 496027.917,
+                  "max_us": 95116.997,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 48,
+                  "sum_us": 859.482,
+                  "max_us": 152.671,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 48,
+                  "sum_us": 197.407,
+                  "max_us": 6.912,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 48,
+                  "sum_us": 16378.027,
+                  "max_us": 401.663,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 48,
+                  "sum_us": 7149.765,
+                  "max_us": 488.382,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 96,
+                  "sum_us": 65357.069,
+                  "max_us": 1162.62,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 48,
+                  "sum_us": 6416.844,
+                  "max_us": 139.84,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 48,
+                  "sum_us": 2026.937,
+                  "max_us": 50.976,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 48,
+                  "sum_us": 236.863,
+                  "max_us": 6.656,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 48,
+                  "sum_us": 32012.752,
+                  "max_us": 832.349,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 48,
+                  "sum_us": 1666.104,
+                  "max_us": 129.855,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 48,
+                  "sum_us": 8832.546,
+                  "max_us": 278.367,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 48,
+                  "sum_us": 217.823,
+                  "max_us": 9.28,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 48,
+                  "sum_us": 83932.945,
+                  "max_us": 2755.574,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_union_us": 64534.556,
+              "gemm_kernel_nodes": 96,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 25059.219,
+              "fraction_gemm_overlapping_other_request_payload": 0.38830698703497707,
+              "candidate_payload_cross_request_overlap_us": 27653.658,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.428509309028174,
+              "candidate_pack_rows_cross_request_overlap_us": 2594.439,
+              "strict_nonempty_cross_slot_overlap_us": 25059.219,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1225.398,
+                "SendReply": 23833.821,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 10164.604
+                },
+                {
+                  "payload_slot": 1,
+                  "strict_nonempty_cross_request_overlap_us": 14894.615
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 144,
+                  "sum_us": 178.589,
+                  "max_us": 2.56,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 48,
+                  "sum_us": 497067.13399999996,
+                  "max_us": 96743.218,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 48,
+                  "sum_us": 180556.699,
+                  "max_us": 82683.447,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 48,
+                  "sum_us": 895.801,
+                  "max_us": 172.222,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 48,
+                  "sum_us": 202.909,
+                  "max_us": 8.48,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 48,
+                  "sum_us": 16671.013,
+                  "max_us": 413.276,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 48,
+                  "sum_us": 6587.843,
+                  "max_us": 467.355,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 96,
+                  "sum_us": 64534.556,
+                  "max_us": 1148.149,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 48,
+                  "sum_us": 6417.638,
+                  "max_us": 141.599,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 48,
+                  "sum_us": 2022.99,
+                  "max_us": 49.6,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 48,
+                  "sum_us": 240.47799999999998,
+                  "max_us": 7.904,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 48,
+                  "sum_us": 31823.736,
+                  "max_us": 822.808,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 48,
+                  "sum_us": 3196.125,
+                  "max_us": 480.348,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 48,
+                  "sum_us": 8871.406,
+                  "max_us": 284.285,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 48,
+                  "sum_us": 210.59,
+                  "max_us": 7.2,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 48,
+                  "sum_us": 84498.152,
+                  "max_us": 2760.454,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_union_us": 65008.363,
+              "gemm_kernel_nodes": 96,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 24821.21,
+              "fraction_gemm_overlapping_other_request_payload": 0.3818156442425723,
+              "candidate_payload_cross_request_overlap_us": 27342.008,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.4205921628883349,
+              "candidate_pack_rows_cross_request_overlap_us": 2520.798,
+              "strict_nonempty_cross_slot_overlap_us": 24821.21,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1082.577,
+                "SendReply": 23738.633,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 9943.359
+                },
+                {
+                  "payload_slot": 1,
+                  "strict_nonempty_cross_request_overlap_us": 14877.851
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 144,
+                  "sum_us": 173.567,
+                  "max_us": 2.304,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 48,
+                  "sum_us": 207425.144,
+                  "max_us": 51673.913,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 48,
+                  "sum_us": 470494.906,
+                  "max_us": 95041.311,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 48,
+                  "sum_us": 1215.699,
+                  "max_us": 256.253,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 48,
+                  "sum_us": 202.139,
+                  "max_us": 12.096,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 48,
+                  "sum_us": 16066.987000000001,
+                  "max_us": 409.691,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 48,
+                  "sum_us": 7146.591,
+                  "max_us": 485.305,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 96,
+                  "sum_us": 65008.363,
+                  "max_us": 1458.957,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 48,
+                  "sum_us": 6399.4349999999995,
+                  "max_us": 140.126,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 48,
+                  "sum_us": 2021.703,
+                  "max_us": 45.76,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 48,
+                  "sum_us": 246.45999999999998,
+                  "max_us": 7.296,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 48,
+                  "sum_us": 31540.06,
+                  "max_us": 820.245,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 48,
+                  "sum_us": 3201.276,
+                  "max_us": 652.056,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 48,
+                  "sum_us": 8036.983,
+                  "max_us": 284.38,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 48,
+                  "sum_us": 217.948,
+                  "max_us": 8.831,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 48,
+                  "sum_us": 84632.362,
+                  "max_us": 2781.98,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "figure_provenance": [
+        {
+          "source_name": "nsight-budget96-large-neighbors-16-19.svg",
+          "available_in_public_repo": false,
+          "sha256": "58c69ba0b53f179a0c4a3c325b75fbf1317deb96774f507b5b4ca1ff53c55ecf"
+        },
+        {
+          "source_name": "nsight-budget96-large-neighbors-16-19.png",
+          "available_in_public_repo": false,
+          "sha256": "9629f32fd27f0c54c595ae1ce292d87952e267c0a9264148537855ca64f6d450"
+        }
+      ]
+    },
+    {
+      "profile": "nsight-budget96-mixed",
+      "mode": "hybrid",
+      "source_working_tree_fingerprint": "8167606cf2154aa4214190e7ee82a0c8d982c57c05afb4a9fe1f8e00b3cca230",
+      "scope": "Profiled one-layer component GPU intervals, not unprofiled throughput or serving latency.",
+      "definitions": {
+        "cross_request": "Positive-row payload kernel intervals from a different request and different slot intersecting ExpertGEMM intervals on the same GPU; union intersections avoid double counting.",
+        "cross_slot": "Includes intra-request chunk overlap for pipeline_graph and inter-request overlap for request_pipeline.",
+        "transport_limit": "GIN SendRequest/SendReply intervals include flush/completion waits; nonempty payload proves bytes exist, not continuous wire transfer throughout the interval.",
+        "pure_local_payload": "ReduceReply is FFN-local NVLink reduction with no readiness polling loop; positive source rows prove useful local work.",
+        "unproven_payload": "PackRows requires exact expert counts to establish nonempty work and is conservatively absent from strict proof.",
+        "clocks": "All overlap comparisons are within one process/device; no cross-node timestamp alignment."
+      },
+      "artifacts": [
+        {
+          "source_name": "node0.nsys-rep",
+          "available_in_public_repo": false,
+          "sha256": "ddf85689627f32b41512a25a76801e95fd385f1d9ac5b0965f03e0af508a3f82"
+        },
+        {
+          "source_name": "node0.sqlite",
+          "available_in_public_repo": false,
+          "sha256": "017358477011e8dd87496921b7da462be9f472e65ec2ffaab0b1417f749c74f1"
+        },
+        {
+          "source_name": "node1.nsys-rep",
+          "available_in_public_repo": false,
+          "sha256": "6b893505cb8be17fd13ede0bc996bd7c85824a1dfe5113eed88bc6b586a0a86c"
+        },
+        {
+          "source_name": "node1.sqlite",
+          "available_in_public_repo": false,
+          "sha256": "798f00af2a373fc6f5125fb8166ac2bac61995a86fab5b2477b20946e1716c5b"
+        },
+        {
+          "source_name": "result-private.json",
+          "available_in_public_repo": false,
+          "sha256": "cf1da49250662ad904f8acc3792e65c43d6b54f3c8ae2e174b03d5f1a5721374"
+        }
+      ],
+      "association": [
+        {
+          "source_name": "node0.sqlite",
+          "available_in_public_repo": false,
+          "timed_attributed_kernel_nodes": 18240,
+          "unmatched_phase_range_count": 0,
+          "unmapped_consolidated_kernel_nodes": 0
+        },
+        {
+          "source_name": "node1.sqlite",
+          "available_in_public_repo": false,
+          "timed_attributed_kernel_nodes": 5760,
+          "unmatched_phase_range_count": 0,
+          "unmapped_consolidated_kernel_nodes": 0
+        }
+      ],
+      "variants": [
+        {
+          "variant": "whole_graph",
+          "microbatches": 1,
+          "gemm_sms": 96,
+          "slots": 1,
+          "request_count": 120,
+          "requests_over_30ms": [],
+          "timed_kernels_over_30ms": [],
+          "largest_ffn_kernel": {
+            "rank": 2,
+            "request": 25,
+            "slot": 0,
+            "phase": "receive",
+            "operation": "PublishPartialAndWait",
+            "duration_us": 5020.133,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 6,
+            "request": 25,
+            "slot": 0,
+            "phase": "exchange",
+            "operation": "WaitRepliesReady",
+            "duration_us": 7140.089,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "polling_gate_grids": {
+            "WaitRequestsReady": {
+              "nodes": 480,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            },
+            "WaitPartialsConsumed": {
+              "nodes": 480,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            },
+            "WaitRepliesReady": {
+              "nodes": 480,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            }
+          },
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_union_us": 73093.981,
+              "gemm_kernel_nodes": 240,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_other_request_payload": 0.0,
+              "candidate_payload_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.0,
+              "candidate_pack_rows_cross_request_overlap_us": 0.0,
+              "strict_nonempty_cross_slot_overlap_us": 0.0,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 0.0
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 360,
+                  "sum_us": 383.03200000000004,
+                  "max_us": 1.12,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 120,
+                  "sum_us": 31118.811,
+                  "max_us": 965.894,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 120,
+                  "sum_us": 3839.481,
+                  "max_us": 662.222,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 120,
+                  "sum_us": 1058.855,
+                  "max_us": 10.912,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 120,
+                  "sum_us": 445.24,
+                  "max_us": 3.776,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 120,
+                  "sum_us": 7514.672,
+                  "max_us": 415.893,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 120,
+                  "sum_us": 6137.862,
+                  "max_us": 451.668,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 240,
+                  "sum_us": 73093.981,
+                  "max_us": 2300.386,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 120,
+                  "sum_us": 3706.076,
+                  "max_us": 359.383,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 120,
+                  "sum_us": 1180.478,
+                  "max_us": 119.165,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 120,
+                  "sum_us": 548.051,
+                  "max_us": 7.615,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 120,
+                  "sum_us": 13832.496000000001,
+                  "max_us": 556.497,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 120,
+                  "sum_us": 33648.05,
+                  "max_us": 5018.906,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 120,
+                  "sum_us": 3996.669,
+                  "max_us": 160.891,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 120,
+                  "sum_us": 427.093,
+                  "max_us": 3.84,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 120,
+                  "sum_us": 28991.286,
+                  "max_us": 1012.709,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_union_us": 72475.175,
+              "gemm_kernel_nodes": 240,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_other_request_payload": 0.0,
+              "candidate_payload_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.0,
+              "candidate_pack_rows_cross_request_overlap_us": 0.0,
+              "strict_nonempty_cross_slot_overlap_us": 0.0,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 0.0
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 360,
+                  "sum_us": 385.146,
+                  "max_us": 1.152,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 120,
+                  "sum_us": 31585.516,
+                  "max_us": 1115.275,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 120,
+                  "sum_us": 5065.121,
+                  "max_us": 397.337,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 120,
+                  "sum_us": 1064.84,
+                  "max_us": 13.279,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 120,
+                  "sum_us": 445.332,
+                  "max_us": 3.776,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 120,
+                  "sum_us": 8538.085,
+                  "max_us": 490.359,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 120,
+                  "sum_us": 5204.284,
+                  "max_us": 399.097,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 240,
+                  "sum_us": 72475.175,
+                  "max_us": 2710.189,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 120,
+                  "sum_us": 3877.366,
+                  "max_us": 438.68,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 120,
+                  "sum_us": 1234.285,
+                  "max_us": 145.437,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 120,
+                  "sum_us": 568.306,
+                  "max_us": 7.072,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 120,
+                  "sum_us": 13986.75,
+                  "max_us": 668.148,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 120,
+                  "sum_us": 33775.553,
+                  "max_us": 4544.907,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 120,
+                  "sum_us": 4000.626,
+                  "max_us": 157.501,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 120,
+                  "sum_us": 417.887,
+                  "max_us": 5.088,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 120,
+                  "sum_us": 28144.137,
+                  "max_us": 1027.757,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_union_us": 66057.215,
+              "gemm_kernel_nodes": 240,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_other_request_payload": 0.0,
+              "candidate_payload_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.0,
+              "candidate_pack_rows_cross_request_overlap_us": 0.0,
+              "strict_nonempty_cross_slot_overlap_us": 0.0,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 0.0
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 360,
+                  "sum_us": 384.66200000000003,
+                  "max_us": 1.152,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 120,
+                  "sum_us": 30020.706,
+                  "max_us": 976.936,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 120,
+                  "sum_us": 10290.332,
+                  "max_us": 834.795,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 120,
+                  "sum_us": 1082.215,
+                  "max_us": 11.104,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 120,
+                  "sum_us": 447.283,
+                  "max_us": 3.808,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 120,
+                  "sum_us": 8000.38,
+                  "max_us": 390.935,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 120,
+                  "sum_us": 5528.282,
+                  "max_us": 444.469,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 240,
+                  "sum_us": 66057.215,
+                  "max_us": 2066.702,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 120,
+                  "sum_us": 3229.721,
+                  "max_us": 323.64,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 120,
+                  "sum_us": 1038.756,
+                  "max_us": 107.742,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 120,
+                  "sum_us": 565.138,
+                  "max_us": 6.207,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 120,
+                  "sum_us": 13460.979,
+                  "max_us": 497.491,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 120,
+                  "sum_us": 41771.583,
+                  "max_us": 5020.133,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 120,
+                  "sum_us": 3804.453,
+                  "max_us": 151.484,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 120,
+                  "sum_us": 420.247,
+                  "max_us": 3.808,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 120,
+                  "sum_us": 24577.285,
+                  "max_us": 822.124,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_union_us": 67763.33,
+              "gemm_kernel_nodes": 240,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_other_request_payload": 0.0,
+              "candidate_payload_cross_request_overlap_us": 0.0,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.0,
+              "candidate_pack_rows_cross_request_overlap_us": 0.0,
+              "strict_nonempty_cross_slot_overlap_us": 0.0,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 0.0
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 360,
+                  "sum_us": 387.861,
+                  "max_us": 1.184,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 120,
+                  "sum_us": 32033.587,
+                  "max_us": 955.909,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 120,
+                  "sum_us": 2700.821,
+                  "max_us": 215.322,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 120,
+                  "sum_us": 996.738,
+                  "max_us": 13.344,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 120,
+                  "sum_us": 454.195,
+                  "max_us": 3.872,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 120,
+                  "sum_us": 7772.23,
+                  "max_us": 432.116,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 120,
+                  "sum_us": 5754.901,
+                  "max_us": 445.875,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 240,
+                  "sum_us": 67763.33,
+                  "max_us": 2463.226,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 120,
+                  "sum_us": 3287.427,
+                  "max_us": 389.749,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 120,
+                  "sum_us": 1051.198,
+                  "max_us": 130.14,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 120,
+                  "sum_us": 573.6129999999999,
+                  "max_us": 6.176,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 120,
+                  "sum_us": 13411.371,
+                  "max_us": 597.231,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 120,
+                  "sum_us": 40050.247,
+                  "max_us": 5017.906,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 120,
+                  "sum_us": 3946.708,
+                  "max_us": 132.509,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 120,
+                  "sum_us": 431.474,
+                  "max_us": 5.312,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 120,
+                  "sum_us": 30182.666,
+                  "max_us": 990.788,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "variant": "request_pipeline",
+          "microbatches": 1,
+          "gemm_sms": 96,
+          "slots": 2,
+          "request_count": 120,
+          "requests_over_30ms": [],
+          "timed_kernels_over_30ms": [],
+          "largest_ffn_kernel": {
+            "rank": 1,
+            "request": 83,
+            "slot": 1,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 22035.78,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 7,
+            "request": 83,
+            "slot": 1,
+            "phase": "collect",
+            "operation": "WaitRepliesReady",
+            "duration_us": 23058.118,
+            "grid": [
+              1,
+              1,
+              1
+            ]
+          },
+          "polling_gate_grids": {
+            "WaitRequestsReady": {
+              "nodes": 480,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            },
+            "WaitPartialsConsumed": {
+              "nodes": 480,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            },
+            "WaitRepliesReady": {
+              "nodes": 480,
+              "grids": [
+                [
+                  1,
+                  1,
+                  1
+                ]
+              ]
+            }
+          },
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_union_us": 74115.446,
+              "gemm_kernel_nodes": 240,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 10451.724,
+              "fraction_gemm_overlapping_other_request_payload": 0.14101951164133858,
+              "candidate_payload_cross_request_overlap_us": 13319.108,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.1797075875385004,
+              "candidate_pack_rows_cross_request_overlap_us": 2867.384,
+              "strict_nonempty_cross_slot_overlap_us": 10451.724,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 2539.227,
+                "SendReply": 7912.497,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 5864.357
+                },
+                {
+                  "payload_slot": 1,
+                  "strict_nonempty_cross_request_overlap_us": 4587.367
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 360,
+                  "sum_us": 549.803,
+                  "max_us": 7.968,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 120,
+                  "sum_us": 56313.612,
+                  "max_us": 2758.358,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 120,
+                  "sum_us": 77681.831,
+                  "max_us": 20313.508,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 120,
+                  "sum_us": 1436.414,
+                  "max_us": 21.984,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 120,
+                  "sum_us": 565.01,
+                  "max_us": 10.688,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 120,
+                  "sum_us": 8355.365,
+                  "max_us": 423.925,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 120,
+                  "sum_us": 7169.311,
+                  "max_us": 494.995,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 240,
+                  "sum_us": 74115.446,
+                  "max_us": 2319.907,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 120,
+                  "sum_us": 3937.514,
+                  "max_us": 362.902,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 120,
+                  "sum_us": 1271.1,
+                  "max_us": 120.796,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 120,
+                  "sum_us": 705.33,
+                  "max_us": 13.119,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 120,
+                  "sum_us": 19253.403,
+                  "max_us": 793.323,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 120,
+                  "sum_us": 36204.957,
+                  "max_us": 4741.505,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 120,
+                  "sum_us": 5381.102,
+                  "max_us": 207.547,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 120,
+                  "sum_us": 638.386,
+                  "max_us": 13.92,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 120,
+                  "sum_us": 47071.324,
+                  "max_us": 1926.732,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_union_us": 73420.096,
+              "gemm_kernel_nodes": 240,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 11076.621,
+              "fraction_gemm_overlapping_other_request_payload": 0.15086633773946576,
+              "candidate_payload_cross_request_overlap_us": 14276.045,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.19444328974998887,
+              "candidate_pack_rows_cross_request_overlap_us": 3199.424,
+              "strict_nonempty_cross_slot_overlap_us": 11076.621,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 2600.975,
+                "SendReply": 8475.646,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 5828.435
+                },
+                {
+                  "payload_slot": 1,
+                  "strict_nonempty_cross_request_overlap_us": 5248.186
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 360,
+                  "sum_us": 538.072,
+                  "max_us": 5.536,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 120,
+                  "sum_us": 101607.505,
+                  "max_us": 22035.78,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 120,
+                  "sum_us": 33039.794,
+                  "max_us": 11522.472,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 120,
+                  "sum_us": 1313.993,
+                  "max_us": 18.015,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 120,
+                  "sum_us": 548.185,
+                  "max_us": 11.552,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 120,
+                  "sum_us": 9092.147,
+                  "max_us": 542.422,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 120,
+                  "sum_us": 6581.858,
+                  "max_us": 438.04,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 240,
+                  "sum_us": 73420.096,
+                  "max_us": 2740.172,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 120,
+                  "sum_us": 4107.764,
+                  "max_us": 437.048,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 120,
+                  "sum_us": 1304.9370000000001,
+                  "max_us": 145.181,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 120,
+                  "sum_us": 720.367,
+                  "max_us": 12.8,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 120,
+                  "sum_us": 19363.859,
+                  "max_us": 786.898,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 120,
+                  "sum_us": 34008.576,
+                  "max_us": 4540.043,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 120,
+                  "sum_us": 5339.552,
+                  "max_us": 184.54,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 120,
+                  "sum_us": 615.798,
+                  "max_us": 11.52,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 120,
+                  "sum_us": 47411.429000000004,
+                  "max_us": 1727.776,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_union_us": 66592.706,
+              "gemm_kernel_nodes": 240,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 9158.274,
+              "fraction_gemm_overlapping_other_request_payload": 0.13752668347791722,
+              "candidate_payload_cross_request_overlap_us": 11813.632,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.17740129076598868,
+              "candidate_pack_rows_cross_request_overlap_us": 2655.358,
+              "strict_nonempty_cross_slot_overlap_us": 9158.274,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 2280.583,
+                "SendReply": 6877.691,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 5521.277
+                },
+                {
+                  "payload_slot": 1,
+                  "strict_nonempty_cross_request_overlap_us": 3636.997
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 360,
+                  "sum_us": 554.223,
+                  "max_us": 9.216,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 120,
+                  "sum_us": 76613.99799999999,
+                  "max_us": 12057.561,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 120,
+                  "sum_us": 59793.519,
+                  "max_us": 20582.152,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 120,
+                  "sum_us": 1214.02,
+                  "max_us": 17.152,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 120,
+                  "sum_us": 556.945,
+                  "max_us": 15.903,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 120,
+                  "sum_us": 8431.566,
+                  "max_us": 385.911,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 120,
+                  "sum_us": 7079.89,
+                  "max_us": 493.972,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 240,
+                  "sum_us": 66592.706,
+                  "max_us": 2064.973,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 120,
+                  "sum_us": 3450.537,
+                  "max_us": 329.304,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 120,
+                  "sum_us": 1124.132,
+                  "max_us": 107.198,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 120,
+                  "sum_us": 746.348,
+                  "max_us": 13.024,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 120,
+                  "sum_us": 18404.409,
+                  "max_us": 770.477,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 120,
+                  "sum_us": 46374.903,
+                  "max_us": 5113.059,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 120,
+                  "sum_us": 5234.781,
+                  "max_us": 199.803,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 120,
+                  "sum_us": 602.386,
+                  "max_us": 10.336,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 120,
+                  "sum_us": 45908.626000000004,
+                  "max_us": 1764.469,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_union_us": 68393.202,
+              "gemm_kernel_nodes": 240,
+              "gemm_grids": [
+                [
+                  96,
+                  1,
+                  1
+                ]
+              ],
+              "strict_nonempty_cross_request_overlap_us": 10204.028,
+              "fraction_gemm_overlapping_other_request_payload": 0.14919652394692676,
+              "candidate_payload_cross_request_overlap_us": 12939.475,
+              "fraction_gemm_overlapping_candidate_other_request_payload": 0.18919241418174865,
+              "candidate_pack_rows_cross_request_overlap_us": 2665.113,
+              "strict_nonempty_cross_slot_overlap_us": 10204.028,
+              "strict_cross_request_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 2504.629,
+                "SendReply": 7699.399,
+                "SendRequest": 0.0
+              },
+              "slots": [
+                {
+                  "payload_slot": 0,
+                  "strict_nonempty_cross_request_overlap_us": 5982.26
+                },
+                {
+                  "payload_slot": 1,
+                  "strict_nonempty_cross_request_overlap_us": 4221.768
+                }
+              ],
+              "stages": {
+                "ResetMetadata": {
+                  "nodes": 360,
+                  "sum_us": 528.523,
+                  "max_us": 4.512,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ],
+                    [
+                      64,
+                      1,
+                      1
+                    ],
+                    [
+                      68,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "BeginWorker": {
+                  "nodes": 120,
+                  "sum_us": 58559.464,
+                  "max_us": 2755.698,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "WaitRequestsReady": {
+                  "nodes": 120,
+                  "sum_us": 73570.368,
+                  "max_us": 20224.676,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Histogram": {
+                  "nodes": 120,
+                  "sum_us": 1238.884,
+                  "max_us": 16.992,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "Prefix": {
+                  "nodes": 120,
+                  "sum_us": 530.097,
+                  "max_us": 8.704,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PackRows": {
+                  "nodes": 120,
+                  "sum_us": 8216.121,
+                  "max_us": 430.067,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPackAndCredit": {
+                  "nodes": 120,
+                  "sum_us": 7289.651,
+                  "max_us": 500.402,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ExpertGEMM": {
+                  "nodes": 240,
+                  "sum_us": 68393.202,
+                  "max_us": 2455.098,
+                  "grids": [
+                    [
+                      96,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SwiGLU": {
+                  "nodes": 120,
+                  "sum_us": 3500.0,
+                  "max_us": 392.181,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "ApplyRoutingWeights": {
+                  "nodes": 120,
+                  "sum_us": 1127.78,
+                  "max_us": 130.396,
+                  "grids": [
+                    [
+                      17,
+                      32,
+                      1
+                    ]
+                  ]
+                },
+                "WaitPartialsConsumed": {
+                  "nodes": 120,
+                  "sum_us": 746.4739999999999,
+                  "max_us": 14.4,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "MakePartials": {
+                  "nodes": 120,
+                  "sum_us": 18472.223,
+                  "max_us": 794.153,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishPartialAndWait": {
+                  "nodes": 120,
+                  "sum_us": 44637.175,
+                  "max_us": 4753.978,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "ReduceReply": {
+                  "nodes": 120,
+                  "sum_us": 5488.381,
+                  "max_us": 188.731,
+                  "grids": [
+                    [
+                      132,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "PublishConsumedAndWaitCredit": {
+                  "nodes": 120,
+                  "sum_us": 628.691,
+                  "max_us": 10.848,
+                  "grids": [
+                    [
+                      1,
+                      1,
+                      1
+                    ]
+                  ]
+                },
+                "SendReply": {
+                  "nodes": 120,
+                  "sum_us": 49113.393,
+                  "max_us": 1874.827,
+                  "grids": [
+                    [
+                      8,
+                      1,
+                      1
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "figures": [],
+      "figure_provenance": [
+        {
+          "source_name": "nsight-budget96-mixed-neighbors-16-19.svg",
+          "available_in_public_repo": false,
+          "sha256": "8d0d681dbc767f5e38996f07761144a4f54fee299040d5872ad18e96a831cabc"
+        },
+        {
+          "source_name": "nsight-budget96-mixed-neighbors-16-19.png",
+          "available_in_public_repo": false,
+          "sha256": "8ef49559cc3f08ea565cc331cd6ff3769c049e6ee14e70c711fa0efa1925f2e0"
+        }
+      ]
+    }
+  ]
+}
