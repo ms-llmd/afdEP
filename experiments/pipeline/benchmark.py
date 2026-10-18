@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Coordinated receive/FFN/reply overlap for one BF16 MoE layer.
 
-Compare a whole-request graph, serialized microbatches, and identical microbatches
-on independent transport slots with one ordered GEMM stream. Graph capture,
-weights, resident inputs and independent reference computation precede timing.
+Compare a whole-request graph, serialized or overlapped microbatches, and an
+optional two-request pipeline retaining full expert GEMMs. Graph capture, weights,
+resident inputs and independent reference computation precede timing.
 This is a component experiment, not a vLLM/full-model serving benchmark.
 """
 
@@ -43,7 +43,8 @@ from experiments.prefill.serving import (
 )
 
 DEFAULT_VARIANTS = ("whole_graph", "split_serial", "pipeline")
-VARIANTS = (*DEFAULT_VARIANTS, "pipeline_graph")
+REQUEST_VARIANTS = ("request_serial", "request_pipeline")
+VARIANTS = (*DEFAULT_VARIANTS, "pipeline_graph", *REQUEST_VARIANTS)
 US_PER_SECOND = 1_000_000
 DELAY_GPU_CYCLES = 5_000_000
 
@@ -204,15 +205,26 @@ class Slot:
 
 
 class Trial:
-    def __init__(self, config, rank, args, weights, module, variant, microbatches):
+    def __init__(
+        self, config, rank, args, weights, module, variant, microbatches, gemm_sms
+    ):
         if variant == "pipeline_graph" and (microbatches != 2 or args.slots != 2):
             raise ValueError("pipeline_graph currently requires two chunks and slots")
         self.rank = rank
         self.variant = variant
-        self.microbatches = 1 if variant == "whole_graph" else microbatches
+        self.microbatches = (
+            1
+            if variant == "whole_graph" or variant in REQUEST_VARIANTS
+            else microbatches
+        )
         self.capacity = math.ceil(config.capacity_tokens_per_rank / self.microbatches)
         self.config = replace(config, capacity_tokens_per_rank=self.capacity)
         self.args = args
+        self.gemm_sms = gemm_sms
+        if module is not None:
+            # This changes only DeepGEMM projections, not transport CTAs or the
+            # short Triton activation/weighting kernels. Set before capture.
+            module.set_num_sms(gemm_sms)
         self.count = 1 if variant == "whole_graph" else args.slots
         self.pool = PipelineBuffer(
             group=dist.group.WORLD, config=self.config, slots=self.count
@@ -226,11 +238,15 @@ class Trial:
         self.previous_done = None
         self.next_slot = 0
         self.requests_submitted = 0
+        self.pending_requests = deque()
         self.request_graph = None
         self.graph_fork = torch.cuda.Event()
 
     def range(self, label):
-        label += f"/rank={self.rank}/microbatches={self.microbatches}"
+        label += (
+            f"/rank={self.rank}/microbatches={self.microbatches}"
+            f"/gemm_sms={self.gemm_sms}"
+        )
         return torch.cuda.nvtx.range(label) if self.args.nvtx else nullcontext()
 
     def pointers(self):
@@ -295,6 +311,7 @@ class Trial:
             "slot_capacity_tokens_per_source": self.capacity,
             "slots": self.count,
             "shared_expert_weights": self.rank < FFN_RANKS,
+            "gemm_sms": self.gemm_sms,
         }
 
     def capture_pipeline_graph(self):
@@ -382,7 +399,10 @@ class Trial:
         lease = self.pool.acquire(index)
         with torch.cuda.stream(stream):
             lease.wait_on(stream)
-            if self.variant != "pipeline" and self.previous_done is not None:
+            if (
+                self.variant not in ("pipeline", "request_pipeline")
+                and self.previous_done is not None
+            ):
                 stream.wait_event(self.previous_done)
             if delayed:
                 torch.cuda._sleep(DELAY_GPU_CYCLES)
@@ -437,6 +457,19 @@ class Trial:
         item.output[begin:end].copy_(slot.output[: end - begin])
         lease.release(stream=self.source_stream)
 
+    def collect_request(self, pending):
+        """Finish one original request before its full-capacity slot is reused."""
+        item, exchange, events = pending
+        self.source_collect(item, exchange)
+        if events is not None:
+            events[1].record(self.source_stream)
+
+    def flush_requests(self):
+        """Drain the final request; runtime completion remains inside timing."""
+        with torch.cuda.stream(self.source_stream):
+            while self.pending_requests:
+                self.collect_request(self.pending_requests.popleft())
+
     def submit(self, item, *, events=None, delayed_source=False, delayed_worker=False):
         """Enqueue one original request; every output retains original token order."""
         request_id = self.requests_submitted
@@ -454,6 +487,21 @@ class Trial:
         with torch.cuda.stream(self.source_stream):
             if events is not None:
                 events[0].record(self.source_stream)
+            if self.variant == "request_pipeline":
+                exchange = self.source_dispatch(
+                    item,
+                    request_id,
+                    0,
+                    0,
+                    item.data.x.shape[0],
+                    delayed=delayed_source,
+                )
+                self.pending_requests.append((item, exchange, events))
+                # Publish the next original request before polling the earlier
+                # reply. At most two full requests own a slot at any instant.
+                if len(self.pending_requests) == self.count:
+                    self.collect_request(self.pending_requests.popleft())
+                return events
             if self.variant == "whole_graph":
                 slot = self.slots[0]
                 lease = self.pool.acquire(0)
@@ -493,6 +541,8 @@ class Trial:
         return events
 
     def close(self):
+        if self.pending_requests:
+            raise RuntimeError("request pipeline must be drained before closing")
         torch.cuda.synchronize()
         dist.barrier()
         self.request_graph = None
@@ -525,6 +575,7 @@ def check(trial, resident, cases):
             delayed_source=trial.rank == FFN_RANKS + 1 and index == 4,
             delayed_worker=trial.rank == 1 and index == 3,
         )
+    trial.flush_requests()
     torch.cuda.synchronize()
     if resident is not None:
         for item in resident:
@@ -594,6 +645,7 @@ def measure(trial, requests, resident, repeat, startup):
                 observed_host_us.append(
                     (now - submitted_at[request_index]) * US_PER_SECOND
                 )
+    trial.flush_requests()
     while pending:
         request_index, complete = pending.popleft()
         complete.synchronize()
@@ -658,6 +710,7 @@ def measure(trial, requests, resident, repeat, startup):
     return {
         "variant": trial.variant,
         "microbatches": trial.microbatches,
+        "gemm_sms": trial.gemm_sms,
         "slots": trial.count,
         "slot_capacity_tokens_per_source": trial.capacity,
         "repeat": repeat,
@@ -687,6 +740,7 @@ def parse_args():
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--request-window", type=int, default=1)
     parser.add_argument("--num-sms", type=int, default=24)
+    parser.add_argument("--gemm-sms", type=int, nargs="+", default=None)
     parser.add_argument("--num-gin-contexts", type=int, default=8)
     parser.add_argument("--transport-stripes", type=int, default=8)
     parser.add_argument("--hidden", type=int, default=2048)
@@ -720,16 +774,30 @@ def parse_args():
     if args.fixed_tokens is not None and not 0 <= args.fixed_tokens <= args.capacity:
         parser.error("fixed tokens must be between zero and capacity")
     args.microbatches = tuple(sorted(set(args.microbatches)))
+    if args.gemm_sms is not None and any(
+        budget <= 0 or budget % 2 for budget in args.gemm_sms
+    ):
+        parser.error("DeepGEMM SM budgets must be positive even integers")
     if "pipeline_graph" in args.variants and (
         2 not in args.microbatches or args.slots != 2
     ):
         parser.error("pipeline_graph requires --slots 2 and --microbatches including 2")
+    if any(variant in REQUEST_VARIANTS for variant in args.variants) and (
+        args.slots != 2 or args.request_window != 2
+    ):
+        parser.error("request variants require --slots 2 and --request-window 2")
     return args
 
 
 def main():
     args = parse_args()
     rank = initialize(timeout_s=600)
+    physical_sms = torch.cuda.get_device_properties(
+        torch.cuda.current_device()
+    ).multi_processor_count
+    args.gemm_sms = tuple(dict.fromkeys(args.gemm_sms or (physical_sms,)))
+    if any(budget > physical_sms for budget in args.gemm_sms):
+        raise ValueError("DeepGEMM SM budgets exceed this GPU's physical SM count")
     config = afdep.Config(
         capacity_tokens_per_rank=args.capacity,
         hidden_size=args.hidden,
@@ -754,15 +822,16 @@ def main():
     )
     module = load_deepgemm() if rank < FFN_RANKS else None
     cases = [
-        (variant, pieces)
+        (variant, pieces, gemm_sms)
         for variant in args.variants
         for pieces in (
             (1,)
-            if variant == "whole_graph"
+            if variant == "whole_graph" or variant in REQUEST_VARIANTS
             else (2,)
             if variant == "pipeline_graph"
             else args.microbatches
         )
+        for gemm_sms in args.gemm_sms
     ]
     checks = []
     if not args.skip_correctness:
@@ -770,19 +839,22 @@ def main():
         check_resident = resident_inputs(
             config, check_requests, rank, args, oracle=True
         )
-        for variant, pieces in cases:
+        for variant, pieces, gemm_sms in cases:
             if rank == 0:
                 print(
-                    f"correctness {variant} microbatches={pieces}",
+                    f"correctness {variant} microbatches={pieces} gemm_sms={gemm_sms}",
                     file=sys.stderr,
                     flush=True,
                 )
-            trial = Trial(config, rank, args, weights, module, variant, pieces)
+            trial = Trial(
+                config, rank, args, weights, module, variant, pieces, gemm_sms
+            )
             startup = trial.prepare()
             checks.append(
                 {
                     "variant": variant,
                     "microbatches": pieces,
+                    "gemm_sms": gemm_sms,
                     "checks": check(trial, check_resident, check_requests),
                     "startup": startup,
                 }
@@ -806,15 +878,18 @@ def main():
                 ]
             resident = resident_inputs(config, requests, rank, args)
             order = cases[repeat % len(cases) :] + cases[: repeat % len(cases)]
-            for variant, pieces in order:
+            for variant, pieces, gemm_sms in order:
                 if rank == 0:
                     print(
-                        f"timing repeat={repeat} {variant} microbatches={pieces}",
+                        f"timing repeat={repeat} {variant} microbatches={pieces} "
+                        f"gemm_sms={gemm_sms}",
                         file=sys.stderr,
                         flush=True,
                     )
                 baseline = allocation_snapshot()
-                trial = Trial(config, rank, args, weights, module, variant, pieces)
+                trial = Trial(
+                    config, rank, args, weights, module, variant, pieces, gemm_sms
+                )
                 startup = trial.prepare()
                 startup["baseline_before_setup"] = baseline
                 result = measure(trial, requests, resident, repeat, startup)
@@ -833,6 +908,11 @@ def main():
                     "intermediate": args.intermediate,
                     "slots": args.slots,
                     "microbatch_sweep": args.microbatches,
+                    "gemm_sm_sweep": args.gemm_sms,
+                    "physical_gpu_sms": physical_sms,
+                    "gemm_sm_scope": (
+                        "DeepGEMM_projections_only_Triton_kernels_unchanged"
+                    ),
                     "request_window": args.request_window,
                     "requests": args.requests,
                     "fixed_tokens_per_source": args.fixed_tokens,
@@ -858,6 +938,16 @@ def main():
                             "ordered_source_dispatch_dispatch_collect;"
                             "per_slot_receive_reply_streams_one_GEMM_stream;"
                             "intra_original_request_overlap_no_inter_request_pipeline"
+                        ),
+                        "request_serial": (
+                            "two_full_capacity_slots_phase_graphs_one_GEMM_stream;"
+                            "source_dispatch_collect_and_worker_requests_serialized;"
+                            "bounded_host_window2_shared_weights_no_token_splitting"
+                        ),
+                        "request_pipeline": (
+                            "two_full_capacity_slots_phase_graphs_one_GEMM_stream;"
+                            "source_dispatchA_dispatchB_collectA_bounded_window2;"
+                            "inter_original_request_overlap_shared_weights_no_token_splitting"
                         ),
                     },
                     "timing": (

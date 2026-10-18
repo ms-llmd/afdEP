@@ -19,7 +19,8 @@
     "Remove unused cpu_timeout_s constructor argument; GPU timeout and distributed bootstrap timeout remain explicit in their respective layers.",
     "Validate 16-byte alignment of nonempty source activation and output pointers before vector-copy kernels, including storage-offset views.",
     "Add validated caller-owned receive tensors with per-exchange weight/receipt resets; preserve native device protocol and reader credits.",
-    "Add opt-in eager exact receive allocation: discover GPU counts and read aligned counts on the CPU before allocating receive payload tensors, then retain the same packing and credit protocol."
+    "Add opt-in eager exact receive allocation: discover GPU counts and read aligned counts on the CPU before allocating receive payload tensors, then retain the same packing and credit protocol.",
+    "Initialize each private NCCL communicator with public ncclConfig_t.numRmaCtx=0 through ncclCommInitRankConfig, because afdEP uses device GIN and does not submit host RMA operations. This avoids unused host-RMA registration and progress threads while retaining GIN resources; explicit NCCL environment overrides retain their normal precedence."
   ],
   "verification": "The original implementation was validated on eight H100 GPUs. This extracted build requires its own GPU validation before claiming equivalence or performance.",
   "extracted_file_sha256": {
@@ -27,8 +28,11 @@
     "afdep/csrc/kernels.cuh": "05b50095f694231db3012821aed1fdf48e86b7a06d9c81eaeb8aee3e4db08bc0"
   },
   "current_file_sha256": {
-    "afdep/csrc/layout.hpp": "3a67c2a0e06c6cc5e053f2d5b0e4ac4a6eed48227576b0ab2a80f43ac1ff7d9c",
-    "afdep/csrc/kernels.cuh": "820c16685d6b803b6c5db0f022dc2b14ec646848ce174ed3f79af09e8ce3f215"
+    "afdep/csrc/layout.hpp": "b6eb1c7daa6b19d3fbd35be85e07a50a2affe470ca8ad6f3c71bfa77016bb38f",
+    "afdep/csrc/kernels.cuh": "7216ef44826b6c8ab461937f8d6a81b1dd9fcd814cd502facc98b136aa40d251",
+    "afdep/csrc/kernels.cu": "072f398a476e0c66752248bedc2c3525a612e4eb7fb6dd80727a4222a422e3c9",
+    "afdep/csrc/buffer.hpp": "711c8f1ed129924876f31d64561e549b9d74d174e5d17cce9d0d1d4323fe5ad1",
+    "afdep/csrc/nccl_runtime.cpp": "c34e35df9d86be29da977de381fe8df7d606dbe85b40ee3fe250cdbb07b4af1f"
   },
   "protocol_changes": [
     {
@@ -38,6 +42,10 @@
     {
       "date": "2026-10-18",
       "description": "Add opt-in device-side live source token counts for fixed-capacity inputs and CUDA graphs. BeginSource validates and caches the live prefix once; packing, compact maps, packet layouts and GIN request bytes use that count in both modes. Iterate worker histogram, packing and partial generation over actual per-source counts while preserving every readiness signal, reuse credit and receipt bucket stride."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Move hybrid all-source request-readiness and previous partial-reader-credit waits, plus hybrid/direct reply-readiness waits, into separate one-CTA gate kernels before the unchanged full-size histogram, partial generation and reply copy grids. Preserve every epoch target, all peer reader credits and all active GIN contexts including empty stripes. Native stream ordering gates payload grids; point-to-point puts/signals and local flush semantics are unchanged. This is a contention-reduction candidate requiring GPU validation; it does not establish the cause of previously observed GIN progress tails."
     }
   ]
 }

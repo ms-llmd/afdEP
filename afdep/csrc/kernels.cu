@@ -28,6 +28,9 @@ cudaError_t launch_kernel(int operation, DeviceArgs args, int blocks, cudaStream
         AFDEP_LAUNCH(SendReply);
         AFDEP_LAUNCH(CollectReply);
         AFDEP_LAUNCH(ReplyConsumedCredit);
+        AFDEP_LAUNCH(WaitRequestsReady);
+        AFDEP_LAUNCH(WaitPartialsConsumed);
+        AFDEP_LAUNCH(WaitRepliesReady);
     default:
         return cudaErrorInvalidValue;
     }

@@ -28,7 +28,12 @@ int64_t create_nccl_comm(const pybind11::bytearray &unique_id, int world_size, i
     ncclUniqueId id;
     std::memcpy(&id, bytes.data(), sizeof(id));
     ncclComm_t comm = nullptr;
-    const auto status = ncclCommInitRank(&comm, world_size, id, rank);
+    ncclConfig_t config = NCCL_CONFIG_INITIALIZER;
+    // Our device GIN path does not use host RMA contexts. Avoid registering
+    // unused host-RMA windows and spawning their progress thread per slot.
+    // NCCL still applies explicit environment overrides to this communicator.
+    config.numRmaCtx = 0;
+    const auto status = ncclCommInitRankConfig(&comm, world_size, id, rank, &config);
     if (status != ncclSuccess && comm != nullptr)
         ncclCommAbort(comm);
     AFDEP_NCCL_CHECK(status);

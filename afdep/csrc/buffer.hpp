@@ -109,6 +109,8 @@ class DirectionalM2NBuffer {
         a.psum = psum.data_ptr<int>();
         counts.zero_();
         launch(BeginWorker, a);
+        if (layout.hybrid)
+            launch(WaitRequestsReady, a);
         launch(Histogram, a, num_sms);
         launch(Prefix, a);
         return a;
@@ -336,6 +338,8 @@ class DirectionalM2NBuffer {
         auto a = args(worker_bucket);
         a.rows = static_cast<const uint16_t *>(rows.data_ptr());
         a.receipt = receipt.data_ptr<int>();
+        if (layout.hybrid)
+            launch(WaitPartialsConsumed, a);
         launch(MakePartials, a, num_sms);
         if (layout.hybrid) {
             launch(PublishPartialAndWait, a);
@@ -353,6 +357,7 @@ class DirectionalM2NBuffer {
                     "Directional output must match the source dispatch shape");
         auto a = args(std::max(source_rows, 1));
         a.out = static_cast<uint16_t *>(out.data_ptr());
+        launch(WaitRepliesReady, a);
         launch(CollectReply, a, num_sms);
         launch(ReplyConsumedCredit, a);
     }

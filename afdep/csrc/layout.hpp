@@ -99,7 +99,8 @@ enum Operation {
     BeginSource, PlanDirectRequests, PackSource, SendRequest, BeginWorker, Histogram, Prefix,
     PackRows, PublishPackAndCredit, MakePartials, PublishPartialAndWait,
     ReduceReply, PublishConsumedAndWaitCredit, SendReply, CollectReply,
-    ReplyConsumedCredit, NumOperations
+    ReplyConsumedCredit, WaitRequestsReady, WaitPartialsConsumed, WaitRepliesReady,
+    NumOperations
 };
 
 enum Signal { RequestReady, ReplyReady, RequestCredit, ReplyCredit };

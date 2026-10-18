@@ -270,12 +270,14 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
         transfer(a, l.partial(source, 0), l.reply_slot(worker),
                  size_t(state->received_tokens[source]) * l.hidden * sizeof(uint16_t), source + 4,
                  direct_signal(ReplyReady, worker), true);
-    } else if constexpr (kOperation == CollectReply) {
-        if (threadIdx.x == 0)
+    } else if constexpr (kOperation == WaitRepliesReady) {
+        // One CTA gates the later copy grid instead of reserving every payload
+        // CTA while another independent slot is still making progress.
+        if (tid == 0)
             for (int peer = 0; peer < 4; ++peer)
                 for (int q = 0; q < a.stripes; ++q)
                     wait_signal(q, direct_signal(ReplyReady, peer), state->epoch, a);
-        __syncthreads();
+    } else if constexpr (kOperation == CollectReply) {
         for (size_t i = tid; i < size_t(state->source_tokens) * l.hidden; i += stride) {
             const int token = i / l.hidden, h = i % l.hidden;
             float sum = 0;
@@ -348,16 +350,19 @@ __global__ void directional_kernel(DeviceArgs a) {
                 wait_signal(q, RequestReady, state->epoch, a);
             release(&state->request_ready, state->epoch);
         }
-    } else if constexpr (kOperation == Histogram) {
-        if (threadIdx.x == 0) {
+    } else if constexpr (kOperation == WaitRequestsReady) {
+        // A separate one-CTA kernel preserves all four acquire dependencies.
+        // Stream ordering then gates the entire following histogram grid.
+        if (tid == 0) {
             for (int source = 0; source < 4; ++source)
                 wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
         }
-        __syncthreads();
+    } else if constexpr (kOperation == Histogram) {
         int i = tid;
         for (int source = 0; source < 4; ++source) {
-            // Every CTA reads the ready packet directly. received_tokens is
-            // published for subsequent kernels, not cross-CTA reads here.
+            // The readiness gate completed before every CTA reads the packet.
+            // received_tokens is published for subsequent kernels, not
+            // cross-CTA reads here.
             const int n = packet_tokens(a.peers[source], l);
             if (n < 0 || n > a.bucket) fail("source tokens exceed bucket", a);
             if (tid == 0)
@@ -428,12 +433,14 @@ __global__ void directional_kernel(DeviceArgs a) {
                 wait_local(&control(a.peers[i])->pack_done, state->epoch, a);
             send_credit(RequestCredit, 1, a);
         }
-    } else if constexpr (kOperation == MakePartials) {
-        if (threadIdx.x == 0) {
+    } else if constexpr (kOperation == WaitPartialsConsumed) {
+        // Keep every reader credit before overwriting partial storage, without
+        // occupying the whole MakePartials grid while waiting for those readers.
+        if (tid == 0) {
             for (int i = 0; i < 4; ++i)
                 wait_local(&control(a.peers[i])->partials_consumed, state->epoch - 1, a);
         }
-        __syncthreads();
+    } else if constexpr (kOperation == MakePartials) {
         size_t i = tid;
         for (int source = 0; source < 4; ++source) {
             const int n = state->received_tokens[source];
@@ -475,12 +482,14 @@ __global__ void directional_kernel(DeviceArgs a) {
     } else if constexpr (kOperation == SendReply) {
         const size_t bytes = size_t(state->received_tokens[worker]) * l.hidden * sizeof(uint16_t);
         transfer(a, l.worker_reply, l.source_reply, bytes, 1, ReplyReady);
-    } else if constexpr (kOperation == CollectReply) {
-        if (threadIdx.x == 0) {
+    } else if constexpr (kOperation == WaitRepliesReady) {
+        // Every active GIN context, including empty stripes, remains required.
+        // A separate kernel lets the payload-copy grid start after readiness.
+        if (tid == 0) {
             for (int q = 0; q < a.stripes; ++q)
                 wait_signal(q, ReplyReady, state->epoch, a);
         }
-        __syncthreads();
+    } else if constexpr (kOperation == CollectReply) {
         const size_t bytes = size_t(state->source_tokens) * l.hidden * sizeof(uint16_t);
         for (size_t i = tid; i < bytes / 16; i += stride)
             reinterpret_cast<uint4*>(a.out)[i] = load_remote_vector(
