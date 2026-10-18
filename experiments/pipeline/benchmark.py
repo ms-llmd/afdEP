@@ -42,7 +42,8 @@ from experiments.prefill.serving import (
     trace,
 )
 
-VARIANTS = ("whole_graph", "split_serial", "pipeline")
+DEFAULT_VARIANTS = ("whole_graph", "split_serial", "pipeline")
+VARIANTS = (*DEFAULT_VARIANTS, "pipeline_graph")
 US_PER_SECOND = 1_000_000
 DELAY_GPU_CYCLES = 5_000_000
 
@@ -204,6 +205,8 @@ class Slot:
 
 class Trial:
     def __init__(self, config, rank, args, weights, module, variant, microbatches):
+        if variant == "pipeline_graph" and (microbatches != 2 or args.slots != 2):
+            raise ValueError("pipeline_graph currently requires two chunks and slots")
         self.rank = rank
         self.variant = variant
         self.microbatches = 1 if variant == "whole_graph" else microbatches
@@ -223,6 +226,8 @@ class Trial:
         self.previous_done = None
         self.next_slot = 0
         self.requests_submitted = 0
+        self.request_graph = None
+        self.graph_fork = torch.cuda.Event()
 
     def range(self, label):
         label += f"/rank={self.rank}/microbatches={self.microbatches}"
@@ -247,6 +252,8 @@ class Trial:
                     slot.stage_source(data, 0, self.capacity)
                 slot.whole()
                 torch.cuda.synchronize()
+            if self.variant == "pipeline_graph":
+                continue
             # Capturing each phase independently keeps event scheduling outside
             # the graphs. Capture itself executes no collective GPU protocol.
             phases = (
@@ -266,18 +273,106 @@ class Trial:
                 slot.graphs[phase].replay()
             torch.cuda.synchronize()
             dist.barrier()
+        if self.variant == "pipeline_graph":
+            self.capture_pipeline_graph()
+            dist.barrier()
+            with torch.cuda.stream(self.source_stream):
+                self.request_graph.replay()
+            torch.cuda.synchronize()
+            dist.barrier()
         self.source_stream.wait_stream(torch.cuda.current_stream())
         self.compute_stream.wait_stream(torch.cuda.current_stream())
         for index in range(self.count):
             self.pool.stream(index).wait_stream(torch.cuda.current_stream())
         return {
             "startup_us": (time.perf_counter() - started) * US_PER_SECOND,
-            "graphs_per_rank": sum(len(slot.graphs) for slot in self.slots),
+            "graphs_per_rank": (
+                1
+                if self.request_graph is not None
+                else sum(len(slot.graphs) for slot in self.slots)
+            ),
             "runtime_recaptures": 0,
             "slot_capacity_tokens_per_source": self.capacity,
             "slots": self.count,
             "shared_expert_weights": self.rank < FFN_RANKS,
         }
+
+    def capture_pipeline_graph(self):
+        """Capture one raw fork/join DAG; all storage/JIT work is warmed first."""
+        self.request_graph = torch.cuda.CUDAGraph()
+        root = self.source_stream
+        root.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.graph(self.request_graph, stream=root):
+            if self.rank >= FFN_RANKS:
+                for phase in ("dispatch", "collect"):
+                    for chunk, slot in enumerate(self.slots):
+                        with self.range(
+                            f"pipeline_capture/pipeline_graph/chunk={chunk}/"
+                            f"slot={chunk}/{phase}"
+                        ):
+                            getattr(slot, phase)()
+            else:
+                self.graph_fork.record(root)
+                for chunk, slot in enumerate(self.slots):
+                    stream = self.pool.stream(chunk)
+                    with torch.cuda.stream(stream):
+                        stream.wait_event(self.graph_fork)
+                        with self.range(
+                            f"pipeline_capture/pipeline_graph/chunk={chunk}/"
+                            f"slot={chunk}/receive"
+                        ):
+                            slot.receive()
+                        slot.ready.record(stream)
+                with torch.cuda.stream(self.compute_stream):
+                    self.compute_stream.wait_event(self.graph_fork)
+                    for chunk, slot in enumerate(self.slots):
+                        self.compute_stream.wait_event(slot.ready)
+                        with self.range(
+                            f"pipeline_capture/pipeline_graph/chunk={chunk}/"
+                            f"slot={chunk}/gemm"
+                        ):
+                            slot.compute()
+                        slot.computed.record(self.compute_stream)
+                for chunk, slot in enumerate(self.slots):
+                    stream = self.pool.stream(chunk)
+                    with torch.cuda.stream(stream):
+                        stream.wait_event(slot.computed)
+                        with self.range(
+                            f"pipeline_capture/pipeline_graph/chunk={chunk}/"
+                            f"slot={chunk}/reply"
+                        ):
+                            slot.reply()
+                        slot.done.record(stream)
+                    root.wait_event(slot.done)
+
+    def submit_pipeline_graph(self, item, request_id, events, delayed):
+        """One replay, with all slot ownership and variable staging outside capture."""
+        root = self.source_stream
+        with torch.cuda.stream(root):
+            if events is not None:
+                events[0].record(root)
+            leases = [self.pool.acquire(index) for index in range(self.count)]
+            for lease in leases:
+                lease.wait_on(root)
+            if delayed:
+                torch.cuda._sleep(DELAY_GPU_CYCLES)
+            bounds = None
+            if item is not None:
+                bounds = partitions(item.data.x.shape[0], self.capacity, 2)
+                for slot, (begin, end) in zip(self.slots, bounds, strict=True):
+                    slot.stage_source(item.data, begin, end)
+            with self.range(f"pipeline/pipeline_graph/request={request_id}/exchange"):
+                self.request_graph.replay()
+            if item is not None:
+                for slot, (begin, end) in zip(self.slots, bounds, strict=True):
+                    item.output[begin:end].copy_(slot.output[: end - begin])
+            # FFN replay joins both reply streams; source copies consume both
+            # output slots. Root completion therefore covers every slot user.
+            for lease in leases:
+                lease.release(stream=root)
+            if events is not None:
+                events[1].record(root)
+        return events
 
     def worker_chunk(self, request_id, chunk, *, delayed=False):
         index = self.next_slot % self.count
@@ -346,6 +441,10 @@ class Trial:
         """Enqueue one original request; every output retains original token order."""
         request_id = self.requests_submitted
         self.requests_submitted += 1
+        if self.variant == "pipeline_graph":
+            return self.submit_pipeline_graph(
+                item, request_id, events, delayed_source or delayed_worker
+            )
         if self.rank < FFN_RANKS:
             for chunk in range(self.microbatches):
                 self.worker_chunk(
@@ -396,6 +495,7 @@ class Trial:
     def close(self):
         torch.cuda.synchronize()
         dist.barrier()
+        self.request_graph = None
         self.slots.clear()
         self.pool.close()
         gc.collect()
@@ -578,7 +678,9 @@ def parse_args():
     parser.add_argument("--capacity", type=int, default=2048)
     parser.add_argument("--fixed-tokens", type=int, default=None)
     parser.add_argument("--microbatches", type=int, nargs="+", default=(1, 2, 4, 8))
-    parser.add_argument("--variants", choices=VARIANTS, nargs="+", default=VARIANTS)
+    parser.add_argument(
+        "--variants", choices=VARIANTS, nargs="+", default=DEFAULT_VARIANTS
+    )
     parser.add_argument("--slots", type=int, default=2)
     parser.add_argument("--requests", type=int, default=90)
     parser.add_argument("--repeats", type=int, default=3)
@@ -618,6 +720,10 @@ def parse_args():
     if args.fixed_tokens is not None and not 0 <= args.fixed_tokens <= args.capacity:
         parser.error("fixed tokens must be between zero and capacity")
     args.microbatches = tuple(sorted(set(args.microbatches)))
+    if "pipeline_graph" in args.variants and (
+        2 not in args.microbatches or args.slots != 2
+    ):
+        parser.error("pipeline_graph requires --slots 2 and --microbatches including 2")
     return args
 
 
@@ -650,7 +756,13 @@ def main():
     cases = [
         (variant, pieces)
         for variant in args.variants
-        for pieces in ((1,) if variant == "whole_graph" else args.microbatches)
+        for pieces in (
+            (1,)
+            if variant == "whole_graph"
+            else (2,)
+            if variant == "pipeline_graph"
+            else args.microbatches
+        )
     ]
     checks = []
     if not args.skip_correctness:
@@ -736,6 +848,11 @@ def main():
                         "split_serial": (
                             "same_partition_slots_phase_graphs_as_pipeline;"
                             "no_inter_chunk_overlap"
+                        ),
+                        "pipeline_graph": (
+                            "C2_only_one_raw_multistream_fork_join_graph_per_request;"
+                            "both_source_chunks_staged_before_replay;one_GEMM_stream;"
+                            "same_two_slots_no_inter_request_pipeline"
                         ),
                         "pipeline": (
                             "ordered_source_dispatch_dispatch_collect;"

@@ -21,8 +21,9 @@ or direct worker delivery (`False`); see [modes](docs/api.md#api).
 | Blackwell | Not implemented | — |
 
 The current backend implements **four Attention + four FFN ranks**, each role in
-its own four-GPU NVLink domain, with one in-flight lane. Other N/M layouts and
-concurrent lanes require further implementation and validation.
+its own four-GPU NVLink domain. Each `Buffer` has one in-flight lane;
+[`PipelineBuffer`](docs/api.md#ordering-and-lifetime) provides independent slots
+for caller-scheduled overlap. Other N/M layouts remain unimplemented.
 
 ## Quick start
 
@@ -66,6 +67,7 @@ eight-H100 checks on October 18. [H100 experiment details](docs/performance.md).
 
 [Contributing](CONTRIBUTING.md) · [CI](https://github.com/ms-llmd/afdEP/actions/workflows/ci.yml)
 
-Optional: [FFN prefill workspace experiment](experiments/prefill/README.md).
+Optional experiments: [FFN workspace](experiments/prefill/README.md) ·
+[microbatch pipeline](experiments/pipeline/README.md).
 
 Apache-2.0; upstream-derived components retain their [original notices](THIRD_PARTY_NOTICES.md).
