@@ -209,7 +209,12 @@ and warm up before timed replay; no automatic graph scheduler is provided.
 Release all leases before collective `pool.close()`. CUDA overlap and performance
 require GPU validation; independent slots alone do not guarantee either.
 
+Private communicators request no host RMA contexts (`numRmaCtx=0`); explicit NCCL
+environment overrides apply. GIN can still require CPU progress threads, and
+each slot creates separate resources.
+
 `close()` is collective, outside capture, after final GPU work; it drains peers
-before releasing windows. Do not use collective close as rank-local exception
+by finishing local GIN operations before the all-rank barrier and window release.
+Do not use collective close as rank-local exception
 cleanup. A timeout/device error is fatal to the job: terminate and reconstruct
 its participants rather than reuse partially advanced communication state.

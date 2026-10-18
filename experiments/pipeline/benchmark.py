@@ -234,6 +234,14 @@ class Trial:
             for i in range(self.count)
         ]
         self.source_stream = torch.cuda.Stream()
+        self.collect_stream = (
+            torch.cuda.Stream() if variant == "request_pipeline" else self.source_stream
+        )
+        self.dispatch_done = (
+            [torch.cuda.Event() for _ in range(self.count)]
+            if variant == "request_pipeline"
+            else []
+        )
         self.compute_stream = torch.cuda.Stream()
         self.previous_done = None
         self.next_slot = 0
@@ -297,6 +305,8 @@ class Trial:
             torch.cuda.synchronize()
             dist.barrier()
         self.source_stream.wait_stream(torch.cuda.current_stream())
+        if self.variant == "request_pipeline":
+            self.collect_stream.wait_stream(torch.cuda.current_stream())
         self.compute_stream.wait_stream(torch.cuda.current_stream())
         for index in range(self.count):
             self.pool.stream(index).wait_stream(torch.cuda.current_stream())
@@ -446,27 +456,37 @@ class Trial:
             f"pipeline/{self.variant}/request={request_id}/chunk={chunk}/slot={index}/dispatch"
         ):
             slot.graphs["dispatch"].replay()
+        if self.variant == "request_pipeline":
+            self.dispatch_done[index].record(stream)
         return index, slot, lease, begin, end, request_id, chunk
 
-    def source_collect(self, item, pending):
+    def source_collect(self, item, pending, *, completion_stream=None):
         index, slot, lease, begin, end, request_id, chunk = pending
         with self.range(
             f"pipeline/{self.variant}/request={request_id}/chunk={chunk}/slot={index}/collect"
         ):
             slot.graphs["collect"].replay()
         item.output[begin:end].copy_(slot.output[: end - begin])
-        lease.release(stream=self.source_stream)
+        lease.release(
+            stream=self.source_stream
+            if completion_stream is None
+            else completion_stream
+        )
 
     def collect_request(self, pending):
         """Finish one original request before its full-capacity slot is reused."""
         item, exchange, events = pending
-        self.source_collect(item, exchange)
-        if events is not None:
-            events[1].record(self.source_stream)
+        with torch.cuda.stream(self.collect_stream):
+            # A's reply depends on A's publication, not a later B publication
+            # queued on the dispatcher. Slot reuse still waits for this collect.
+            self.collect_stream.wait_event(self.dispatch_done[exchange[0]])
+            self.source_collect(item, exchange, completion_stream=self.collect_stream)
+            if events is not None:
+                events[1].record(self.collect_stream)
 
     def flush_requests(self):
         """Drain the final request; runtime completion remains inside timing."""
-        with torch.cuda.stream(self.source_stream):
+        with torch.cuda.stream(self.collect_stream):
             while self.pending_requests:
                 self.collect_request(self.pending_requests.popleft())
 
@@ -946,6 +966,7 @@ def main():
                         ),
                         "request_pipeline": (
                             "two_full_capacity_slots_phase_graphs_one_GEMM_stream;"
+                            "ordered_dispatch_independent_collect_stream_per_slot_ready;"
                             "source_dispatchA_dispatchB_collectA_bounded_window2;"
                             "inter_original_request_overlap_shared_weights_no_token_splitting"
                         ),
