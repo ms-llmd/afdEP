@@ -6,7 +6,7 @@ afdEP connects Attention token sources to FFN expert workers: dispatch routed
 tokens, receive expert inputs, and return combined results. Routing, quantization,
 expert compute, and serving scheduling stay with the caller.
 
-![DeepEP shared EP roles versus afdEP separate Attention and FFN roles](docs/assets/communication.svg)
+![afdEP round trip: Attention GPUs dispatch tokens to FFN expert GPUs and collect replies, compared with Masked DeepEP](docs/assets/communication.svg)
 
 The current backend uses NCCL GPU-Initiated Networking (GIN) and NVLink, with
 afdEP's own request/reply kernels. No DeepEP or vLLM runtime package is required.

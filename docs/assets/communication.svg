@@ -1,78 +1,121 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="790" viewBox="0 0 1280 790" role="img" aria-labelledby="title description">
-<title id="title">DeepEP standard expert parallelism and afdEP disaggregated communication</title>
-<desc id="description">Standard expert parallelism has ranks that both originate tokens and own experts. Selected token routes are dispatched to expert owners and combined results return. afdEP gives separate Attention source ranks and FFN worker ranks explicit request and reply roles. DeepEP masking already produces directional useful payload for AFD, but reuses the general EP protocol. This is a conceptual role diagram, not a claim of arbitrary currently supported topology or dense all-pair payload.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
+<title id="title">afdEP: tokens to experts and back</title>
+<desc id="desc">One MoE-layer round trip in afdEP's current backend: four Attention GPUs (group ranks 4-7) and four FFN GPUs (group ranks 0-3), each role in its own four-GPU NVLink domain, joined by NCCL GIN GPU-initiated RDMA with one rail per Attention j / FFN j pair. 1: source_dispatch(x, expert_ids, weights) on each Attention GPU sends each token once as a request on its rail. 2: worker_receive() on every FFN GPU gathers, over NVLink, the rows routed to its own quarter of the experts (experts 0-31, 32-63, 64-95, 96-127 for E = 128) from all four requests. 3: the caller runs expert compute and multiplies by the routing weights exactly once. 4: worker_reply(weighted_rows, receipt) sums partial results over NVLink and sends one row per token back over the rail. 5: source_collect(out) receives the combined result. A strip shows the Masked DeepEP baseline: all eight GPUs join one symmetric EP group, every GPU has token and expert slots, and the unused one is masked; useful payload already flows Attention to FFN to Attention, but the protocol, bookkeeping and registered buffers stay general all-to-all. Only the implemented 4 + 4 layout with one in-flight lane is shown; other N/M layouts are not implemented.</desc>
 <defs>
-<marker id="dispatch" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 4.5 L 0 9 z" fill="#2563eb"/></marker>
-<marker id="reply" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 4.5 L 0 9 z" fill="#047857"/></marker>
+<marker id="req" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 12 6 L 0 12 z" fill="#2563eb"/></marker>
+<marker id="rep" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 12 6 L 0 12 z" fill="#047857"/></marker>
+<marker id="flow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 12 6 L 0 12 z" fill="#64748b"/></marker>
+<pattern id="hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f4f6f9"/><rect width="3" height="8" fill="#e1e5eb"/></pattern>
 </defs>
 <g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
-<rect x="0" y="0" width="1280" height="790" rx="0" fill="white" stroke="none"/>
-<text x="32" y="48" fill="#15243b" font-size="32" font-weight="700">DeepEP and afdEP communication</text>
-<text x="32" y="78" fill="#526278" font-size="20">Shared EP roles → separate Attention and FFN roles</text>
-<rect x="32" y="106" width="592" height="598" rx="14" fill="#f7f9fd" stroke="#dce4ee"/>
-<rect x="648" y="106" width="600" height="598" rx="14" fill="#f5faf8" stroke="#d4e6dd"/>
-<text x="56" y="146" fill="#15243b" font-size="25" font-weight="700">DeepEP · standard EP</text>
-<text x="56" y="178" fill="#526278" font-size="20">Tokens and experts on every rank</text>
-<text x="672" y="146" fill="#15243b" font-size="25" font-weight="700">afdEP · disaggregated EP</text>
-<text x="672" y="178" fill="#526278" font-size="20">Separate token sources and expert workers</text>
-<path d="M 256 266 L 392 266" fill="none" stroke="#2563eb" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#dispatch)"/>
-<path d="M 400 302 L 264 302" fill="none" stroke="#047857" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#reply)"/>
-<path d="M 256 516 L 392 516" fill="none" stroke="#2563eb" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#dispatch)"/>
-<path d="M 400 552 L 264 552" fill="none" stroke="#047857" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#reply)"/>
-<path d="M 208 342 L 442 472" fill="none" stroke="#2563eb" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#dispatch)"/>
-<path d="M 470 480 L 238 350" fill="none" stroke="#047857" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#reply)"/>
-<path d="M 434 342 L 200 472" fill="none" stroke="#2563eb" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#dispatch)"/>
-<path d="M 170 480 L 404 350" fill="none" stroke="#047857" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#reply)"/>
-<rect x="72" y="230" width="184" height="112" rx="14" fill="white" stroke="#d7e0eb"/>
-<text x="90" y="261" fill="#15243b" font-size="22" font-weight="700">Rank 0</text>
-<text x="90" y="292" fill="#2563eb" font-size="19">Token source</text>
-<text x="90" y="321" fill="#7454a1" font-size="19">Expert owner</text>
-<rect x="400" y="230" width="184" height="112" rx="14" fill="white" stroke="#d7e0eb"/>
-<text x="418" y="261" fill="#15243b" font-size="22" font-weight="700">Rank 1</text>
-<text x="418" y="292" fill="#2563eb" font-size="19">Token source</text>
-<text x="418" y="321" fill="#7454a1" font-size="19">Expert owner</text>
-<rect x="72" y="480" width="184" height="112" rx="14" fill="white" stroke="#d7e0eb"/>
-<text x="90" y="511" fill="#15243b" font-size="22" font-weight="700">Rank 2</text>
-<text x="90" y="542" fill="#2563eb" font-size="19">Token source</text>
-<text x="90" y="571" fill="#7454a1" font-size="19">Expert owner</text>
-<rect x="400" y="480" width="184" height="112" rx="14" fill="white" stroke="#d7e0eb"/>
-<text x="418" y="511" fill="#15243b" font-size="22" font-weight="700">Rank 3</text>
-<text x="418" y="542" fill="#2563eb" font-size="19">Token source</text>
-<text x="418" y="571" fill="#7454a1" font-size="19">Expert owner</text>
-<rect x="222" y="388" width="214" height="39" rx="19" fill="#f7f9fd" stroke="none"/>
-<text x="329" y="414" fill="#526278" font-size="19" text-anchor="middle">Selected token routes</text>
-<path d="M 76 630 L 112 630" fill="none" stroke="#2563eb" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#dispatch)"/>
-<text x="126" y="637" fill="#2563eb" font-size="20">Dispatch: routed tokens</text>
-<path d="M 112 666 L 76 666" fill="none" stroke="#047857" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#reply)"/>
-<text x="126" y="673" fill="#047857" font-size="20">Combine: reduced results</text>
-<text x="775" y="224" fill="#15243b" font-size="21" text-anchor="middle" font-weight="600">N Attention ranks</text>
-<text x="1140" y="224" fill="#15243b" font-size="21" text-anchor="middle" font-weight="600">M FFN ranks</text>
-<rect x="680" y="244" width="190" height="352" rx="14" fill="#eaf1fe" stroke="#d4e0f5"/>
-<rect x="1040" y="244" width="190" height="352" rx="14" fill="#e7f4ee" stroke="#cfe4d9"/>
-<rect x="696" y="264" width="158" height="66" rx="14" fill="white" stroke="#d9e3f5"/>
-<text x="775" y="305" fill="#2563eb" font-size="22" text-anchor="middle" font-weight="600">A₀</text>
-<rect x="696" y="350" width="158" height="66" rx="14" fill="white" stroke="#d9e3f5"/>
-<text x="775" y="391" fill="#2563eb" font-size="22" text-anchor="middle" font-weight="600">A₁</text>
-<text x="775" y="450" fill="#526278" font-size="27" text-anchor="middle">⋮</text>
-<rect x="696" y="482" width="158" height="66" rx="14" fill="white" stroke="#d9e3f5"/>
-<text x="775" y="523" fill="#2563eb" font-size="22" text-anchor="middle" font-weight="600">Aₙ₋₁</text>
-<rect x="1056" y="264" width="158" height="66" rx="14" fill="white" stroke="#d8e4e2"/>
-<text x="1135" y="305" fill="#047857" font-size="22" text-anchor="middle" font-weight="600">F₀</text>
-<rect x="1056" y="350" width="158" height="66" rx="14" fill="white" stroke="#d8e4e2"/>
-<text x="1135" y="391" fill="#047857" font-size="22" text-anchor="middle" font-weight="600">F₁</text>
-<text x="1135" y="450" fill="#526278" font-size="27" text-anchor="middle">⋮</text>
-<rect x="1056" y="482" width="158" height="66" rx="14" fill="white" stroke="#d8e4e2"/>
-<text x="1135" y="523" fill="#047857" font-size="22" text-anchor="middle" font-weight="600">Fₘ₋₁</text>
-<text x="775" y="578" fill="#2563eb" font-size="18" text-anchor="middle">Token sources</text>
-<text x="1135" y="578" fill="#047857" font-size="18" text-anchor="middle">Expert owners</text>
-<text x="955" y="320" fill="#2563eb" font-size="19" text-anchor="middle" font-weight="600">Routed tokens</text>
-<path d="M 884 344 L 1024 344" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#dispatch)"/>
-<text x="955" y="375" fill="#2563eb" font-size="18" text-anchor="middle">Dispatch N → M</text>
-<text x="955" y="446" fill="#047857" font-size="19" text-anchor="middle" font-weight="600">Reduced results</text>
-<path d="M 1024 470 L 884 470" fill="none" stroke="#047857" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#reply)"/>
-<text x="955" y="501" fill="#047857" font-size="18" text-anchor="middle">Reply M → N</text>
-<text x="672" y="637" fill="#047857" font-size="21" font-weight="600">Directional request / reply</text>
-<text x="672" y="673" fill="#526278" font-size="20">Real experts · Explicit roles</text>
-<text x="32" y="742" fill="#526278" font-size="19">DeepEP masking already gives directional useful payload.</text>
-<text x="32" y="774" fill="#526278" font-size="18">Logical roles and selected routes; see the support matrix for implemented configurations.</text>
+<rect x="0" y="0" width="1280" height="760" rx="0" fill="white" stroke="none" stroke-width="1.5"/>
+<text x="32" y="48" font-size="30" fill="#15243b" font-weight="700">afdEP: tokens to experts and back</text>
+<text x="32" y="80" font-size="18" fill="#526278">Attention–FFN Disaggregation (AFD): Attention GPUs hold tokens but no experts; FFN GPUs hold experts but originate no tokens.</text>
+<rect x="32" y="100" width="300" height="466" rx="16" fill="#f1f6ff" stroke="#cfdcf3" stroke-width="1.5"/>
+<text x="52" y="132" font-size="21" fill="#1d4ed8" font-weight="700">Attention GPUs</text>
+<text x="52" y="156" font-size="16" fill="#526278">ranks 4–7 · one NVLink domain</text>
+<circle cx="66" cy="192" r="15" fill="#2563eb"/>
+<text x="66" y="198" font-size="17" fill="white" font-weight="700" text-anchor="middle">1</text>
+<text x="90" y="198" font-size="18" fill="#2563eb" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">source_dispatch</text>
+<text x="90" y="221" font-size="16" fill="#15243b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">(x, expert_ids, weights)</text>
+<text x="90" y="244" font-size="16" fill="#526278">sends each token once</text>
+<rect x="50" y="260" width="264" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
+<text x="66" y="287" font-size="18" fill="#15243b" font-weight="600">Attention 0</text>
+<rect x="230" y="268" width="72" height="26" rx="13" fill="#dbe7fd" stroke="none" stroke-width="1.5"/>
+<text x="266" y="287" font-size="16" fill="#1d4ed8" text-anchor="middle">tokens</text>
+<rect x="50" y="314" width="264" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
+<text x="66" y="341" font-size="18" fill="#15243b" font-weight="600">Attention 1</text>
+<rect x="230" y="322" width="72" height="26" rx="13" fill="#dbe7fd" stroke="none" stroke-width="1.5"/>
+<text x="266" y="341" font-size="16" fill="#1d4ed8" text-anchor="middle">tokens</text>
+<rect x="50" y="368" width="264" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
+<text x="66" y="395" font-size="18" fill="#15243b" font-weight="600">Attention 2</text>
+<rect x="230" y="376" width="72" height="26" rx="13" fill="#dbe7fd" stroke="none" stroke-width="1.5"/>
+<text x="266" y="395" font-size="16" fill="#1d4ed8" text-anchor="middle">tokens</text>
+<rect x="50" y="422" width="264" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
+<text x="66" y="449" font-size="18" fill="#15243b" font-weight="600">Attention 3</text>
+<rect x="230" y="430" width="72" height="26" rx="13" fill="#dbe7fd" stroke="none" stroke-width="1.5"/>
+<text x="266" y="449" font-size="16" fill="#1d4ed8" text-anchor="middle">tokens</text>
+<circle cx="66" cy="498" r="15" fill="#2563eb"/>
+<text x="66" y="504" font-size="17" fill="white" font-weight="700" text-anchor="middle">5</text>
+<text x="90" y="504" font-size="18" fill="#2563eb" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">source_collect(out)</text>
+<rect x="632" y="100" width="326" height="466" rx="16" fill="#eff8f3" stroke="#c6e3d3" stroke-width="1.5"/>
+<text x="652" y="132" font-size="21" fill="#047857" font-weight="700">FFN GPUs</text>
+<text x="652" y="156" font-size="16" fill="#526278">ranks 0–3 · one NVLink domain</text>
+<circle cx="666" cy="192" r="15" fill="#047857"/>
+<text x="666" y="198" font-size="17" fill="white" font-weight="700" text-anchor="middle">2</text>
+<text x="690" y="198" font-size="18" fill="#047857" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">worker_receive()</text>
+<text x="690" y="221" font-size="16" fill="#526278">gathers its experts' rows</text>
+<text x="690" y="244" font-size="16" fill="#526278">from all 4 requests (NVLink)</text>
+<rect x="650" y="260" width="234" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
+<text x="666" y="287" font-size="18" fill="#15243b" font-weight="600">FFN 0</text>
+<rect x="750" y="268" width="124" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
+<text x="812" y="287" font-size="16" fill="#047857" text-anchor="middle">experts 0–31</text>
+<line x1="884" y1="281" x2="904" y2="281" stroke="#7fbf9d" stroke-width="3"/>
+<rect x="650" y="314" width="234" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
+<text x="666" y="341" font-size="18" fill="#15243b" font-weight="600">FFN 1</text>
+<rect x="750" y="322" width="124" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
+<text x="812" y="341" font-size="16" fill="#047857" text-anchor="middle">experts 32–63</text>
+<line x1="884" y1="335" x2="904" y2="335" stroke="#7fbf9d" stroke-width="3"/>
+<rect x="650" y="368" width="234" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
+<text x="666" y="395" font-size="18" fill="#15243b" font-weight="600">FFN 2</text>
+<rect x="750" y="376" width="124" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
+<text x="812" y="395" font-size="16" fill="#047857" text-anchor="middle">experts 64–95</text>
+<line x1="884" y1="389" x2="904" y2="389" stroke="#7fbf9d" stroke-width="3"/>
+<rect x="650" y="422" width="234" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
+<text x="666" y="449" font-size="18" fill="#15243b" font-weight="600">FFN 3</text>
+<rect x="750" y="430" width="124" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
+<text x="812" y="449" font-size="16" fill="#047857" text-anchor="middle">experts 96–127</text>
+<line x1="884" y1="443" x2="904" y2="443" stroke="#7fbf9d" stroke-width="3"/>
+<rect x="904" y="256" width="30" height="212" rx="8" fill="#cde9da" stroke="#7fbf9d" stroke-width="1.5"/>
+<text x="919" y="362" font-size="16" fill="#065f46" font-weight="700" text-anchor="middle" transform="rotate(-90 919 362)" dy="6">NVLink</text>
+<circle cx="666" cy="498" r="15" fill="#047857"/>
+<text x="666" y="504" font-size="17" fill="white" font-weight="700" text-anchor="middle">4</text>
+<text x="690" y="504" font-size="18" fill="#047857" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">worker_reply</text>
+<text x="690" y="527" font-size="16" fill="#15243b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">(weighted_rows, receipt)</text>
+<text x="690" y="550" font-size="16" fill="#526278">sums partials over NVLink</text>
+<text x="482" y="132" font-size="19" fill="#15243b" font-weight="700" text-anchor="middle">GPU-initiated RDMA</text>
+<text x="482" y="156" font-size="16" fill="#526278" text-anchor="middle">NCCL GIN · one rail per pair</text>
+<path d="M 315 273 L 648 273" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
+<path d="M 649 289 L 316 289" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
+<path d="M 315 327 L 648 327" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
+<path d="M 649 343 L 316 343" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
+<path d="M 315 381 L 648 381" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
+<path d="M 649 397 L 316 397" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
+<path d="M 315 435 L 648 435" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
+<path d="M 649 451 L 316 451" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
+<text x="482" y="255" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">request: tokens, ids, weights</text>
+<text x="482" y="483" font-size="16" fill="#047857" font-weight="600" text-anchor="middle">reply: one row per token</text>
+<rect x="984" y="290" width="264" height="140" rx="14" fill="white" stroke="#64748b" stroke-width="2" stroke-dasharray="7 6"/>
+<circle cx="1014" cy="320" r="15" fill="#15243b"/>
+<text x="1014" y="326" font-size="17" fill="white" font-weight="700" text-anchor="middle">3</text>
+<text x="1038" y="326" font-size="18" fill="#15243b" font-weight="700">Your expert compute</text>
+<text x="1006" y="358" font-size="16" fill="#526278">Run your experts on the</text>
+<text x="1006" y="380" font-size="16" fill="#526278">rows; multiply by routing</text>
+<text x="1006" y="402" font-size="16" fill="#526278">weights exactly once.</text>
+<path d="M 880 192 L 1116 192 L 1116 288" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#flow)"/>
+<text x="1037" y="180" font-size="16" fill="#64748b" text-anchor="middle">rows</text>
+<path d="M 1116 431 L 1116 498 L 836 498" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#flow)"/>
+<text x="1037" y="524" font-size="16" fill="#64748b" text-anchor="middle">weighted rows</text>
+<rect x="32" y="584" width="1216" height="128" rx="14" fill="#f6f7f9" stroke="#e1e6ee" stroke-width="1.5"/>
+<text x="56" y="617" font-size="19" fill="#15243b" font-weight="700">Baseline: Masked DeepEP</text>
+<rect x="56" y="643" width="352" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
+<text x="70" y="670" font-size="16" fill="#1d4ed8" font-weight="700">Attention ×4</text>
+<rect x="174" y="651" width="74" height="26" rx="13" fill="#dbe7fd" stroke="none" stroke-width="1.5"/>
+<text x="211" y="670" font-size="16" fill="#1d4ed8" text-anchor="middle">tokens</text>
+<rect x="256" y="651" width="142" height="26" rx="13" fill="url(#hatch)" stroke="#c3cbd6" stroke-width="1.2"/>
+<text x="327" y="670" font-size="16" fill="#5f6b7e" text-anchor="middle">experts: masked</text>
+<rect x="492" y="643" width="310" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
+<text x="506" y="670" font-size="16" fill="#047857" font-weight="700">FFN ×4</text>
+<rect x="568" y="651" width="134" height="26" rx="13" fill="url(#hatch)" stroke="#c3cbd6" stroke-width="1.2"/>
+<text x="635" y="670" font-size="16" fill="#5f6b7e" text-anchor="middle">tokens: masked</text>
+<rect x="710" y="651" width="82" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
+<text x="751" y="670" font-size="16" fill="#047857" text-anchor="middle">experts</text>
+<path d="M 409 657 L 490 657" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
+<path d="M 491 671 L 410 671" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
+<line x1="826" y1="604" x2="826" y2="692" stroke="#d5dce6" stroke-width="1.5"/>
+<text x="850" y="617" font-size="17" fill="#15243b">All 8 GPUs join one symmetric EP group.</text>
+<text x="850" y="643" font-size="17" fill="#526278">Useful payload is already directional, but</text>
+<text x="850" y="667" font-size="17" fill="#526278">the protocol, bookkeeping and registered</text>
+<text x="850" y="691" font-size="17" fill="#526278">buffers stay general all-to-all.</text>
+<text x="32" y="742" font-size="16" fill="#526278">Current backend: 4 Attention + 4 FFN GPUs, one in-flight lane; expert ranges shown for E = 128. Other N/M layouts are not implemented.</text>
 </g></svg>
