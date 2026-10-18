@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Closed-loop mixed-size one-layer experiment, not an end-to-end serving test.
+"""Mixed-size one-layer component experiment, not an end-to-end serving test.
 
 Dynamic eager allocates receive/reply storage per request and sizes compute from
 GPU-produced host counts. Pooled variants share one maximum-capacity workspace
 across buckets; graph mode caches communication/FFN graphs, with timed source
 staging and padding. Only standard buckets are warmed, never future trace inputs.
+Queued mode uses resident inputs and matched source graphs. Host enqueue can run
+ahead while the one device lane stays ordered; GPU intervals are not response
+latency. Capture, first replay and input generation precede the trace clock.
 """
 
 from __future__ import annotations
@@ -156,7 +159,7 @@ def cpu_snapshot() -> dict:
 
 
 class Pipeline:
-    """One lane with shared max storage; every request completes before reuse."""
+    """One ordered device lane; stage/compute/reply precede the next reuse."""
 
     def __init__(
         self,
@@ -168,12 +171,20 @@ class Pipeline:
         weights,
         module,
         live_token_count=False,
+        source_policy="variant",
     ):
         self.buffer = buffer
         self.config = config
         self.rank = rank
         self.variant = variant
         self.buckets = buckets
+        self.source_policy = source_policy
+        self.dynamic_source = variant == "dynamic_eager" and source_policy == "variant"
+        self.capture_for_role = (
+            variant == "pooled_graph"
+            if rank < FFN_RANKS
+            else variant == "pooled_graph" or source_policy == "matched_graph"
+        )
         self.receive = None
         self.views = {}
         self.graphs = {}
@@ -213,7 +224,7 @@ class Pipeline:
                         [],
                         receipt,
                     )
-        elif variant != "dynamic_eager":
+        elif not self.dynamic_source:
             maximum = buckets[-1]
             self.stage = Payload(
                 torch.empty(
@@ -280,7 +291,11 @@ class Pipeline:
             if self.variant == "dynamic_eager":
                 self.executor.reply = self.empty_reply
                 received = self.buffer.worker_receive(
-                    bucket=max(1, request.maximum),
+                    bucket=(
+                        bucket
+                        if self.source_policy == "matched_graph"
+                        else max(1, request.maximum)
+                    ),
                     read_host_counts=True,
                     exact_rows=True,
                 )
@@ -300,7 +315,7 @@ class Pipeline:
                 self.graphs[bucket].replay()
             else:
                 self.worker(bucket)
-        elif self.variant == "dynamic_eager":
+        elif self.dynamic_source:
             self.output = None
             self.output = torch.empty_like(data.x)
             self.buffer.source_dispatch(
@@ -312,7 +327,7 @@ class Pipeline:
             self.buffer.source_collect(self.output)
         else:
             self.stage_source(data, bucket)
-            if self.variant == "pooled_graph":
+            if self.capture_for_role:
                 self.graphs[bucket].replay()
             else:
                 self.source(bucket)
@@ -323,6 +338,8 @@ class Pipeline:
             return
         config = self.config
         if self.rank >= FFN_RANKS:
+            if not self.dynamic_source:
+                return
             self.logical_allocations += 1
             self.logical_allocation_bytes += (
                 request.counts[self.rank - FFN_RANKS] * config.hidden_size * 2
@@ -332,7 +349,14 @@ class Pipeline:
             self.logical_allocation_bytes += (
                 self.last_receive_rows * (4 * config.hidden_size + 4)
                 + config.experts_per_rank * 4
-                + ATTENTION_RANKS * max(1, request.maximum) * config.top_k * 4
+                + ATTENTION_RANKS
+                * (
+                    selected_bucket(request.maximum, self.buckets)
+                    if self.source_policy == "matched_graph"
+                    else max(1, request.maximum)
+                )
+                * config.top_k
+                * 4
                 + self.last_compute_rows * 6 * self.executor.weights.intermediate
             )
 
@@ -340,11 +364,13 @@ class Pipeline:
         if self.variant == "dynamic_eager":
             if self.executor is not None:
                 self.executor.reply = self.empty_reply
-            else:
+            elif self.dynamic_source:
                 self.output = None
 
     def storage_pointers(self) -> tuple[int, ...]:
-        if self.variant == "dynamic_eager":
+        if (self.rank < FFN_RANKS and self.variant == "dynamic_eager") or (
+            self.rank >= FFN_RANKS and self.dynamic_source
+        ):
             return ()
         if self.receive is not None:
             tensors = (
@@ -377,7 +403,7 @@ class Pipeline:
                 dist.barrier()
                 started = time.perf_counter()
                 # Graphs do not exist until the first eager warmup finishes.
-                if self.variant == "pooled_graph":
+                if self.capture_for_role:
                     if self.rank < FFN_RANKS:
                         self.executor.expected_rows_per_expert = self.hint(bucket)
                         self.worker(bucket)
@@ -389,7 +415,7 @@ class Pipeline:
                 torch.cuda.synchronize()
                 warm_us += (time.perf_counter() - started) * US_PER_SECOND
                 dist.barrier()
-            if self.variant == "pooled_graph":
+            if self.capture_for_role:
                 started = time.perf_counter()
                 graph = torch.cuda.CUDAGraph()
                 with torch.cuda.graph(graph):
@@ -401,9 +427,15 @@ class Pipeline:
                 self.graphs[bucket] = graph
                 torch.cuda.synchronize()
                 capture_us += (time.perf_counter() - started) * US_PER_SECOND
-                dist.barrier()
+            # Some variants capture only the source role. All ranks must match
+            # capture barriers and the subsequent source/worker prime exchange.
+            dist.barrier()
+            if self.variant == "pooled_graph" or self.source_policy == "matched_graph":
                 started = time.perf_counter()
-                graph.replay()
+                if self.capture_for_role:
+                    self.graphs[bucket].replay()
+                else:
+                    self.execute(request, data)
                 torch.cuda.synchronize()
                 first_replay_us += (time.perf_counter() - started) * US_PER_SECOND
                 dist.barrier()
@@ -471,19 +503,53 @@ def correctness(buffer, config, rank, args, weights, module) -> list[str]:
             weights,
             module,
             args.live_token_count,
+            args.source_policy,
         )
         pipeline.prepare(args.warmup)
         pointers = pipeline.storage_pointers()
+        resident = (
+            [payload(config, request, rank - FFN_RANKS) for request in requests]
+            if args.execution == "queued" and rank >= FFN_RANKS
+            else None
+        )
+        snapshots = (
+            [torch.empty_like(data.x) for data in resident]
+            if resident is not None
+            else None
+        )
+        torch.cuda.synchronize()
         dist.barrier()
         for index, request in enumerate(requests):
-            data = payload(config, request, rank - FFN_RANKS) if rank >= 4 else None
-            torch.cuda.synchronize()
+            data = (
+                resident[index]
+                if resident is not None
+                else payload(config, request, rank - FFN_RANKS)
+                if rank >= FFN_RANKS
+                else None
+            )
+            if args.execution != "queued":
+                torch.cuda.synchronize()
             if rank == 1 and index == 2:
                 torch.cuda._sleep(5_000_000)
             pipeline.execute(request, data)
-            torch.cuda.synchronize()
-            pipeline.check(data, args)
+            if snapshots is not None:
+                snapshots[index].copy_(pipeline.output[: data.x.shape[0]])
+            if args.execution != "queued":
+                torch.cuda.synchronize()
+                pipeline.check(data, args)
             assert pipeline.storage_pointers() == pointers, "pooled storage moved"
+        torch.cuda.synchronize()
+        if snapshots is not None:
+            for data, snapshot in zip(resident, snapshots, strict=True):
+                expected = reference_output(
+                    SourceInputs(data.x, data.ids, data.weights, snapshot),
+                    config,
+                    args.intermediate,
+                    args.weight_seed,
+                )
+                torch.testing.assert_close(
+                    snapshot, expected, rtol=REFERENCE_RTOL, atol=REFERENCE_ATOL
+                )
         dist.barrier()
         checked.append(variant)
         pipeline.close()
@@ -499,6 +565,25 @@ def percentile(values: list[float], quantile: float) -> float:
 
 
 def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dict:
+    queued = args.execution == "queued"
+    requests = trace(args.requests, args.trace_seed + repeat * 7919, args.buckets[-1])
+    generation_started = time.perf_counter()
+    resident = (
+        [payload(config, request, rank - FFN_RANKS) for request in requests]
+        if queued and rank >= FFN_RANKS
+        else None
+    )
+    torch.cuda.synchronize()
+    generation_us = (time.perf_counter() - generation_started) * US_PER_SECOND
+    resident_bytes = (
+        sum(
+            tensor.numel() * tensor.element_size()
+            for data in resident
+            for tensor in (data.x, data.ids, data.weights)
+        )
+        if resident is not None
+        else 0
+    )
     gc.collect()
     torch.cuda.empty_cache()
     baseline = allocation_snapshot()
@@ -512,13 +597,14 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
         weights,
         module,
         args.live_token_count,
+        args.source_policy,
     )
     construction_us = (time.perf_counter() - started) * US_PER_SECOND
     startup = pipeline.prepare(args.warmup)
     startup["construction_us"] = construction_us
     storage_pointers = pipeline.storage_pointers()
-    requests = trace(args.requests, args.trace_seed + repeat * 7919, args.buckets[-1])
     events = []
+    origin = torch.cuda.Event(enable_timing=True) if queued else None
     if args.cuda_events:
         events = [
             (torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True))
@@ -527,18 +613,30 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
         for begin, end in events:
             begin.record()
             end.record()
+        if origin is not None:
+            origin.record()
         torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()
     before = allocation_snapshot()
     samples = []
+    drain_samples = []
     dist.barrier()  # Exactly one initial barrier; no per-request Gloo control.
     cpu_before = cpu_snapshot()
     trace_started = time.perf_counter()
+    if origin is not None:
+        origin.record()
     for index, request in enumerate(requests):
-        # Payload/routing generation is deliberately excluded from per-request
-        # latency, but remains included in whole-trace wall throughput.
-        data = payload(config, request, rank - FFN_RANKS) if rank >= 4 else None
-        torch.cuda.synchronize()
+        # Closed-loop generation is outside each request clock but inside the
+        # trace. Queued inputs are already resident, outside both clocks.
+        data = (
+            resident[index]
+            if resident is not None
+            else payload(config, request, rank - FFN_RANKS)
+            if rank >= FFN_RANKS
+            else None
+        )
+        if not queued:
+            torch.cuda.synchronize()
         context = (
             torch.cuda.nvtx.range(f"mixed/{variant}/request={index}/rank={rank}")
             if args.nvtx
@@ -552,10 +650,24 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
             submit_us = (time.perf_counter() - started) * US_PER_SECOND
             if events:
                 events[index][1].record()
+            if not queued:
+                torch.cuda.synchronize()
+                wall_us = (time.perf_counter() - started) * US_PER_SECOND
+        if not queued:
+            pipeline.account(request)
+        samples.append(
+            {"host_enqueue_us": submit_us}
+            if queued
+            else {"wall_us": wall_us, "host_submit_us": submit_us}
+        )
+        if queued and args.queue_depth and (index + 1) % args.queue_depth == 0:
+            drain_started = time.perf_counter()
             torch.cuda.synchronize()
-            wall_us = (time.perf_counter() - started) * US_PER_SECOND
-        pipeline.account(request)
-        samples.append({"wall_us": wall_us, "host_submit_us": submit_us})
+            drain_samples.append((time.perf_counter() - drain_started) * US_PER_SECOND)
+    if queued:
+        drain_started = time.perf_counter()
+        torch.cuda.synchronize()
+        drain_samples.append((time.perf_counter() - drain_started) * US_PER_SECOND)
     trace_wall_s = time.perf_counter() - trace_started
     cpu_after = cpu_snapshot()
     after = allocation_snapshot()
@@ -582,8 +694,12 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
             },
         },
         "samples": samples,
-        "logical_workspace_allocations": pipeline.logical_allocations,
-        "logical_workspace_allocation_bytes": pipeline.logical_allocation_bytes,
+        "logical_workspace_allocations": (
+            None if queued else pipeline.logical_allocations
+        ),
+        "logical_workspace_allocation_bytes": (
+            None if queued else pipeline.logical_allocation_bytes
+        ),
         "baseline_before_setup": baseline,
         "before_trace": before,
         "after_trace": after,
@@ -604,18 +720,44 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
         },
         "registered_transport_bytes": buffer.num_buffer_bytes,
         "final_output_checked": rank >= FFN_RANKS,
-        "pooled_storage_addresses_stable": variant != "dynamic_eager",
+        "pooled_storage_addresses_stable": bool(storage_pointers),
     }
     if events:
         local["cuda_event_us"] = [
             begin.elapsed_time(end) * 1000 for begin, end in events
         ]
+    if queued:
+        local.update(
+            {
+                "resident_input_bytes": resident_bytes,
+                "allocation_accounting": (
+                    "use_torch_allocator_deltas_no_per_request_logging"
+                ),
+                "resident_input_generation_us": generation_us,
+                "host_window_drain_us": drain_samples,
+                "gpu_completion_offset_us": [
+                    origin.elapsed_time(end) * 1000 for _, end in events
+                ],
+                "gpu_interrequest_gap_us": [0.0]
+                + [
+                    events[index - 1][1].elapsed_time(events[index][0]) * 1000
+                    for index in range(1, len(events))
+                ],
+            }
+        )
     ranks = [None] * dist.get_world_size()
     dist.all_gather_object(ranks, local)
-    maximum_wall = [
-        max(row["samples"][i]["wall_us"] for row in ranks[FFN_RANKS:])
-        for i in range(len(requests))
-    ]
+    maximum_wall = (
+        [
+            max(row["cuda_event_us"][i] for row in ranks[FFN_RANKS:])
+            for i in range(len(requests))
+        ]
+        if queued
+        else [
+            max(row["samples"][i]["wall_us"] for row in ranks[FFN_RANKS:])
+            for i in range(len(requests))
+        ]
+    )
     trace_wall_s = max(row["trace_wall_s"] for row in ranks)
     useful_tokens = sum(sum(request.counts) for request in requests)
     result = {
@@ -626,7 +768,7 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
         "max_rank_trace_wall_s": trace_wall_s,
         "useful_source_tokens": useful_tokens,
         "useful_source_tokens_per_trace_wall_second": useful_tokens / trace_wall_s,
-        "max_attention_wall_us": {
+        "max_attention_gpu_service_us" if queued else "max_attention_wall_us": {
             "p50": statistics.median(maximum_wall),
             "p95": percentile(maximum_wall, 0.95),
             "p99": percentile(maximum_wall, 0.99),
@@ -635,7 +777,11 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
             {
                 **asdict(request),
                 "selected_bucket": selected_bucket(request.maximum, args.buckets),
-                "dynamic_receive_bucket": max(1, request.maximum),
+                "dynamic_receive_bucket": (
+                    selected_bucket(request.maximum, args.buckets)
+                    if args.source_policy == "matched_graph"
+                    else max(1, request.maximum)
+                ),
                 "pooled_padded_source_rows": (
                     0
                     if args.live_token_count
@@ -647,12 +793,30 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
                     ATTENTION_RANKS * selected_bucket(request.maximum, args.buckets)
                     - sum(request.counts)
                 ),
-                "max_attention_wall_us": maximum_wall[index],
+                "max_attention_gpu_service_us" if queued else "max_attention_wall_us": (
+                    maximum_wall[index]
+                ),
             }
             for index, request in enumerate(requests)
         ],
         "ranks": ranks,
     }
+    if queued:
+        result.update(
+            {
+                "execution": args.execution,
+                "source_policy": args.source_policy,
+                "configured_queue_depth": args.queue_depth,
+                "maximum_host_enqueue_window_requests": min(
+                    args.queue_depth or len(requests), len(requests)
+                ),
+                "concurrent_device_lanes": 1,
+                "resident_producer": True,
+                "timed_output_audit": (
+                    "final_request_only_queued_burst_checked_separately"
+                ),
+            }
+        )
     pipeline.close()
     return result
 
@@ -660,6 +824,13 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("hybrid", "direct"), default="hybrid")
+    parser.add_argument(
+        "--execution", choices=("closed_loop", "queued"), default="closed_loop"
+    )
+    parser.add_argument(
+        "--source-policy", choices=("variant", "matched_graph"), default="variant"
+    )
+    parser.add_argument("--queue-depth", type=int, default=0)
     parser.add_argument("--buckets", nargs="+", type=int, default=DEFAULT_BUCKETS)
     parser.add_argument("--requests", type=int, default=300)
     parser.add_argument("--repeats", type=int, default=3)
@@ -684,6 +855,15 @@ def parse_args():
         parser.error("hidden must be a positive multiple of 128")
     if args.intermediate % 128:
         parser.error("intermediate must be a positive multiple of 128")
+    if args.queue_depth < 0:
+        parser.error("queue depth must be nonnegative; zero drains only at trace end")
+    if args.execution == "queued":
+        if args.source_policy != "matched_graph" or not args.live_token_count:
+            parser.error(
+                "queued execution requires "
+                "--source-policy matched_graph --live-token-count"
+            )
+        args.cuda_events = True
     return args
 
 
@@ -731,7 +911,12 @@ def main() -> None:
             json.dumps(
                 {
                     "ok": True,
-                    "experiment": "closed_loop_mixed_size_one_layer_component_study",
+                    "experiment": (
+                        f"{args.execution}_mixed_size_one_layer_component_study"
+                    ),
+                    "execution": args.execution,
+                    "source_policy": args.source_policy,
+                    "queue_depth": args.queue_depth,
                     "config": asdict(config),
                     "intermediate": args.intermediate,
                     "buckets": args.buckets,
@@ -744,7 +929,12 @@ def main() -> None:
                     "hint": "same_4_times_selected_bucket_times_topk_div_num_experts",
                     "warmup": "standard_buckets_only_no_future_trace_input_warmup",
                     "input_generation": (
-                        "gpu_random_generation_and_source_drain_before_request_timer;"
+                        "all_trace_inputs_gpu_resident_before_workspace_baseline;"
+                        "generation_and_drain_excluded_from_trace_clock;"
+                        "future_expert_counts_not_executed_or_warmed"
+                        if args.execution == "queued"
+                        else "gpu_random_generation_and_source_"
+                        "drain_before_request_timer;"
                         "included_in_whole_trace_wall_and_source_allocator_counters"
                     ),
                     "timed": (
@@ -764,7 +954,14 @@ def main() -> None:
                         "native_transport_separate_from_pytorch;ffn_peaks_for_workspace"
                     ),
                     "scope": (
-                        "one_layer_one_lane_closed_loop_no_per_request_gloo_barriers;"
+                        "one_layer_one_ordered_device_lane_host_can_enqueue_ahead;"
+                        "final_drain_tokens_per_second_not_full_serving_throughput;"
+                        "gpu_intervals_are_service_not_host_response_latency;"
+                        "exact_ffn_host_count_reads_naturally_block;"
+                        "no_end_to_end_serving_or_deepep_performance_claim"
+                        if args.execution == "queued"
+                        else "one_layer_one_lane_closed_loop_"
+                        "no_per_request_gloo_barriers;"
                         "host_lengths_known_expert_counts_device_derived;"
                         "no_end_to_end_serving_or_deepep_performance_claim"
                     ),

@@ -1,39 +1,40 @@
 # Mixed-size FFN workspace experiment
 
-**Fixed workspaces and GPU counts support changing requests; performance remains
-mixed.**
+**A backlogged hybrid stream benefits; graphs are not a universal throughput win.**
 
-![Mixed-request latency, profiling and FFN allocation costs](mixed-performance.svg)
+![Queued throughput and paired repeat ranges on H100](sustained-performance.svg)
 
-Eight H100s, four Attention + four FFN ranks; one BF16 DeepGEMM SwiGLU layer:
+Eight H100s: four Attention + four FFN ranks; one BF16 DeepGEMM SwiGLU layer,
 hidden 2048, intermediate 4096, 128 experts, top-8 routing.
 
-| Variant | Receive/compute storage | Execution |
+| Variant | FFN storage | Execution |
 |---|---|---|
-| `dynamic_eager` | GPU counts → CPU wait → exact receive and intermediate allocations | Eager |
-| `pooled_eager` | Reusable receive storage + one maximum-capacity FFN arena; GPU counts | Eager |
+| `dynamic_eager` | GPU counts → CPU wait → exact receive/intermediate allocations | Eager |
+| `pooled_eager` | Reusable receive storage + shared FFN arena; GPU counts | Eager |
 | `pooled_graph` | Same storage, six cached bucket graphs | CUDA graphs |
 
-Each FFN GPU shares storage among its experts. GPU prefix sums partition it;
-**128-row expert alignment remains**. A device live-token count sends **actual
-source rows without bucket wire padding**, while graph storage stays fixed.
+With **900 changing requests and a final-only drain**, hybrid graph/exact gains
+were **8–13%** across three rotated repeats (median paired gain **9.6%**).
+Pooled eager gained **4–9%**: preallocation contributes too. Direct graphs were
+near parity in later repeats; the first exact-eager trace had large tails.
+Other queue windows were less consistent; bands retain all repeats.
+[Measurements, checks and provenance](results-sustained-h100.json).
 
-- Graph p50 latency: hybrid **1.347 → 1.314 ms**; direct **2.259 → 2.386 ms**.
-  No overall throughput improvement.
-- Pooling removes roughly **1,559 FFN allocation requests per 300 requests**.
-  Dynamic eager mostly uses cached memory, with few physical device allocations.
-- Mean FFN allocator peak increment: **1,465 → 2,177 MiB/GPU**. Resident weights
-  and native GIN windows are excluded.
+Separate Nsight traces show FFN kernel gaps **68 → 1 µs**, with GEMM time
+unchanged. Direct-mode long tails occur inside GIN/peer-wait kernels in eager
+and graph runs; their cause remains unresolved.
 
-Nsight confirms comparable send stages after removing padding. Large tails
-remain in GIN completion; their cause is unresolved.
+All variants use identical graphed Attention sources and already-resident GPU
+inputs. Window K means enqueue K requests, then drain; 0 submits the whole trace.
+There is **one ordered device lane**; CUDA calls may still block submission.
+Throughput includes submission and final
+completion, excluding input generation, capture, instantiation and first replay.
+This measures an always-ready **component**, not full serving throughput.
 
-Three rotated repeats use 300 mixed requests each: changing non-aligned batch
-sizes, unseen random routing, hot workers and empty sources. Input staging is
-timed; capture, instantiation and first replay are excluded. Input generation
-is outside request latency but included in trace throughput. This is a
-**closed-loop, single-layer component study**, not vLLM serving.
-[Measurements, checks and provenance](results-mixed-h100.json).
+Each FFN GPU shares capacity among experts using GPU prefix sums; 128-row expert
+alignment remains. Live token counts transfer actual source rows without bucket
+wire padding. Exact eager usually allocates through PyTorch's cache; allocation
+requests are not equivalent to physical device allocations.
 
 ## Run
 
@@ -47,8 +48,12 @@ Run on both four-GPU hosts; node 0 hosts FFN workers:
 torchrun --nnodes=2 --nproc-per-node=4 --node-rank="$NODE_RANK" \
   --master-addr="$MASTER_ADDR" --master-port=29500 \
   --module experiments.prefill.serving --mode hybrid \
-  --requests 300 --repeats 3 --live-token-count --cuda-events
+  --requests 900 --repeats 3 --live-token-count --cuda-events \
+  --execution queued --source-policy matched_graph --queue-depth 0
 ```
 
-Use `--mode direct` for direct delivery. Profile separately with `--nvtx`.
-Historical fixed-bucket control: [figure](performance.svg), [results](results-h100.json).
+Use `--mode direct`; sweep `--queue-depth 1`, `8`, `64`, `0`.
+Profile separately with `--nvtx`.
+Earlier controls: [closed loop](mixed-performance.svg)
+([data](results-mixed-h100.json)), [fixed bucket](performance.svg)
+([data](results-h100.json)).
