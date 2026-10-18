@@ -5,6 +5,11 @@ communication latency than Masked DeepEP. At 2048 tokens/source, BF16 was near
 parity and FP8 latency was about 12% lower. Registered transport capacity fell 68–72%.
 These are communication-only measurements.
 
+The newer DeepEP-derived backend has a separate
+[four-H100 correctness record](validation-deepep-2026-10-18.json).
+It retains the Masked DeepEP protocol; the directional results below do not
+measure that backend.
+
 ![H100 prototype latency and memory comparison](assets/h100-performance.svg)
 
 ## October 15 prototype comparison

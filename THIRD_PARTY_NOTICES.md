@@ -1,7 +1,7 @@
 # Third-party notices
 
-afdEP's own code is licensed under Apache-2.0. Its small NCCL host runtime
-contains code adapted from DeepEP and remains licensed under MIT.
+afdEP's own code is licensed under Apache-2.0. Its adapted NCCL host runtime
+and vendored DeepEP V2 transport remain licensed under MIT.
 
 ## DeepEP host runtime
 
@@ -22,13 +22,25 @@ contains code adapted from DeepEP and remains licensed under MIT.
 The license and runtime API header match that FastAFD revision byte-for-byte.
 The AFD plugin runtime input includes its marked patch allowing single-node
 use without GIN; its hash is retained separately from the pristine FastAFD
-hash. afdEP requires rail GIN for its supported two-domain topology and does
-not retain that optional-GIN path.
+hash. The directional backend requires GIN for its supported two-domain
+topology and does not retain that optional-GIN path.
 
 The extracted runtime implements NCCL communicator bootstrap, topology queries,
-registered windows, and a GPU-initiated rail communicator. afdEP does not ship
-or invoke DeepEP's expert dispatch/combine kernels, dummy expert layouts, or
-its generic JIT compiler. No DeepGEMM, CUTLASS, or fmt source is included.
+registered windows, and a GPU-initiated rail communicator. The directional
+backend does not invoke DeepEP's expert dispatch/combine kernels or JIT.
+
+## DeepEP V2 elastic transport
+
+`afdep/third_party/deepep_v2/` retains the DeepEP transport subtree byte-for-byte
+from AFD plugin commit `1198c52f8bed0c20a2b51ff550db5ccf2fda0906`, originating
+in the FastAFD revision above. It includes ElasticBuffer, dispatch/combine
+kernels, NCCL integration and runtime JIT helpers. The MIT license and complete
+file hashes are included in that directory's `LICENSE` and `PROVENANCE.json`.
+Existing AFD plugin patches for optional GIN and module-local classes remain.
+
+The lazy standalone build adapter `afdep/_deepep_build.py` is adapted from
+that revision's Apache-2.0 `deepep_m2n/buffer.py` and `jit_build.py`. It has no
+vLLM or DeepGEMM dependency. No DeepGEMM, CUTLASS or fmt subtree is included.
 
 ## AFD plugin directional protocol
 

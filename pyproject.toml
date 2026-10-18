@@ -14,6 +14,7 @@ license-files = [
     "NOTICE",
     "THIRD_PARTY_NOTICES.md",
     "afdep/third_party/deepep/LICENSE",
+    "afdep/third_party/deepep_v2/LICENSE",
 ]
 authors = [{ name = "AFDEP contributors" }]
 dependencies = ["torch>=2.6", "ninja>=1.11", "setuptools>=77", "packaging>=23"]
@@ -39,7 +40,13 @@ Issues = "https://github.com/ms-llmd/afdEP/issues"
 include = ["afdep*"]
 
 [tool.setuptools.package-data]
-afdep = ["py.typed", "csrc/*", "third_party/deepep/*"]
+afdep = [
+    "py.typed",
+    "csrc/*",
+    "third_party/deepep/*",
+    "third_party/deepep_v2/*",
+    "third_party/deepep_v2/**/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]

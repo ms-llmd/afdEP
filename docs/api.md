@@ -1,13 +1,16 @@
 # Installation and API
 
 afdEP separates Attention token sources from expert workers. This reference
-covers the current NCCL GIN/NVLink backend; see [support](../README.md#support)
+covers the directional `Buffer` backend; the [DeepEP backend](#deepep-backend)
+has a separate receipt/allocation contract. See [support](../README.md#support)
 for hardware and topology status.
 
 ## Install
 
-GPU execution needs Linux, CUDA 13 PyTorch and a compatible `nvcc`, NCCL ≥2.30.7
-with GIN device headers/RDMA, plus `setuptools` and `ninja`. The native extension
+The tested GPU environment uses Linux, CUDA 13 PyTorch, compatible `nvcc`,
+NCCL ≥2.30.7 with device headers, `setuptools` and `ninja`. RDMA is required
+when ranks span NVLink domains; DeepEP also supports one NVLink domain.
+The native extension
 compiles on first use. Package import and configuration tests need no GPU.
 
 ```bash
@@ -192,3 +195,42 @@ Concurrent use of one buffer is unsupported.
 before releasing windows. Do not use collective close as rank-local exception
 cleanup. A timeout/device error is fatal to the job: terminate and reconstruct
 its participants rather than reuse partially advanced communication state.
+
+## DeepEP backend
+
+`DeepEPBuffer` wraps vendored DeepEP V2 kernels with the same four role operations:
+
+```python
+from afdep import DeepEPBuffer, DeepEPConfig
+
+config = DeepEPConfig(
+    capacity_tokens_per_rank=2048, hidden_size=2048, num_experts=128,
+    top_k=8, ffn_ranks=2, attention_ranks=2, payload="bf16",
+)
+buffer = DeepEPBuffer(group=group, config=config)  # FFN ranks first.
+# Attention:
+buffer.source_dispatch(x, ids, weights, bucket=bucket)
+out = buffer.source_collect()
+# FFN, instead:
+r = buffer.worker_receive(bucket=bucket)
+buffer.worker_reply(weighted_rows, r.receipt)
+buffer.close()  # Collective, after completed GPU work, outside capture.
+```
+
+Differences from `Buffer`: collect returns native output storage; receipts are
+opaque multi-tensor handles; receive allocations belong to DeepEP/graph pools.
+There is no `out` reservation or `live_tokens` argument. Fixed-shape graph inputs
+can disable routes with `-1`; changing tensor shapes requires another capture.
+Warm up each bucket before capture and retain graph inputs/outputs through use.
+`read_host_counts=True` performs CPU synchronization and is forbidden in capture.
+Weight expert rows exactly once before reply. FP8 is caller-quantized E4M3 with
+FP32 block-128 scales; routing/quantization/GEMMs remain outside the library.
+
+The backend retains uniform logical expert blocks and dummy Attention slots.
+Real experts are `[0,num_experts)` and are split evenly across FFN ranks.
+All union ranks participate in dispatch/combine, including empty roles.
+`allow_hybrid_mode` retains DeepEP's transport policy; one physical NVLink domain
+can use `EP_DISABLE_GIN=1`. The library queries physical topology and does not
+change process environment. Multiple domains require GIN. Each buffer owns one
+communicator; concurrent lanes require separate buffers. The low-level
+`afdep.deepep.ElasticBuffer` facade supports existing DeepEP integrations.

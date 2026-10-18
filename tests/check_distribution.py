@@ -9,7 +9,18 @@ from pathlib import Path
 
 
 def source_files(root: str) -> set[str]:
-    suffixes = {".py", ".typed", ".cpp", ".cu", ".cuh", ".hpp", ".json", ".md", ".svg"}
+    suffixes = {
+        ".py",
+        ".typed",
+        ".cpp",
+        ".cu",
+        ".cuh",
+        ".hpp",
+        ".json",
+        ".md",
+        ".svg",
+        ".txt",
+    }
     return {
         path.as_posix()
         for path in Path(root).rglob("*")

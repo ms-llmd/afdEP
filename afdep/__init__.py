@@ -9,9 +9,17 @@ from .config import Config
 
 if TYPE_CHECKING:
     from .buffer import Buffer, ReceiveResult
+    from .deepep import DeepEPBuffer, DeepEPConfig
 
 __version__ = "0.1.0.dev0"
-__all__ = ["Buffer", "Config", "ReceiveResult", "__version__"]
+__all__ = [
+    "Buffer",
+    "Config",
+    "DeepEPBuffer",
+    "DeepEPConfig",
+    "ReceiveResult",
+    "__version__",
+]
 
 
 def __getattr__(name: str):
@@ -21,4 +29,8 @@ def __getattr__(name: str):
         from .buffer import Buffer, ReceiveResult
 
         return {"Buffer": Buffer, "ReceiveResult": ReceiveResult}[name]
+    if name in {"DeepEPBuffer", "DeepEPConfig"}:
+        from .deepep import DeepEPBuffer, DeepEPConfig
+
+        return {"DeepEPBuffer": DeepEPBuffer, "DeepEPConfig": DeepEPConfig}[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

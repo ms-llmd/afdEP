@@ -8,19 +8,26 @@ expert compute, and serving scheduling stay with the caller.
 
 ![DeepEP shared EP roles versus afdEP separate Attention and FFN roles](docs/assets/communication.svg)
 
-The current backend uses NCCL GPU-Initiated Networking (GIN) and NVLink, with
-afdEP's own request/reply kernels. No DeepEP or vLLM runtime package is required.
-`Config.allow_hybrid_mode` selects ingress/NVLink forwarding (`True`, default)
-or direct worker delivery (`False`); see [modes](docs/api.md#api).
+Two backends use NCCL and NVLink; neither requires a DeepEP or vLLM package:
+
+| API | Communication kernels |
+|---|---|
+| `DeepEPBuffer` | Vendored DeepEP V2 dispatch/combine; explicit AFD roles over the Masked DeepEP protocol |
+| `Buffer` | Experimental directional request/reply kernels |
+
+The DeepEP backend preserves its optimized kernels and graph execution.
+It retains masking internally; extraction alone does not remove that overhead.
+[Backend contracts](docs/api.md#deepep-backend).
 
 ## Support
 
 | Architecture | Backend | Validated hardware and modes |
 |---|---|---|
-| Hopper (SM90) | **Implemented** | Eight H100 80GB GPUs; hybrid/direct; BF16/FP8; eager and CUDA graphs |
-| Blackwell | Not implemented | — |
+| Hopper (SM90) | Directional | Eight H100 80GB GPUs; hybrid/direct; BF16/FP8; eager and CUDA graphs |
+| Hopper (SM90) | DeepEP V2 | Four H100 80GB GPUs in one NVLink domain; BF16/FP8; eager and CUDA graphs |
+| Blackwell | Directional: not implemented; DeepEP V2: unvalidated | — |
 
-The current backend implements **four Attention + four FFN ranks**, each role in
+The directional backend implements **four Attention + four FFN ranks**, each role in
 its own four-GPU NVLink domain, with one in-flight lane. Other N/M layouts and
 concurrent lanes require further implementation and validation.
 
@@ -50,7 +57,8 @@ Apply routing weights **once** before `worker_reply`.
 
 ## H100 experiment
 
-Eight H100s, four Attention + four FFN ranks, CUDA graphs, communication only:
+Directional prototype: eight H100s, four Attention + four FFN ranks,
+CUDA graphs, communication only.
 
 ![H100 communication latency and registered buffer comparison](docs/assets/h100-performance.svg)
 
