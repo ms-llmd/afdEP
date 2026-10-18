@@ -36,7 +36,7 @@ from experiments.prefill.benchmark import (
 from experiments.prefill.ffn import PrefillFFN, deterministic_weights, load_deepgemm
 
 VARIANTS = ("dynamic_eager", "pooled_eager", "pooled_graph")
-DEFAULT_BUCKETS = (1, 8, 32, 128, 512, 2048)
+DEFAULT_BUCKETS = (2048,)
 US_PER_SECOND = 1_000_000
 
 
@@ -178,6 +178,7 @@ class Pipeline:
         self.rank = rank
         self.variant = variant
         self.buckets = buckets
+        self.fixed_bucket = buckets[0] if len(buckets) == 1 else None
         self.source_policy = source_policy
         self.dynamic_source = variant == "dynamic_eager" and source_policy == "variant"
         self.capture_for_role = (
@@ -201,6 +202,7 @@ class Pipeline:
                 capacity_rows=maximum_rows,
                 expert_alignment=config.expert_alignment,
                 deepgemm_module=module,
+                expected_rows_per_expert=self.hint(buckets[-1]),
             )
             self.empty_reply = torch.empty(
                 (0, config.hidden_size), device="cuda", dtype=torch.bfloat16
@@ -285,9 +287,14 @@ class Pipeline:
     def execute(self, request: Request, data: Payload | None) -> None:
         # Bucket selection, graph lookup, allocations and source staging are
         # deliberately part of the request's timed interval.
-        bucket = selected_bucket(request.maximum, self.buckets)
+        bucket = (
+            self.fixed_bucket
+            if self.fixed_bucket is not None
+            else selected_bucket(request.maximum, self.buckets)
+        )
         if self.rank < FFN_RANKS:
-            self.executor.expected_rows_per_expert = self.hint(bucket)
+            if self.fixed_bucket is None:
+                self.executor.expected_rows_per_expert = self.hint(bucket)
             if self.variant == "dynamic_eager":
                 self.executor.reply = self.empty_reply
                 received = self.buffer.worker_receive(
@@ -448,6 +455,10 @@ class Pipeline:
             "first_graph_replay_us": first_replay_us,
             "captured_graphs": len(self.graphs),
             "primed_graphs": len(self.graphs),
+            "graph_strategy": (
+                "single_capacity" if self.fixed_bucket is not None else "bucketed"
+            ),
+            "runtime_recaptures": 0,
             "one_maximum_receive_pool": self.receive is not None,
             "one_maximum_ffn_arena": self.executor is not None
             and self.variant != "dynamic_eager",
@@ -485,12 +496,12 @@ class Pipeline:
 def correctness(buffer, config, rank, args, weights, module) -> list[str]:
     maximum = args.buckets[-1]
     requests = [
-        Request((min(513, maximum), 1, 0, min(17, maximum)), "uniform", 0, 7101),
-        Request((min(3, maximum), 0, min(7, maximum), 1), "hot", 2, 7102),
+        Request((maximum, 1, 0, min(17, maximum)), "uniform", 0, 7101),
+        Request((1, 0, 1, 1), "hot", 2, 7102),
         Request((min(129, maximum), min(7, maximum), 1, 0), "uniform", 0, 7103),
         Request((min(31, maximum), 0, min(4, maximum), 0), "allskip", 0, 7104),
         Request((0, 0, 0, 0), "uniform", 0, 7105),
-        Request((min(1025, maximum), min(17, maximum), 1, 0), "hot", 1, 7106),
+        Request((maximum,) * ATTENTION_RANKS, "hot", 1, 7106),
     ]
     checked = []
     for variant in args.variants:
@@ -765,6 +776,7 @@ def measure(buffer, config, rank, args, weights, module, variant, repeat) -> dic
         "repeat": repeat,
         "trace_seed": args.trace_seed + repeat * 7919,
         "live_token_count": args.live_token_count,
+        "graph_strategy": "single_capacity" if len(args.buckets) == 1 else "bucketed",
         "max_rank_trace_wall_s": trace_wall_s,
         "useful_source_tokens": useful_tokens,
         "useful_source_tokens_per_trace_wall_second": useful_tokens / trace_wall_s,
@@ -920,13 +932,22 @@ def main() -> None:
                     "config": asdict(config),
                     "intermediate": args.intermediate,
                     "buckets": args.buckets,
+                    "graph_strategy": (
+                        "single_capacity" if len(args.buckets) == 1 else "bucketed"
+                    ),
+                    "runtime_recaptures": 0,
                     "requests_per_trace": args.requests,
                     "repeats": args.repeats,
                     "profiled": args.nvtx,
                     "live_token_count": args.live_token_count,
                     "correctness_variants": checks,
                     "per_expert_counts": "gpu_routing_unknown_to_pool_allocation",
-                    "hint": "same_4_times_selected_bucket_times_topk_div_num_experts",
+                    "hint": (
+                        "fixed_4_times_capacity_times_topk_div_num_experts_all_variants;"
+                        "not_eager_retuned_for_each_actual_batch"
+                        if len(args.buckets) == 1
+                        else "same_4_times_selected_bucket_times_topk_div_num_experts"
+                    ),
                     "warmup": "standard_buckets_only_no_future_trace_input_warmup",
                     "input_generation": (
                         "all_trace_inputs_gpu_resident_before_workspace_baseline;"

@@ -1,59 +1,55 @@
-# Mixed-size FFN workspace experiment
+# Single-graph FFN workspace
 
-**A backlogged hybrid stream benefits; graphs are not a universal throughput win.**
+**One maximum-capacity graph per FFN GPU, reused across changing token counts.**
 
-![Queued throughput and paired repeat ranges on H100](sustained-performance.svg)
+![One graph adapts GPU work to actual expert counts](single-graph-mechanism.svg)
 
-Eight H100s: four Attention + four FFN ranks; one BF16 DeepGEMM SwiGLU layer,
-hidden 2048, intermediate 4096, 128 experts, top-8 routing.
+The graph captures receive → GPU counts/packing → grouped GEMM → SwiGLU →
+grouped GEMM → reduction/reply. Each worker shares one preallocated receive pool
+and compute arena across its experts. Addresses stay fixed; GPU prefix sums
+select active rows. Expert alignment and tile rounding remain. Unused capacity
+is not transferred or fully computed. Capture once; **replay for every batch**.
 
-| Variant | FFN storage | Execution |
+| Variant | FFN storage/counts | Submission |
 |---|---|---|
-| `dynamic_eager` | GPU counts → CPU wait → exact receive/intermediate allocations | Eager |
-| `pooled_eager` | Reusable receive storage + shared FFN arena; GPU counts | Eager |
-| `pooled_graph` | Same storage, six cached bucket graphs | CUDA graphs |
+| `dynamic_eager` | CPU reads GPU counts; exact aligned allocation requests | Individual kernels |
+| `pooled_eager` | Shared fixed pool; GPU counts | Individual kernels |
+| `pooled_graph` | Same pool/counts | One captured graph |
 
-With **900 changing requests and a final-only drain**, hybrid graph/exact gains
-were **8–13%** across three rotated repeats (median paired gain **9.6%**).
-Pooled eager gained **4–9%**: preallocation contributes too. Direct graphs were
-near parity in later repeats; the first exact-eager trace had large tails.
-Other queue windows were less consistent; bands retain all repeats.
-[Measurements, checks and provenance](results-sustained-h100.json).
+On eight H100s, the longer hybrid comparison (9,000 requests × four balanced
+repeats) shows **3.0% median paired throughput gain**. Gains were 14.7%, 2.9%,
+3.0%, 3.0%; the first includes a slower eager trace, retained in full.
+[Throughput](single-graph-performance.svg) ·
+[Per-step GPU budget, milliseconds](single-graph-step-budget.svg) ·
+[Measurements, Nsight and provenance](results-single-graph-h100.json).
+Shorter hybrid/direct runs remain noisy; communication/readiness tails can
+outweigh ordinary kernel-gap savings. No general 8–13% single-graph claim.
 
-Separate Nsight traces show FFN kernel gaps **68 → 1 µs**, with GEMM time
-unchanged. Direct-mode long tails occur inside GIN/peer-wait kernels in eager
-and graph runs; their cause remains unresolved.
-
-All variants use identical graphed Attention sources and already-resident GPU
-inputs. Window K means enqueue K requests, then drain; 0 submits the whole trace.
-There is **one ordered device lane**; CUDA calls may still block submission.
-Throughput includes submission and final
-completion, excluding input generation, capture, instantiation and first replay.
-This measures an always-ready **component**, not full serving throughput.
-
-Each FFN GPU shares capacity among experts using GPU prefix sums; 128-row expert
-alignment remains. Live token counts transfer actual source rows without bucket
-wire padding. Exact eager usually allocates through PyTorch's cache; allocation
-requests are not equivalent to physical device allocations.
+This is **one BF16 FFN layer**, not a full vLLM step. Attention communication is
+already graphed in every variant; input staging remains outside it. All variants
+use the same fixed GEMM tuning hint, not individually retuned eager kernels.
+Capture, instantiation, first replay and resident input generation are excluded;
+runtime staging/replay/completion are timed. One ordered device lane.
 
 ## Run
 
 Provision [afdEP/NCCL](../../docs/api.md) and the recorded DeepGEMM BF16 grouped
-psum API. For a staged extension, set `AFDEP_DEEPGEMM_MODULE` to its `.so` and
-`AFDEP_DEEPGEMM_ROOT` to the matching source directory.
-
+psum API. Set `AFDEP_DEEPGEMM_MODULE`/`AFDEP_DEEPGEMM_ROOT` for a staged extension.
 Run on both four-GPU hosts; node 0 hosts FFN workers:
 
 ```bash
 torchrun --nnodes=2 --nproc-per-node=4 --node-rank="$NODE_RANK" \
   --master-addr="$MASTER_ADDR" --master-port=29500 \
-  --module experiments.prefill.serving --mode hybrid \
-  --requests 900 --repeats 3 --live-token-count --cuda-events \
+  --module experiments.prefill.serving --mode hybrid --buckets 2048 \
+  --requests 9000 --repeats 4 --warmup 10 \
+  --variants dynamic_eager pooled_graph --live-token-count --cuda-events \
   --execution queued --source-policy matched_graph --queue-depth 0
 ```
 
-Use `--mode direct`; sweep `--queue-depth 1`, `8`, `64`, `0`.
-Profile separately with `--nvtx`.
-Earlier controls: [closed loop](mixed-performance.svg)
-([data](results-mixed-h100.json)), [fixed bucket](performance.svg)
-([data](results-h100.json)).
+The shorter control uses 900 requests, three repeats, all three variants,
+`--mode hybrid`/`direct`, and queue windows 1/final-only. Profile separately with
+`--nvtx`. H=2048, I=4096, E=128, top-k=8; fixed capacity=2048, GEMM hint=512.
+
+Historical **six-bucket** [queued](results-sustained-h100.json) and
+[closed-loop](results-mixed-h100.json) results remain frozen; reproduce with
+`--buckets 1 8 32 128 512 2048`. [Earlier fixed control](results-h100.json).
