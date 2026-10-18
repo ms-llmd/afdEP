@@ -100,20 +100,25 @@ struct BF16VectorSum {
     static constexpr int kValues = sizeof(uint4) / sizeof(nv_bfloat16);
     float values[kValues] = {};
     __device__ __forceinline__ void add(uint4 input) {
+        const uint32_t words[] = {input.x, input.y, input.z, input.w};
 #pragma unroll
         for (int pair = 0; pair < kValues / 2; ++pair) {
-            const float2 value = __bfloat1622float2(reinterpret_cast<const __nv_bfloat162*>(&input)[pair]);
+            const __nv_bfloat162_raw bits = {static_cast<uint16_t>(words[pair]),
+                                            static_cast<uint16_t>(words[pair] >> 16)};
+            const float2 value = __bfloat1622float2(__nv_bfloat162(bits));
             values[2 * pair] += value.x;
             values[2 * pair + 1] += value.y;
         }
     }
     __device__ __forceinline__ uint4 pack() const {
-        uint4 output;
+        uint32_t words[kValues / 2];
 #pragma unroll
-        for (int pair = 0; pair < kValues / 2; ++pair)
-            reinterpret_cast<__nv_bfloat162*>(&output)[pair] =
+        for (int pair = 0; pair < kValues / 2; ++pair) {
+            const __nv_bfloat162_raw bits =
                 __floats2bfloat162_rn(values[2 * pair], values[2 * pair + 1]);
-        return output;
+            words[pair] = uint32_t(bits.x) | (uint32_t(bits.y) << 16);
+        }
+        return make_uint4(words[0], words[1], words[2], words[3]);
     }
 };
 

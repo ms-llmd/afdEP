@@ -28,7 +28,7 @@
   },
   "current_file_sha256": {
     "afdep/csrc/layout.hpp": "3a644833bff462ae2a2044b1cf1e07a6972c7abd159af9876ee557f9e57bd9a0",
-    "afdep/csrc/kernels.cuh": "d08d5a5b8239ad28e320e042f8c72c294d043861eb86f4738b060303383295df"
+    "afdep/csrc/kernels.cuh": "bb5da8a009d08a8269e318152b515324d7d65e3e653d812169219f9d29a74942"
   },
   "protocol_changes": [
     {
