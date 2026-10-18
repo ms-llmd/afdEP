@@ -53,7 +53,10 @@ class Buffer:
             )
         self.config = config
         self._group = group
-        self.rank = dist.get_rank(group)
+        # A serving runtime can own another default world with different ranks.
+        # get_rank(group) translates through that world's global-rank mapping;
+        # our independent communicator already owns the correct local rank.
+        self.rank = group.rank()
         self.role: Literal["ffn", "attention"] = (
             "ffn" if self.rank < config.ffn_ranks else "attention"
         )
