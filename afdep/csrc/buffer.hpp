@@ -362,14 +362,20 @@ class DirectionalM2NBuffer {
         launch(ReplyConsumedCredit, a);
     }
 
+    void drain() {
+        check_live(rank < 4);
+        // No epoch/credit changes: only finish already-published GIN work.
+        launch(DrainGin, args(1), stripes);
+    }
+
     void destroy() {
         if (destroyed)
             return;
         int current;
         AFDEP_CUDA_CHECK(cudaGetDevice(&current));
         TORCH_CHECK(current == device, "Directional buffer must be destroyed on its owning CUDA device");
-        // The Python owner synchronizes every rank's GPU, then performs a
-        // Gloo barrier, before any rank may deregister its worker windows.
+        // The Python owner drains local GPU and GIN work before the all-rank
+        // Gloo barrier, so peers cannot deregister windows with NIC users left.
         AFDEP_CUDA_CHECK(cudaDeviceSynchronize());
         context->finalize();
         destroyed = true;
@@ -395,6 +401,7 @@ inline void register_apis(pybind11::module_ &m) {
         .def("worker_receive_into", &DirectionalM2NBuffer::worker_receive_into)
         .def("worker_reply", &DirectionalM2NBuffer::worker_reply)
         .def("source_collect", &DirectionalM2NBuffer::source_collect)
+        .def("drain", &DirectionalM2NBuffer::drain)
         .def("destroy", &DirectionalM2NBuffer::destroy);
 }
 

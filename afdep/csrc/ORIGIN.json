@@ -20,7 +20,8 @@
     "Validate 16-byte alignment of nonempty source activation and output pointers before vector-copy kernels, including storage-offset views.",
     "Add validated caller-owned receive tensors with per-exchange weight/receipt resets; preserve native device protocol and reader credits.",
     "Add opt-in eager exact receive allocation: discover GPU counts and read aligned counts on the CPU before allocating receive payload tensors, then retain the same packing and credit protocol.",
-    "Initialize each private NCCL communicator with public ncclConfig_t.numRmaCtx=0 through ncclCommInitRankConfig, because afdEP uses device GIN and does not submit host RMA operations. This avoids unused host-RMA registration and progress threads while retaining GIN resources; explicit NCCL environment overrides retain their normal precedence."
+    "Initialize each private NCCL communicator with public ncclConfig_t.numRmaCtx=0 through ncclCommInitRankConfig, because afdEP uses device GIN and does not submit host RMA operations. This avoids unused host-RMA registration and progress threads while retaining GIN resources; explicit NCCL environment overrides retain their normal precedence.",
+    "Drain all active GIN contexts locally and synchronize that drain before the existing all-rank close barrier, preserving pending notification lifetimes even when closing collectively after receive without a reply."
   ],
   "verification": "The original implementation was validated on eight H100 GPUs. This extracted build requires its own GPU validation before claiming equivalence or performance.",
   "extracted_file_sha256": {
@@ -28,10 +29,10 @@
     "afdep/csrc/kernels.cuh": "05b50095f694231db3012821aed1fdf48e86b7a06d9c81eaeb8aee3e4db08bc0"
   },
   "current_file_sha256": {
-    "afdep/csrc/layout.hpp": "b6eb1c7daa6b19d3fbd35be85e07a50a2affe470ca8ad6f3c71bfa77016bb38f",
-    "afdep/csrc/kernels.cuh": "7216ef44826b6c8ab461937f8d6a81b1dd9fcd814cd502facc98b136aa40d251",
-    "afdep/csrc/kernels.cu": "072f398a476e0c66752248bedc2c3525a612e4eb7fb6dd80727a4222a422e3c9",
-    "afdep/csrc/buffer.hpp": "711c8f1ed129924876f31d64561e549b9d74d174e5d17cce9d0d1d4323fe5ad1",
+    "afdep/csrc/layout.hpp": "58597025c9cd29692098f75e5bf6bc9509df7b7bdbe125c211c6ab03d16c5175",
+    "afdep/csrc/kernels.cuh": "63c09fe992b450aa8226f2ab99fea91dcf4095b2827bac65dfa88132e8332eef",
+    "afdep/csrc/kernels.cu": "df4148cbe104e4e892242d41edfef5e1dad8cc14c6bd0684aa028f8e23af101d",
+    "afdep/csrc/buffer.hpp": "5e6390f1944320edeebbb43b57c725142eeb2f069fb23318a546c9940ca3012d",
     "afdep/csrc/nccl_runtime.cpp": "c34e35df9d86be29da977de381fe8df7d606dbe85b40ee3fe250cdbb07b4af1f"
   },
   "protocol_changes": [
@@ -46,6 +47,10 @@
     {
       "date": "2026-10-18",
       "description": "Move hybrid all-source request-readiness and previous partial-reader-credit waits, plus hybrid/direct reply-readiness waits, into separate one-CTA gate kernels before the unchanged full-size histogram, partial generation and reply copy grids. Preserve every epoch target, all peer reader credits and all active GIN contexts including empty stripes. Native stream ordering gates payload grids; point-to-point puts/signals and local flush semantics are unchanged. This is a contention-reduction candidate requiring GPU validation; it does not establish the cause of previously observed GIN progress tails."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Defer only the local completion wait for inline request-credit notifications. Keep every remote epoch/credit wait, terminal reply-credit flush, and payload-transfer flush. The later reply transfer flushes context zero; an explicit pre-barrier close drain covers notification-only shutdown. Signal descriptors remain in communicator-owned queues with normal submission and queue backpressure. No credit or readiness notification is removed."
     }
   ]
 }

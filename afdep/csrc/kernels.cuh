@@ -41,12 +41,19 @@ __device__ __forceinline__ void wait_signal(int context, int signal, uint64_t ta
         if (clock64() - start >= a.timeout_cycles) fail("network phase", a);
     }
 }
+enum class CreditCompletion { Wait, Defer };
+
+template <CreditCompletion kCompletion = CreditCompletion::Wait>
 __device__ __forceinline__ void send_credit(int signal, int peer, const DeviceArgs& a,
                                            bool direct = false) {
     ncclGin gin(a.comm, 0, NCCL_GIN_RESOURCE_SHARING_CTA);
     gin.signal(direct ? ncclTeamWorld(a.comm) : ncclTeamRail(a.comm), peer,
                ncclGin_StrongSignalInc{static_cast<ncclGinSignal_t>(signal)});
-    gin.flush(ncclCoopThread());
+    // Credits have no caller-owned source payload. Queue descriptors persist
+    // across kernels, and remote reuse still waits for the signal itself.
+    // Request credits are drained by the later reply transfer (or close).
+    // Keep terminal reply-credit completion before normal exchange completion.
+    if constexpr (kCompletion == CreditCompletion::Wait) gin.flush(ncclCoopThread());
 }
 __device__ __forceinline__ int packet_tokens(uint8_t* base, const Layout& l) {
     return static_cast<int>(reinterpret_cast<volatile Packet*>(base + l.request)->tokens);
@@ -242,7 +249,8 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
             // All request data needed by reply generation has been copied into
             // worker-owned maps and receipts before sources may reuse inboxes.
             for (int source = 0; source < 4; ++source)
-                send_credit(direct_signal(RequestCredit, worker), source + 4, a, true);
+                send_credit<CreditCompletion::Defer>(
+                    direct_signal(RequestCredit, worker), source + 4, a, true);
         }
     } else if constexpr (kOperation == MakePartials) {
         size_t i = tid;
@@ -300,6 +308,15 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
 template <int kOperation>
 __global__ void directional_kernel(DeviceArgs a) {
     const Layout l = a.layout;
+    if constexpr (kOperation == DrainGin) {
+        // The owner synchronizes GPU work before launching this drain and
+        // completes it before the all-rank window-release barrier.
+        if (threadIdx.x == 0) {
+            ncclGin gin(a.comm, blockIdx.x, NCCL_GIN_RESOURCE_SHARING_GPU);
+            gin.flush(ncclCoopThread());
+        }
+        return;
+    }
     if (!l.hybrid && kOperation != Prefix) {
         direct_operation<kOperation>(a);
         return;
@@ -431,7 +448,7 @@ __global__ void directional_kernel(DeviceArgs a) {
             release(&state->pack_done, state->epoch);
             for (int i = 0; i < 4; ++i)
                 wait_local(&control(a.peers[i])->pack_done, state->epoch, a);
-            send_credit(RequestCredit, 1, a);
+            send_credit<CreditCompletion::Defer>(RequestCredit, 1, a);
         }
     } else if constexpr (kOperation == WaitPartialsConsumed) {
         // Keep every reader credit before overwriting partial storage, without

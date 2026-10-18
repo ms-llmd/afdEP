@@ -316,6 +316,25 @@ def main() -> None:
     ]
     registered = pool.num_buffer_bytes
     pool.close()
+    # Closing collectively after receive, without a reply, must also drain
+    # deferred request credits before any peer deregisters its signal window.
+    # Exercise both nonempty packets and empty-source phase notifications.
+    for count in (args.capacity, 0):
+        buffer = afdep.Buffer(group=dist.group.WORLD, config=config)
+        case = Case("receive_then_close", (count,) * ATTENTION_RANKS)
+        exchange = make_exchange(buffer, config, rank, case)
+        if rank < FFN_RANKS:
+            exchange.received = buffer.worker_receive(bucket=case.bucket)
+        else:
+            inputs = exchange.inputs
+            buffer.source_dispatch(
+                inputs.x,
+                inputs.ids,
+                inputs.weights,
+                x_scale=inputs.scale,
+                bucket=case.bucket,
+            )
+        buffer.close()
     if rank == 0:
         print(
             json.dumps(
@@ -325,6 +344,10 @@ def main() -> None:
                     "slots": NUM_SLOTS,
                     "registered_transport_bytes_per_rank": registered,
                     "expert_compute": "weighted_expert_echo_no_gemm",
+                    "collective_close_after_receive_without_reply": {
+                        "nonempty": True,
+                        "empty": True,
+                    },
                     "variants": checked,
                 }
             ),
