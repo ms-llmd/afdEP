@@ -427,21 +427,20 @@ __global__ void directional_kernel(DeviceArgs a) {
             for (int q = 0; q < a.stripes; ++q)
                 wait_signal(q, RequestReady, state->epoch, a);
             release(&state->request_ready, state->epoch);
+            // One waiter per worker acquires peer readiness and headers.
+            // The next kernel inherits this stream dependency; launching a
+            // waiter on every histogram CTA floods the peer control lines.
+            for (int source = 0; source < 4; ++source) {
+                wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
+                const int n = packet_tokens(a.peers[source], l);
+                if (n < 0 || n > a.bucket) fail("source tokens exceed bucket", a);
+                state->received_tokens[source] = n;
+            }
         }
     } else if constexpr (kOperation == Histogram) {
-        if (threadIdx.x == 0) {
-            for (int source = 0; source < 4; ++source)
-                wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
-        }
-        __syncthreads();
         int i = tid;
         for (int source = 0; source < 4; ++source) {
-            // Every CTA reads the ready packet directly. received_tokens is
-            // published for subsequent kernels, not cross-CTA reads here.
-            const int n = packet_tokens(a.peers[source], l);
-            if (n < 0 || n > a.bucket) fail("source tokens exceed bucket", a);
-            if (tid == 0)
-                state->received_tokens[source] = n;
+            const int n = state->received_tokens[source];
             const uint8_t* packet = a.peers[source] + l.request;
             for (; i < n * l.topk; i += stride) {
                 const int64_t expert = reinterpret_cast<const volatile int64_t*>(packet + l.packet_ids(n))[i];

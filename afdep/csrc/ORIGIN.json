@@ -28,7 +28,7 @@
   },
   "current_file_sha256": {
     "afdep/csrc/layout.hpp": "3a644833bff462ae2a2044b1cf1e07a6972c7abd159af9876ee557f9e57bd9a0",
-    "afdep/csrc/kernels.cuh": "bb5da8a009d08a8269e318152b515324d7d65e3e653d812169219f9d29a74942"
+    "afdep/csrc/kernels.cuh": "b7882c8dfbe28c7734005826ffb430bf8df309ccc70f87e5e02a388fe4395af4"
   },
   "protocol_changes": [
     {
@@ -54,6 +54,10 @@
     {
       "date": "2026-10-18",
       "description": "Vectorize BF16 partial, hybrid reply, and direct source reductions over eight adjacent values. Use one CTA per token and share expert receipt rows within that CTA, avoiding per-element integer divisions and redundant route lookups. Preserve FP32 addition order, BF16 rounding, actual-count bounds and every credit/readiness dependency."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Acquire hybrid peer readiness and packet token counts once in the single-CTA BeginWorker kernel. Publish counts locally before Histogram via the CUDA stream kernel dependency, rather than having every histogram CTA poll the same remote control/header lines. Preserve all peer and GIN-context readiness waits, bounds checks, epochs and consumption credits."
     }
   ]
 }
