@@ -91,7 +91,7 @@ Both modes currently require the same two pure-role four-GPU NVLink domains.
 |---|---|
 | Capacity / bucket | Positive; `0 ≤ actual tokens ≤ bucket ≤ capacity`; shared bucket |
 | Hidden size / experts / top-k | H positive multiple of 128; E positive divisible by four; `1 ≤ K ≤ min(32,E)` |
-| Roles / lanes | Four per role; one in-flight lane |
+| Roles / lanes | Four per role; one lane per `Buffer`, independent `PipelineBuffer` slots |
 | `expert_alignment`, `payload` | 128; `"bf16"` or `"fp8"` |
 | `num_gin_contexts`, `transport_stripes` | Eight each; positive stripes ≤ contexts |
 | `num_sms` | 132 local CTAs; must not exceed device SM count; tune for compute overlap |

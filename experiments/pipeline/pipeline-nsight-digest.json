@@ -1,0 +1,5049 @@
+{
+  "scope": "Separate Nsight Systems H100 profiles: BF16 one-layer component; profiled durations are not unprofiled throughput.",
+  "definitions": {
+    "cross_slot_overlap": "Kernel interval intersection on the same GPU between GEMMs and another slot's selected payload operations; unions prevent double counting.",
+    "strict_nonempty": "Positive source row counts establish nonempty hybrid ReduceReply/SendReply work. This proves concurrent GPU operation intervals, not continuous NIC byte transfer.",
+    "pure_local_payload": "ReduceReply has no readiness polling loop: it performs FFN-local NVLink reads and reduction for known positive source rows.",
+    "GIN_send": "SendReply includes GIN put/signal and local flush/completion waits; its whole interval is not pure transfer time.",
+    "candidate_PackRows": "PackRows has no protocol polling but exact expert row counts are unavailable; strict nonempty statistics conservatively omit it.",
+    "tail_frequency": "Count per-original-request maximum Attention GPU response duration >30ms; durations are compared without cross-node clock alignment.",
+    "stage_time": "Kernel durations include synchronization or progress waits where present; summed stage durations can overlap and are not an additive wall-time budget."
+  },
+  "profiles": [
+    {
+      "workload": "large",
+      "mode": "hybrid",
+      "requests_per_case": 36,
+      "fixed_tokens_per_source": 2048,
+      "communication_local_ctas": 132,
+      "request_window": 1,
+      "source_working_tree_fingerprint": "6facbf3c359e231871e58ebc65471ba816c9357b43ae61ddb4f095b58eee7ce1",
+      "artifacts": [
+        {
+          "file": "nsight-graph-large/analysis-overlap.json",
+          "sha256": "330bb2b94957c566fcffde705fe018f5fee6732d8dab91d2d32e326244a8a6ca"
+        },
+        {
+          "file": "nsight-graph-large/node0.nsys-rep",
+          "sha256": "e3b8bae3389265971df198179973396d7ec97873eefcc77166d85b8b3d99ae6a"
+        },
+        {
+          "file": "nsight-graph-large/node0.sqlite",
+          "sha256": "2c5de032a29db5c11030d646d6a646cf98437f72a0cf47b3a3d56fc3fc27c6d7"
+        },
+        {
+          "file": "nsight-graph-large/node1.nsys-rep",
+          "sha256": "6b3fa7a1a1aae3e200d79aad490b0d9aa91456c49aa6be984a4a040607b9a9c9"
+        },
+        {
+          "file": "nsight-graph-large/node1.sqlite",
+          "sha256": "d07bfd68db43ebcace86c1b41496681c3fe197d23bb05f42fef9b7b4bb661f61"
+        }
+      ],
+      "association": [
+        {
+          "node": 0,
+          "timed_attributed_kernel_nodes": 17136,
+          "unmatched_phase_ranges": 0,
+          "unmapped_consolidated_kernel_nodes": 0
+        },
+        {
+          "node": 1,
+          "timed_attributed_kernel_nodes": 5040,
+          "unmatched_phase_ranges": 0,
+          "unmapped_consolidated_kernel_nodes": 0
+        }
+      ],
+      "variants": [
+        {
+          "variant": "whole_graph",
+          "microbatches": 1,
+          "request_count": 36,
+          "requests_over_30ms": 5,
+          "tail_requests": [
+            {
+              "request": 7,
+              "gpu_response_ms": 30.240480422973633
+            },
+            {
+              "request": 16,
+              "gpu_response_ms": 48.24835205078125
+            },
+            {
+              "request": 17,
+              "gpu_response_ms": 84.1488037109375
+            },
+            {
+              "request": 26,
+              "gpu_response_ms": 93.3458251953125
+            },
+            {
+              "request": 32,
+              "gpu_response_ms": 57.60841751098633
+            }
+          ],
+          "maximum_attention_gpu_response_ms": 93.3458251953125,
+          "cpu_throttled_periods_by_rank": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_total_us": 41007.007,
+              "gemm_kernel_nodes": 72,
+              "gemm_time_ratio_to_whole": 1.0,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 36,
+                  "sum_us": 183028.46999999997,
+                  "median_us": 1442.1295
+                },
+                "ExpertGEMM": {
+                  "count": 72,
+                  "sum_us": 41007.007,
+                  "median_us": 565.7225
+                },
+                "Histogram": {
+                  "count": 36,
+                  "sum_us": 177757.61499999996,
+                  "median_us": 11.792
+                },
+                "PackRows": {
+                  "count": 36,
+                  "sum_us": 9447.068,
+                  "median_us": 260.813
+                },
+                "PublishPackAndCredit": {
+                  "count": 36,
+                  "sum_us": 3314.301,
+                  "median_us": 92.799
+                },
+                "PublishPartialAndWait": {
+                  "count": 36,
+                  "sum_us": 513.8480000000001,
+                  "median_us": 13.136
+                },
+                "ReduceReply": {
+                  "count": 36,
+                  "sum_us": 5858.022999999998,
+                  "median_us": 162.7185
+                },
+                "SendReply": {
+                  "count": 36,
+                  "sum_us": 39156.144,
+                  "median_us": 1082.8049999999998
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_total_us": 41104.664,
+              "gemm_kernel_nodes": 72,
+              "gemm_time_ratio_to_whole": 1.0,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 36,
+                  "sum_us": 182561.492,
+                  "median_us": 1422.027
+                },
+                "ExpertGEMM": {
+                  "count": 72,
+                  "sum_us": 41104.664000000004,
+                  "median_us": 567.2935
+                },
+                "Histogram": {
+                  "count": 36,
+                  "sum_us": 178252.63999999996,
+                  "median_us": 29.232
+                },
+                "PackRows": {
+                  "count": 36,
+                  "sum_us": 11634.229000000001,
+                  "median_us": 322.38300000000004
+                },
+                "PublishPackAndCredit": {
+                  "count": 36,
+                  "sum_us": 1090.107,
+                  "median_us": 31.423499999999997
+                },
+                "PublishPartialAndWait": {
+                  "count": 36,
+                  "sum_us": 385.44,
+                  "median_us": 5.984
+                },
+                "ReduceReply": {
+                  "count": 36,
+                  "sum_us": 5893.583999999998,
+                  "median_us": 163.552
+                },
+                "SendReply": {
+                  "count": 36,
+                  "sum_us": 39108.03200000001,
+                  "median_us": 1080.8445000000002
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_total_us": 40900.844,
+              "gemm_kernel_nodes": 72,
+              "gemm_time_ratio_to_whole": 1.0,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 36,
+                  "sum_us": 53215.355,
+                  "median_us": 1450.9789999999998
+                },
+                "ExpertGEMM": {
+                  "count": 72,
+                  "sum_us": 40900.84400000001,
+                  "median_us": 566.043
+                },
+                "Histogram": {
+                  "count": 36,
+                  "sum_us": 307832.2250000001,
+                  "median_us": 13.728
+                },
+                "PackRows": {
+                  "count": 36,
+                  "sum_us": 11955.985999999999,
+                  "median_us": 330.621
+                },
+                "PublishPackAndCredit": {
+                  "count": 36,
+                  "sum_us": 787.7369999999999,
+                  "median_us": 21.792
+                },
+                "PublishPartialAndWait": {
+                  "count": 36,
+                  "sum_us": 574.233,
+                  "median_us": 11.664
+                },
+                "ReduceReply": {
+                  "count": 36,
+                  "sum_us": 5847.119000000001,
+                  "median_us": 162.303
+                },
+                "SendReply": {
+                  "count": 36,
+                  "sum_us": 39123.772000000004,
+                  "median_us": 1081.1419999999998
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_total_us": 40740.153,
+              "gemm_kernel_nodes": 72,
+              "gemm_time_ratio_to_whole": 1.0,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 36,
+                  "sum_us": 96404.46000000002,
+                  "median_us": 1444.7015000000001
+                },
+                "ExpertGEMM": {
+                  "count": 72,
+                  "sum_us": 40740.152999999984,
+                  "median_us": 563.0965
+                },
+                "Histogram": {
+                  "count": 36,
+                  "sum_us": 265936.359,
+                  "median_us": 73.311
+                },
+                "PackRows": {
+                  "count": 36,
+                  "sum_us": 11647.464,
+                  "median_us": 322.748
+                },
+                "PublishPackAndCredit": {
+                  "count": 36,
+                  "sum_us": 1024.0210000000002,
+                  "median_us": 27.375999999999998
+                },
+                "PublishPartialAndWait": {
+                  "count": 36,
+                  "sum_us": 1053.742,
+                  "median_us": 27.871499999999997
+                },
+                "ReduceReply": {
+                  "count": 36,
+                  "sum_us": 5027.427000000001,
+                  "median_us": 139.534
+                },
+                "SendReply": {
+                  "count": 36,
+                  "sum_us": 38397.363,
+                  "median_us": 1068.5785
+                }
+              }
+            }
+          ],
+          "source_by_rank": [
+            {
+              "rank": 4,
+              "kernel_nodes_over_30ms": 4,
+              "distinct_requests_with_kernel_over_30ms": 4,
+              "maximum_kernel_ms": 89.24241,
+              "long_kernels": [
+                {
+                  "rank": 4,
+                  "request": 16,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "SendRequest",
+                  "duration_us": 44386.886,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 17,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 82633.107,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 26,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "SendRequest",
+                  "duration_us": 89242.41,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 32,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 56071.35,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 5,
+              "kernel_nodes_over_30ms": 4,
+              "distinct_requests_with_kernel_over_30ms": 4,
+              "maximum_kernel_ms": 92.01902700000001,
+              "long_kernels": [
+                {
+                  "rank": 5,
+                  "request": 16,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 46709.836,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 17,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "SendRequest",
+                  "duration_us": 80107.824,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 26,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 92019.027,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 32,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "SendRequest",
+                  "duration_us": 53577.44,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 6,
+              "kernel_nodes_over_30ms": 4,
+              "distinct_requests_with_kernel_over_30ms": 4,
+              "maximum_kernel_ms": 92.01356799999999,
+              "long_kernels": [
+                {
+                  "rank": 6,
+                  "request": 16,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 46702.479,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 17,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 82631.92,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 26,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 92013.568,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 32,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 56073.823,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 7,
+              "kernel_nodes_over_30ms": 4,
+              "distinct_requests_with_kernel_over_30ms": 4,
+              "maximum_kernel_ms": 91.99383900000001,
+              "long_kernels": [
+                {
+                  "rank": 7,
+                  "request": 16,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 46746.328,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 17,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 82650.257,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 26,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 91993.839,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 32,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "exchange",
+                  "operation": "CollectReply",
+                  "duration_us": 56066.294,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    2048,
+                    2048,
+                    2048,
+                    2048
+                  ]
+                }
+              ]
+            }
+          ],
+          "largest_ffn_kernel": {
+            "rank": 0,
+            "request": 26,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 89398.385,
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              2048,
+              2048,
+              2048,
+              2048
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 5,
+            "request": 26,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "exchange",
+            "operation": "CollectReply",
+            "duration_us": 92019.027,
+            "grid": [
+              132,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              2048,
+              2048,
+              2048,
+              2048
+            ]
+          }
+        },
+        {
+          "variant": "split_serial",
+          "microbatches": 2,
+          "request_count": 36,
+          "requests_over_30ms": 4,
+          "tail_requests": [
+            {
+              "request": 5,
+              "gpu_response_ms": 104.7824935913086
+            },
+            {
+              "request": 10,
+              "gpu_response_ms": 105.28044891357422
+            },
+            {
+              "request": 32,
+              "gpu_response_ms": 99.65055847167969
+            },
+            {
+              "request": 34,
+              "gpu_response_ms": 55.52134323120117
+            }
+          ],
+          "maximum_attention_gpu_response_ms": 105.28044891357422,
+          "cpu_throttled_periods_by_rank": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_total_us": 50702.48,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.2364345439792768,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 55630.39000000002,
+                  "median_us": 781.0160000000001
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 50702.47999999999,
+                  "median_us": 360.22
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 403261.906,
+                  "median_us": 11.36
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 10186.610000000004,
+                  "median_us": 141.695
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 3954.4859999999994,
+                  "median_us": 54.8155
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 1881.6789999999996,
+                  "median_us": 11.104
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 5891.579999999997,
+                  "median_us": 81.855
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 63610.367999999995,
+                  "median_us": 853.1265000000001
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_total_us": 50334.083,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.2245345929600593,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 148930.47100000002,
+                  "median_us": 797.309
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 50334.082999999984,
+                  "median_us": 360.655
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 311289.0679999999,
+                  "median_us": 14.608
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 11954.846,
+                  "median_us": 165.8715
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 1764.5950000000003,
+                  "median_us": 23.247999999999998
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 3542.1660000000006,
+                  "median_us": 47.952
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 5570.059000000001,
+                  "median_us": 77.3595
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 63398.23600000001,
+                  "median_us": 844.4770000000001
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_total_us": 50622.469,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.2376876379372515,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 272727.491,
+                  "median_us": 785.433
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 50622.469,
+                  "median_us": 360.861
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 187812.83999999997,
+                  "median_us": 17.12
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 12185.903999999997,
+                  "median_us": 168.78300000000002
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 1623.8209999999992,
+                  "median_us": 22.112
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 3341.4100000000008,
+                  "median_us": 44.9755
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 5039.379000000001,
+                  "median_us": 69.9515
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 63528.03899999999,
+                  "median_us": 853.9925000000001
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_total_us": 50315.01,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.2350226077943303,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 149751.722,
+                  "median_us": 795.4615
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 50315.00999999998,
+                  "median_us": 358.7795
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 311206.359,
+                  "median_us": 21.8715
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 11902.507000000003,
+                  "median_us": 164.398
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 1748.6509999999998,
+                  "median_us": 22.528
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 3927.342000000002,
+                  "median_us": 55.791
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 5007.844000000001,
+                  "median_us": 69.535
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 63234.32800000002,
+                  "median_us": 852.645
+                }
+              }
+            }
+          ],
+          "source_by_rank": [
+            {
+              "rank": 4,
+              "kernel_nodes_over_30ms": 4,
+              "distinct_requests_with_kernel_over_30ms": 4,
+              "maximum_kernel_ms": 100.981823,
+              "long_kernels": [
+                {
+                  "rank": 4,
+                  "request": 5,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 100615.199,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 10,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 100981.823,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 32,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 95458.47,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 34,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 51792.094,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 5,
+              "kernel_nodes_over_30ms": 4,
+              "distinct_requests_with_kernel_over_30ms": 4,
+              "maximum_kernel_ms": 100.981071,
+              "long_kernels": [
+                {
+                  "rank": 5,
+                  "request": 5,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 100586.446,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 10,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 100981.071,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 32,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 95451.423,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 34,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 49812.341,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 6,
+              "kernel_nodes_over_30ms": 4,
+              "distinct_requests_with_kernel_over_30ms": 4,
+              "maximum_kernel_ms": 99.247803,
+              "long_kernels": [
+                {
+                  "rank": 6,
+                  "request": 5,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 98426.653,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 10,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 99247.803,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 32,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 95461.762,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 34,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 51785.034,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 7,
+              "kernel_nodes_over_30ms": 4,
+              "distinct_requests_with_kernel_over_30ms": 4,
+              "maximum_kernel_ms": 101.001362,
+              "long_kernels": [
+                {
+                  "rank": 7,
+                  "request": 5,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 100580.818,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 10,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 101001.362,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 32,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 93450.323,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 34,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 51794.904,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            }
+          ],
+          "largest_ffn_kernel": {
+            "rank": 2,
+            "request": 10,
+            "chunk": 1,
+            "slot": 1,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 99284.963,
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              1024,
+              1024,
+              1024,
+              1024
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 7,
+            "request": 10,
+            "chunk": 1,
+            "slot": 1,
+            "phase": "collect",
+            "operation": "CollectReply",
+            "duration_us": 101001.362,
+            "grid": [
+              132,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              1024,
+              1024,
+              1024,
+              1024
+            ]
+          }
+        },
+        {
+          "variant": "pipeline",
+          "microbatches": 2,
+          "request_count": 36,
+          "requests_over_30ms": 5,
+          "tail_requests": [
+            {
+              "request": 1,
+              "gpu_response_ms": 88.47625732421875
+            },
+            {
+              "request": 3,
+              "gpu_response_ms": 78.46685028076172
+            },
+            {
+              "request": 6,
+              "gpu_response_ms": 79.2952651977539
+            },
+            {
+              "request": 8,
+              "gpu_response_ms": 77.18479919433594
+            },
+            {
+              "request": 17,
+              "gpu_response_ms": 40.16899108886719
+            }
+          ],
+          "maximum_attention_gpu_response_ms": 88.47625732421875,
+          "cpu_throttled_periods_by_rank": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_total_us": 55683.067,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.35789151839343,
+              "candidate_payload_overlap_us": 5381.644,
+              "strict_nonempty_payload_overlap_us": 1909.169,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.03428634776888277,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1125.785,
+                "SendReply": 783.384
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 98857.08399999996,
+                  "median_us": 1398.7845
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 55683.06699999999,
+                  "median_us": 412.0915
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 382280.5710000001,
+                  "median_us": 17.632
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 11380.219,
+                  "median_us": 148.14249999999998
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 190521.47700000004,
+                  "median_us": 92.719
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 111149.68299999998,
+                  "median_us": 27.0395
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 7692.429,
+                  "median_us": 88.59100000000001
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 92498.119,
+                  "median_us": 1212.2269999999999
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_total_us": 56022.419,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.3629212247057902,
+              "candidate_payload_overlap_us": 5407.98,
+              "strict_nonempty_payload_overlap_us": 1972.569,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.03521035034206574,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1116.027,
+                "SendReply": 856.542
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 93683.86299999998,
+                  "median_us": 1373.0680000000002
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 56022.418999999994,
+                  "median_us": 414.1585
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 387035.4949999997,
+                  "median_us": 37.6795
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 12554.391999999993,
+                  "median_us": 166.9915
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 37609.31799999999,
+                  "median_us": 115.8395
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 431350.458,
+                  "median_us": 50.239999999999995
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 7452.901000000001,
+                  "median_us": 86.70349999999999
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 92202.30499999996,
+                  "median_us": 1173.469
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_total_us": 56148.036,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.3727842877765555,
+              "candidate_payload_overlap_us": 5020.754,
+              "strict_nonempty_payload_overlap_us": 1670.323,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.029748556120466976,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1010.648,
+                "SendReply": 659.675
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 98305.07299999999,
+                  "median_us": 1380.772
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 56148.035999999986,
+                  "median_us": 413.9805
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 382647.25299999974,
+                  "median_us": 15.424
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 12483.666000000003,
+                  "median_us": 168.2545
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 38538.79400000003,
+                  "median_us": 112.447
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 411096.59900000005,
+                  "median_us": 58.432
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 7112.989,
+                  "median_us": 85.519
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 92989.79,
+                  "median_us": 1218.661
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_total_us": 55769.016,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.3688955954583677,
+              "candidate_payload_overlap_us": 5090.97,
+              "strict_nonempty_payload_overlap_us": 1747.144,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.031328219956400165,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1058.45,
+                "SendReply": 688.694
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 476337.6480000001,
+                  "median_us": 1418.638
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 55769.015999999974,
+                  "median_us": 411.2425
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 6882.759000000001,
+                  "median_us": 21.663
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 12455.933999999994,
+                  "median_us": 166.094
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 36945.256,
+                  "median_us": 121.47
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 433408.08400000003,
+                  "median_us": 102.86250000000001
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 7462.783000000001,
+                  "median_us": 83.279
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 90637.88799999998,
+                  "median_us": 1145.3609999999999
+                }
+              }
+            }
+          ],
+          "source_by_rank": [
+            {
+              "rank": 4,
+              "kernel_nodes_over_30ms": 5,
+              "distinct_requests_with_kernel_over_30ms": 5,
+              "maximum_kernel_ms": 86.911958,
+              "long_kernels": [
+                {
+                  "rank": 4,
+                  "request": 1,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 86911.958,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 3,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 76756.546,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 6,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 77788.193,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 8,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 75951.331,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 17,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 38483.41,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 5,
+              "kernel_nodes_over_30ms": 5,
+              "distinct_requests_with_kernel_over_30ms": 5,
+              "maximum_kernel_ms": 86.757544,
+              "long_kernels": [
+                {
+                  "rank": 5,
+                  "request": 1,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 86757.544,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 3,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 76574.728,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 6,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 77821.004,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 8,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 75997.351,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 17,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 38499.766,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 6,
+              "kernel_nodes_over_30ms": 5,
+              "distinct_requests_with_kernel_over_30ms": 5,
+              "maximum_kernel_ms": 86.70862799999999,
+              "long_kernels": [
+                {
+                  "rank": 6,
+                  "request": 1,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 86708.628,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 3,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 76503.365,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 6,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 77853.507,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 8,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 75912.325,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 17,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 38461.698,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 7,
+              "kernel_nodes_over_30ms": 5,
+              "distinct_requests_with_kernel_over_30ms": 5,
+              "maximum_kernel_ms": 86.820983,
+              "long_kernels": [
+                {
+                  "rank": 7,
+                  "request": 1,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 86820.983,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 3,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 76476.183,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 6,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 74117.688,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 8,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 73002.872,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 17,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 36042.62,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            }
+          ],
+          "largest_ffn_kernel": {
+            "rank": 0,
+            "request": 1,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "receive",
+            "operation": "PublishPackAndCredit",
+            "duration_us": 83327.878,
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              1024,
+              1024,
+              1024,
+              1024
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 4,
+            "request": 1,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "collect",
+            "operation": "CollectReply",
+            "duration_us": 86911.958,
+            "grid": [
+              132,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              1024,
+              1024,
+              1024,
+              1024
+            ]
+          }
+        },
+        {
+          "variant": "pipeline_graph",
+          "microbatches": 2,
+          "request_count": 36,
+          "requests_over_30ms": 3,
+          "tail_requests": [
+            {
+              "request": 3,
+              "gpu_response_ms": 92.15737915039062
+            },
+            {
+              "request": 4,
+              "gpu_response_ms": 80.12889862060547
+            },
+            {
+              "request": 11,
+              "gpu_response_ms": 44.71238327026367
+            }
+          ],
+          "maximum_attention_gpu_response_ms": 92.15737915039062,
+          "cpu_throttled_periods_by_rank": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_total_us": 57351.217,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.398571151510765,
+              "candidate_payload_overlap_us": 4839.405,
+              "strict_nonempty_payload_overlap_us": 1826.827,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.03185332579777688,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1214.194,
+                "SendReply": 612.633
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 104606.213,
+                  "median_us": 1363.5525
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 57351.216999999975,
+                  "median_us": 413.212
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 222707.57200000007,
+                  "median_us": 18.256
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 11168.204000000002,
+                  "median_us": 148.6705
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 43760.054000000004,
+                  "median_us": 249.03699999999998
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 355002.72500000003,
+                  "median_us": 85.759
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 7573.262000000001,
+                  "median_us": 83.935
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 76916.85700000002,
+                  "median_us": 977.8615
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_total_us": 58889.582,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.4326739661465182,
+              "candidate_payload_overlap_us": 5928.907,
+              "strict_nonempty_payload_overlap_us": 2652.408,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.04504036044949342,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1224.699,
+                "SendReply": 1427.709
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 137297.818,
+                  "median_us": 1354.78
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 58889.58200000003,
+                  "median_us": 414.703
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 189873.467,
+                  "median_us": 14.368
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 12301.751000000002,
+                  "median_us": 165.824
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 68236.68800000002,
+                  "median_us": 251.03900000000002
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 316931.606,
+                  "median_us": 92.864
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 7437.579000000001,
+                  "median_us": 84.048
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 77309.38899999997,
+                  "median_us": 986.3645
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_total_us": 56513.448,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.381718382143899,
+              "candidate_payload_overlap_us": 5270.483,
+              "strict_nonempty_payload_overlap_us": 1964.752,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.03476609673506384,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1279.094,
+                "SendReply": 685.658
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 258077.78999999995,
+                  "median_us": 1355.5875
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 56513.448000000004,
+                  "median_us": 413.61199999999997
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 73126.86899999999,
+                  "median_us": 22.688
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 12399.376999999997,
+                  "median_us": 171.0865
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 39194.33499999998,
+                  "median_us": 162.5745
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 355473.6950000002,
+                  "median_us": 131.951
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 7335.450999999998,
+                  "median_us": 80.95949999999999
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 76395.03499999997,
+                  "median_us": 962.44
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_total_us": 56615.54,
+              "gemm_kernel_nodes": 144,
+              "gemm_time_ratio_to_whole": 1.389674211581876,
+              "candidate_payload_overlap_us": 5836.956,
+              "strict_nonempty_payload_overlap_us": 2208.041,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.03900061714504534,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1281.107,
+                "SendReply": 926.934
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 72,
+                  "sum_us": 87626.66500000001,
+                  "median_us": 1338.463
+                },
+                "ExpertGEMM": {
+                  "count": 144,
+                  "sum_us": 56615.54000000001,
+                  "median_us": 412.459
+                },
+                "Histogram": {
+                  "count": 72,
+                  "sum_us": 241695.24599999996,
+                  "median_us": 22.336
+                },
+                "PackRows": {
+                  "count": 72,
+                  "sum_us": 12308.419,
+                  "median_us": 166.6855
+                },
+                "PublishPackAndCredit": {
+                  "count": 72,
+                  "sum_us": 204428.195,
+                  "median_us": 195.13299999999998
+                },
+                "PublishPartialAndWait": {
+                  "count": 72,
+                  "sum_us": 113385.99099999992,
+                  "median_us": 68.49549999999999
+                },
+                "ReduceReply": {
+                  "count": 72,
+                  "sum_us": 7107.2390000000005,
+                  "median_us": 75.295
+                },
+                "SendReply": {
+                  "count": 72,
+                  "sum_us": 77589.22900000004,
+                  "median_us": 968.9155000000001
+                }
+              }
+            }
+          ],
+          "source_by_rank": [
+            {
+              "rank": 4,
+              "kernel_nodes_over_30ms": 3,
+              "distinct_requests_with_kernel_over_30ms": 3,
+              "maximum_kernel_ms": 90.03397500000001,
+              "long_kernels": [
+                {
+                  "rank": 4,
+                  "request": 3,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 90033.975,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 4,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 77759.269,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 11,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 42531.343,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 5,
+              "kernel_nodes_over_30ms": 3,
+              "distinct_requests_with_kernel_over_30ms": 3,
+              "maximum_kernel_ms": 90.058868,
+              "long_kernels": [
+                {
+                  "rank": 5,
+                  "request": 3,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 90058.868,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 4,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 77796.431,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 11,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 42535.458,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 6,
+              "kernel_nodes_over_30ms": 3,
+              "distinct_requests_with_kernel_over_30ms": 3,
+              "maximum_kernel_ms": 88.17439,
+              "long_kernels": [
+                {
+                  "rank": 6,
+                  "request": 3,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 88174.39,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 4,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 77794.758,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 11,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 40013.985,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 7,
+              "kernel_nodes_over_30ms": 3,
+              "distinct_requests_with_kernel_over_30ms": 3,
+              "maximum_kernel_ms": 90.103447,
+              "long_kernels": [
+                {
+                  "rank": 7,
+                  "request": 3,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 90103.447,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 4,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 78031.16,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 11,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 42816.508,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    1024,
+                    1024,
+                    1024,
+                    1024
+                  ]
+                }
+              ]
+            }
+          ],
+          "largest_ffn_kernel": {
+            "rank": 2,
+            "request": 3,
+            "chunk": 1,
+            "slot": 1,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 89006.759,
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              1024,
+              1024,
+              1024,
+              1024
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 7,
+            "request": 3,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "collect",
+            "operation": "CollectReply",
+            "duration_us": 90103.447,
+            "grid": [
+              132,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              1024,
+              1024,
+              1024,
+              1024
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "workload": "mixed",
+      "mode": "hybrid",
+      "requests_per_case": 90,
+      "fixed_tokens_per_source": null,
+      "communication_local_ctas": 132,
+      "request_window": 1,
+      "source_working_tree_fingerprint": "6facbf3c359e231871e58ebc65471ba816c9357b43ae61ddb4f095b58eee7ce1",
+      "artifacts": [
+        {
+          "file": "nsight-graph-mixed/analysis-overlap.json",
+          "sha256": "aa958728b662c45eca4e3436f257e41e59b4c3c6af3983575a9da3dd427887c1"
+        },
+        {
+          "file": "nsight-graph-mixed/node0.nsys-rep",
+          "sha256": "5955dd621f535e2c3269311a970c2f33618414914d3bdc8c816d34673cd2f4d7"
+        },
+        {
+          "file": "nsight-graph-mixed/node0.sqlite",
+          "sha256": "50cfed2ed7e58d13caf3b257049ed52a0d70b612075aa9d9f8dd68860018dc40"
+        },
+        {
+          "file": "nsight-graph-mixed/node1.nsys-rep",
+          "sha256": "a550e2478d95e12cdbe48808fc18cf145ef219f4717dc8dc255bb7d74e0ead57"
+        },
+        {
+          "file": "nsight-graph-mixed/node1.sqlite",
+          "sha256": "552f87ad422e10b68025d64e30f2eafb5ae89ac286c818e600ddb5efe9973847"
+        }
+      ],
+      "association": [
+        {
+          "node": 0,
+          "timed_attributed_kernel_nodes": 42840,
+          "unmatched_phase_ranges": 0,
+          "unmapped_consolidated_kernel_nodes": 0
+        },
+        {
+          "node": 1,
+          "timed_attributed_kernel_nodes": 12600,
+          "unmatched_phase_ranges": 0,
+          "unmapped_consolidated_kernel_nodes": 0
+        }
+      ],
+      "variants": [
+        {
+          "variant": "whole_graph",
+          "microbatches": 1,
+          "request_count": 90,
+          "requests_over_30ms": 0,
+          "tail_requests": [],
+          "maximum_attention_gpu_response_ms": 29.52556800842285,
+          "cpu_throttled_periods_by_rank": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_total_us": 52371.568,
+              "gemm_kernel_nodes": 180,
+              "gemm_time_ratio_to_whole": 1.0,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 90,
+                  "sum_us": 32463.469999999998,
+                  "median_us": 259.18100000000004
+                },
+                "ExpertGEMM": {
+                  "count": 180,
+                  "sum_us": 52371.56799999999,
+                  "median_us": 231.3095
+                },
+                "Histogram": {
+                  "count": 90,
+                  "sum_us": 33707.007,
+                  "median_us": 16.912
+                },
+                "PackRows": {
+                  "count": 90,
+                  "sum_us": 5549.796000000001,
+                  "median_us": 31.664
+                },
+                "PublishPackAndCredit": {
+                  "count": 90,
+                  "sum_us": 5181.144,
+                  "median_us": 30.0475
+                },
+                "PublishPartialAndWait": {
+                  "count": 90,
+                  "sum_us": 30051.563,
+                  "median_us": 9.36
+                },
+                "ReduceReply": {
+                  "count": 90,
+                  "sum_us": 3139.2280000000005,
+                  "median_us": 17.728
+                },
+                "SendReply": {
+                  "count": 90,
+                  "sum_us": 24631.902000000013,
+                  "median_us": 139.47
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_total_us": 52452.484,
+              "gemm_kernel_nodes": 180,
+              "gemm_time_ratio_to_whole": 1.0,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 90,
+                  "sum_us": 32678.738999999994,
+                  "median_us": 260.33500000000004
+                },
+                "ExpertGEMM": {
+                  "count": 180,
+                  "sum_us": 52452.484,
+                  "median_us": 228.015
+                },
+                "Histogram": {
+                  "count": 90,
+                  "sum_us": 31174.604999999996,
+                  "median_us": 21.28
+                },
+                "PackRows": {
+                  "count": 90,
+                  "sum_us": 6499.179999999999,
+                  "median_us": 37.472
+                },
+                "PublishPackAndCredit": {
+                  "count": 90,
+                  "sum_us": 4013.0069999999996,
+                  "median_us": 22.512
+                },
+                "PublishPartialAndWait": {
+                  "count": 90,
+                  "sum_us": 29320.95200000001,
+                  "median_us": 11.792
+                },
+                "ReduceReply": {
+                  "count": 90,
+                  "sum_us": 2936.9190000000003,
+                  "median_us": 17.136000000000003
+                },
+                "SendReply": {
+                  "count": 90,
+                  "sum_us": 27529.979000000007,
+                  "median_us": 139.69549999999998
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_total_us": 45941.714,
+              "gemm_kernel_nodes": 180,
+              "gemm_time_ratio_to_whole": 1.0,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 90,
+                  "sum_us": 56383.67000000003,
+                  "median_us": 250.22199999999998
+                },
+                "ExpertGEMM": {
+                  "count": 180,
+                  "sum_us": 45941.713999999905,
+                  "median_us": 200.1585
+                },
+                "Histogram": {
+                  "count": 90,
+                  "sum_us": 9479.24,
+                  "median_us": 28.736
+                },
+                "PackRows": {
+                  "count": 90,
+                  "sum_us": 5872.928999999997,
+                  "median_us": 33.7275
+                },
+                "PublishPackAndCredit": {
+                  "count": 90,
+                  "sum_us": 4589.689000000001,
+                  "median_us": 21.6635
+                },
+                "PublishPartialAndWait": {
+                  "count": 90,
+                  "sum_us": 38271.735,
+                  "median_us": 16.192
+                },
+                "ReduceReply": {
+                  "count": 90,
+                  "sum_us": 2866.119000000001,
+                  "median_us": 17.0875
+                },
+                "SendReply": {
+                  "count": 90,
+                  "sum_us": 25417.746000000003,
+                  "median_us": 137.16649999999998
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_total_us": 46166.27,
+              "gemm_kernel_nodes": 180,
+              "gemm_time_ratio_to_whole": 1.0,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 90,
+                  "sum_us": 34318.239,
+                  "median_us": 274.7805
+                },
+                "ExpertGEMM": {
+                  "count": 180,
+                  "sum_us": 46166.27000000001,
+                  "median_us": 199.62900000000002
+                },
+                "Histogram": {
+                  "count": 90,
+                  "sum_us": 27807.057000000023,
+                  "median_us": 13.6
+                },
+                "PackRows": {
+                  "count": 90,
+                  "sum_us": 5536.119,
+                  "median_us": 32.512
+                },
+                "PublishPackAndCredit": {
+                  "count": 90,
+                  "sum_us": 4851.130000000001,
+                  "median_us": 23.503999999999998
+                },
+                "PublishPartialAndWait": {
+                  "count": 90,
+                  "sum_us": 38539.27599999999,
+                  "median_us": 16.624000000000002
+                },
+                "ReduceReply": {
+                  "count": 90,
+                  "sum_us": 3022.9660000000013,
+                  "median_us": 18.896
+                },
+                "SendReply": {
+                  "count": 90,
+                  "sum_us": 29012.386999999995,
+                  "median_us": 166.84550000000002
+                }
+              }
+            }
+          ],
+          "source_by_rank": [
+            {
+              "rank": 4,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 27.3534,
+              "long_kernels": []
+            },
+            {
+              "rank": 5,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 28.189772,
+              "long_kernels": []
+            },
+            {
+              "rank": 6,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 25.813710999999998,
+              "long_kernels": []
+            },
+            {
+              "rank": 7,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 28.276055,
+              "long_kernels": []
+            }
+          ],
+          "largest_ffn_kernel": {
+            "rank": 2,
+            "request": 23,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 25988.558,
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              1025,
+              1422,
+              1543,
+              1691
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 7,
+            "request": 23,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "exchange",
+            "operation": "CollectReply",
+            "duration_us": 28276.055,
+            "grid": [
+              132,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              1025,
+              1422,
+              1543,
+              1691
+            ]
+          }
+        },
+        {
+          "variant": "split_serial",
+          "microbatches": 2,
+          "request_count": 90,
+          "requests_over_30ms": 0,
+          "tail_requests": [],
+          "maximum_attention_gpu_response_ms": 13.614463806152344,
+          "cpu_throttled_periods_by_rank": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_total_us": 89396.632,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.7069687888665086,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 34855.280000000006,
+                  "median_us": 178.33350000000002
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 89396.63199999997,
+                  "median_us": 199.038
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 15475.139999999994,
+                  "median_us": 13.008
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 6129.434000000005,
+                  "median_us": 18.656
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 7483.870000000002,
+                  "median_us": 27.807499999999997
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 36873.851,
+                  "median_us": 8.688
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 3210.907000000001,
+                  "median_us": 10.544
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 29085.430000000004,
+                  "median_us": 82.879
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_total_us": 88021.157,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.6781122701452997,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 43049.227000000006,
+                  "median_us": 175.6155
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 88021.15699999989,
+                  "median_us": 198.463
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 15700.292000000005,
+                  "median_us": 34.256
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 7039.075999999998,
+                  "median_us": 20.784
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 6427.370000000003,
+                  "median_us": 24.176000000000002
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 38431.646,
+                  "median_us": 12.624
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 3029.563,
+                  "median_us": 9.76
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 21140.628999999997,
+                  "median_us": 62.88
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_total_us": 79703.161,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.734875651352494,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 34941.69299999999,
+                  "median_us": 177.2625
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 79703.16099999992,
+                  "median_us": 198.206
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 18218.705000000005,
+                  "median_us": 15.296
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 6346.887999999998,
+                  "median_us": 19.04
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 6905.385,
+                  "median_us": 23.488
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 49192.825,
+                  "median_us": 16.944000000000003
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 2932.1610000000023,
+                  "median_us": 9.9835
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 26943.304,
+                  "median_us": 82.22399999999999
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_total_us": 80512.309,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.7439639156466398,
+              "candidate_payload_overlap_us": 0.0,
+              "strict_nonempty_payload_overlap_us": 0.0,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 0.0,
+                "SendReply": 0.0
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 35758.31599999999,
+                  "median_us": 179.82150000000001
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 80512.30899999996,
+                  "median_us": 197.54899999999998
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 14907.359000000004,
+                  "median_us": 16.016
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 5999.607000000003,
+                  "median_us": 17.871000000000002
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 7070.146000000003,
+                  "median_us": 23.775
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 48674.98600000001,
+                  "median_us": 16.192
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 3208.597000000001,
+                  "median_us": 10.72
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 29295.481999999996,
+                  "median_us": 84.543
+                }
+              }
+            }
+          ],
+          "source_by_rank": [
+            {
+              "rank": 4,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 10.775217000000001,
+              "long_kernels": []
+            },
+            {
+              "rank": 5,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 9.492026,
+              "long_kernels": []
+            },
+            {
+              "rank": 6,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 10.803117,
+              "long_kernels": []
+            },
+            {
+              "rank": 7,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 10.619325,
+              "long_kernels": []
+            }
+          ],
+          "largest_ffn_kernel": {
+            "rank": 1,
+            "request": 50,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 9646.846,
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              916,
+              649,
+              997,
+              575
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 6,
+            "request": 50,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "collect",
+            "operation": "CollectReply",
+            "duration_us": 10803.117,
+            "grid": [
+              132,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              916,
+              649,
+              997,
+              575
+            ]
+          }
+        },
+        {
+          "variant": "pipeline",
+          "microbatches": 2,
+          "request_count": 90,
+          "requests_over_30ms": 3,
+          "tail_requests": [
+            {
+              "request": 54,
+              "gpu_response_ms": 90.2570571899414
+            },
+            {
+              "request": 83,
+              "gpu_response_ms": 79.09219360351562
+            },
+            {
+              "request": 86,
+              "gpu_response_ms": 97.66185760498047
+            }
+          ],
+          "maximum_attention_gpu_response_ms": 97.66185760498047,
+          "cpu_throttled_periods_by_rank": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_total_us": 92363.318,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.76361567024306,
+              "candidate_payload_overlap_us": 9834.351,
+              "strict_nonempty_payload_overlap_us": 7601.288,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.08229769311665482,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1583.276,
+                "SendReply": 6018.012
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 268221.67299999995,
+                  "median_us": 420.651
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 92363.31799999996,
+                  "median_us": 215.29399999999998
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 386814.97,
+                  "median_us": 18.336
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 7435.925000000002,
+                  "median_us": 21.9995
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 23072.65200000002,
+                  "median_us": 47.4075
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 79518.97200000002,
+                  "median_us": 16.912
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 4475.852000000001,
+                  "median_us": 14.9435
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 37365.084,
+                  "median_us": 95.743
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_total_us": 90302.183,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.721599743493559,
+              "candidate_payload_overlap_us": 8508.446,
+              "strict_nonempty_payload_overlap_us": 6316.811,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0699519191025537,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1535.291,
+                "SendReply": 4781.52
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 337820.94100000005,
+                  "median_us": 428.27099999999996
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 90302.18300000002,
+                  "median_us": 205.27949999999998
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 319297.608,
+                  "median_us": 27.695999999999998
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 7757.601999999996,
+                  "median_us": 23.28
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 20038.24499999999,
+                  "median_us": 42.336
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 86502.323,
+                  "median_us": 38.464
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 4575.825000000001,
+                  "median_us": 15.904
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 34908.838,
+                  "median_us": 91.7435
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_total_us": 82012.775,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.785148351234784,
+              "candidate_payload_overlap_us": 7593.561,
+              "strict_nonempty_payload_overlap_us": 5523.31,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.06734694686285154,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1293.845,
+                "SendReply": 4229.465
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 352563.59099999984,
+                  "median_us": 417.148
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 82012.77500000007,
+                  "median_us": 201.1985
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 308178.651,
+                  "median_us": 33.0875
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 6976.987000000004,
+                  "median_us": 20.704
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 23789.158000000007,
+                  "median_us": 49.263999999999996
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 101874.57899999997,
+                  "median_us": 50.911
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 4480.127,
+                  "median_us": 14.768
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 32162.386999999988,
+                  "median_us": 82.09549999999999
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_total_us": 107868.4,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 2.336519714501518,
+              "candidate_payload_overlap_us": 7424.523,
+              "strict_nonempty_payload_overlap_us": 5248.545,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0486569282570243,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1405.586,
+                "SendReply": 3842.959
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 162895.58000000005,
+                  "median_us": 448.65
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 107868.40000000002,
+                  "median_us": 201.3095
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 495431.84099999996,
+                  "median_us": 19.792
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 6725.997,
+                  "median_us": 19.615
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 23906.977000000006,
+                  "median_us": 47.150999999999996
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 75046.70199999999,
+                  "median_us": 44.8795
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 4829.675999999998,
+                  "median_us": 16.576
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 34615.35500000002,
+                  "median_us": 82.527
+                }
+              }
+            }
+          ],
+          "source_by_rank": [
+            {
+              "rank": 4,
+              "kernel_nodes_over_30ms": 3,
+              "distinct_requests_with_kernel_over_30ms": 3,
+              "maximum_kernel_ms": 94.70053999999999,
+              "long_kernels": [
+                {
+                  "rank": 4,
+                  "request": 54,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 87443.366,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    586,
+                    517,
+                    742,
+                    594
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 83,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 77904.084,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    478,
+                    515,
+                    810,
+                    950
+                  ]
+                },
+                {
+                  "rank": 4,
+                  "request": 86,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 94700.54,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    732,
+                    649,
+                    829,
+                    687
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 5,
+              "kernel_nodes_over_30ms": 3,
+              "distinct_requests_with_kernel_over_30ms": 3,
+              "maximum_kernel_ms": 90.555288,
+              "long_kernels": [
+                {
+                  "rank": 5,
+                  "request": 54,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 62717.26,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    586,
+                    517,
+                    742,
+                    594
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 83,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 77993.973,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    478,
+                    515,
+                    810,
+                    950
+                  ]
+                },
+                {
+                  "rank": 5,
+                  "request": 86,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 90555.288,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    732,
+                    649,
+                    829,
+                    687
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 6,
+              "kernel_nodes_over_30ms": 3,
+              "distinct_requests_with_kernel_over_30ms": 3,
+              "maximum_kernel_ms": 95.462967,
+              "long_kernels": [
+                {
+                  "rank": 6,
+                  "request": 54,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 62693.489,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    586,
+                    517,
+                    742,
+                    594
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 83,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "dispatch",
+                  "operation": "SendRequest",
+                  "duration_us": 75758.97,
+                  "grid": [
+                    8,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    478,
+                    515,
+                    810,
+                    950
+                  ]
+                },
+                {
+                  "rank": 6,
+                  "request": 86,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 95462.967,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    732,
+                    649,
+                    829,
+                    687
+                  ]
+                }
+              ]
+            },
+            {
+              "rank": 7,
+              "kernel_nodes_over_30ms": 3,
+              "distinct_requests_with_kernel_over_30ms": 3,
+              "maximum_kernel_ms": 94.564713,
+              "long_kernels": [
+                {
+                  "rank": 7,
+                  "request": 54,
+                  "chunk": 1,
+                  "slot": 1,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 62718.609,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    586,
+                    517,
+                    742,
+                    594
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 83,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 78177.901,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    478,
+                    515,
+                    810,
+                    950
+                  ]
+                },
+                {
+                  "rank": 7,
+                  "request": 86,
+                  "chunk": 0,
+                  "slot": 0,
+                  "phase": "collect",
+                  "operation": "CollectReply",
+                  "duration_us": 94564.713,
+                  "grid": [
+                    132,
+                    1,
+                    1
+                  ],
+                  "dynamic_shared_bytes": 0,
+                  "chunk_source_rows": [
+                    732,
+                    649,
+                    829,
+                    687
+                  ]
+                }
+              ]
+            }
+          ],
+          "largest_ffn_kernel": {
+            "rank": 1,
+            "request": 86,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 91873.481,
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              732,
+              649,
+              829,
+              687
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 6,
+            "request": 86,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "collect",
+            "operation": "CollectReply",
+            "duration_us": 95462.967,
+            "grid": [
+              132,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              732,
+              649,
+              829,
+              687
+            ]
+          }
+        },
+        {
+          "variant": "pipeline_graph",
+          "microbatches": 2,
+          "request_count": 90,
+          "requests_over_30ms": 1,
+          "tail_requests": [
+            {
+              "request": 87,
+              "gpu_response_ms": 31.452255249023438
+            }
+          ],
+          "maximum_attention_gpu_response_ms": 31.452255249023438,
+          "cpu_throttled_periods_by_rank": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "ffn_by_rank": [
+            {
+              "rank": 0,
+              "gemm_total_us": 91540.187,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.7478985353274128,
+              "candidate_payload_overlap_us": 7853.199,
+              "strict_nonempty_payload_overlap_us": 5808.993,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.06345839123094647,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1446.964,
+                "SendReply": 4362.029
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 100030.07799999998,
+                  "median_us": 322.5725
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 91540.18700000008,
+                  "median_us": 209.34199999999998
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 88804.124,
+                  "median_us": 14.896
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 6879.347999999999,
+                  "median_us": 21.616
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 20349.342999999993,
+                  "median_us": 37.0555
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 101167.05600000004,
+                  "median_us": 25.6475
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 4659.570000000001,
+                  "median_us": 15.344
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 24616.103999999996,
+                  "median_us": 84.463
+                }
+              }
+            },
+            {
+              "rank": 1,
+              "gemm_total_us": 90229.076,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.7202059677478765,
+              "candidate_payload_overlap_us": 8225.861,
+              "strict_nonempty_payload_overlap_us": 6098.571,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.0675898642694734,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1457.338,
+                "SendReply": 4641.233
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 118897.546,
+                  "median_us": 318.43100000000004
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 90229.076,
+                  "median_us": 207.76
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 70853.77600000003,
+                  "median_us": 24.032
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 7670.595000000001,
+                  "median_us": 23.456
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 19531.620000000014,
+                  "median_us": 36.128
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 101277.35099999998,
+                  "median_us": 22.784
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 4357.586999999998,
+                  "median_us": 16.288
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 23431.762000000006,
+                  "median_us": 81.44
+                }
+              }
+            },
+            {
+              "rank": 2,
+              "gemm_total_us": 82229.4,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.789863564951016,
+              "candidate_payload_overlap_us": 7532.864,
+              "strict_nonempty_payload_overlap_us": 5471.631,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.06654105465928245,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1485.074,
+                "SendReply": 3986.557
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 75419.98700000001,
+                  "median_us": 299.837
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 82229.40000000001,
+                  "median_us": 200.91
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 120825.32900000003,
+                  "median_us": 48.799499999999995
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 6807.8769999999995,
+                  "median_us": 20.976
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 47434.46499999999,
+                  "median_us": 41.358999999999995
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 72944.51000000001,
+                  "median_us": 20.302999999999997
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 4303.673999999999,
+                  "median_us": 14.751999999999999
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 20150.443000000003,
+                  "median_us": 66.7995
+                }
+              }
+            },
+            {
+              "rank": 3,
+              "gemm_total_us": 82952.801,
+              "gemm_kernel_nodes": 360,
+              "gemm_time_ratio_to_whole": 1.7968270124486994,
+              "candidate_payload_overlap_us": 7503.837,
+              "strict_nonempty_payload_overlap_us": 5503.195,
+              "fraction_gemm_overlapping_strict_nonempty_payload": 0.06634128002501084,
+              "strict_overlap_by_operation_us": {
+                "PackRows": 0.0,
+                "ReduceReply": 1708.044,
+                "SendReply": 3795.151
+              },
+              "stages": {
+                "BeginWorker": {
+                  "count": 180,
+                  "sum_us": 121471.05099999999,
+                  "median_us": 312.892
+                },
+                "ExpertGEMM": {
+                  "count": 360,
+                  "sum_us": 82952.80099999995,
+                  "median_us": 201.582
+                },
+                "Histogram": {
+                  "count": 180,
+                  "sum_us": 66565.31099999999,
+                  "median_us": 22.944
+                },
+                "PackRows": {
+                  "count": 180,
+                  "sum_us": 6578.025,
+                  "median_us": 20.335
+                },
+                "PublishPackAndCredit": {
+                  "count": 180,
+                  "sum_us": 24280.806999999993,
+                  "median_us": 38.912000000000006
+                },
+                "PublishPartialAndWait": {
+                  "count": 180,
+                  "sum_us": 116594.29800000001,
+                  "median_us": 36.256
+                },
+                "ReduceReply": {
+                  "count": 180,
+                  "sum_us": 4797.8290000000015,
+                  "median_us": 16.4
+                },
+                "SendReply": {
+                  "count": 180,
+                  "sum_us": 24192.554000000004,
+                  "median_us": 79.263
+                }
+              }
+            }
+          ],
+          "source_by_rank": [
+            {
+              "rank": 4,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 28.841528999999998,
+              "long_kernels": []
+            },
+            {
+              "rank": 5,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 26.991499,
+              "long_kernels": []
+            },
+            {
+              "rank": 6,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 28.932302,
+              "long_kernels": []
+            },
+            {
+              "rank": 7,
+              "kernel_nodes_over_30ms": 0,
+              "distinct_requests_with_kernel_over_30ms": 0,
+              "maximum_kernel_ms": 28.845241,
+              "long_kernels": []
+            }
+          ],
+          "largest_ffn_kernel": {
+            "rank": 3,
+            "request": 80,
+            "chunk": 1,
+            "slot": 1,
+            "phase": "receive",
+            "operation": "BeginWorker",
+            "duration_us": 25505.399,
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              875,
+              860,
+              686,
+              762
+            ]
+          },
+          "largest_source_kernel": {
+            "rank": 6,
+            "request": 87,
+            "chunk": 0,
+            "slot": 0,
+            "phase": "collect",
+            "operation": "CollectReply",
+            "duration_us": 28932.302,
+            "grid": [
+              132,
+              1,
+              1
+            ],
+            "dynamic_shared_bytes": 0,
+            "chunk_source_rows": [
+              579,
+              957,
+              614,
+              968
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "file": "pipeline-overlap-timeline.svg",
+      "sha256": "6662c1c1863b2768c70900fd6a15a44aed4db8809d8cc6a32de1c26f51761e64",
+      "scope": "mixed request17 FFN0, matched input across policies",
+      "normalization": "Trailing line whitespace removed; geometry unchanged."
+    },
+    {
+      "file": "pipeline-overlap-timeline.png",
+      "sha256": "46d2d5cfc78bf5612458be734f3c6791e5b6c2d36ef71fe0ae2140fe850fc994",
+      "scope": "mixed request17 FFN0, matched input across policies"
+    },
+    {
+      "file": "pipeline-progress-stall.svg",
+      "sha256": "0757ca3f9744cdb118f6c160cacd884beeab97bcbd35897e1275b7aef960b76e",
+      "scope": "fixed-large baseline request26 and consolidated request3, FFN0\u20133 same-node clocks",
+      "normalization": "Trailing line whitespace removed; geometry unchanged."
+    },
+    {
+      "file": "pipeline-progress-stall.png",
+      "sha256": "4c9e7bbc3572b74ebd799498b0820765dbbdc4659da241c73468ea493e03a84d",
+      "scope": "fixed-large baseline request26 and consolidated request3, FFN0\u20133 same-node clocks"
+    }
+  ],
+  "representative_stalls": [
+    {
+      "workload": "large",
+      "variant": "whole_graph",
+      "request": 26,
+      "kernels_over_10ms": [
+        {
+          "rank": 2,
+          "request": 26,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "receive",
+          "operation": "Histogram",
+          "duration_us": 88344.832,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            2048,
+            2048,
+            2048,
+            2048
+          ]
+        },
+        {
+          "rank": 0,
+          "request": 26,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "receive",
+          "operation": "BeginWorker",
+          "duration_us": 89398.385,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            2048,
+            2048,
+            2048,
+            2048
+          ]
+        },
+        {
+          "rank": 1,
+          "request": 26,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "receive",
+          "operation": "Histogram",
+          "duration_us": 88349.634,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            2048,
+            2048,
+            2048,
+            2048
+          ]
+        },
+        {
+          "rank": 3,
+          "request": 26,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "receive",
+          "operation": "Histogram",
+          "duration_us": 88351.761,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            2048,
+            2048,
+            2048,
+            2048
+          ]
+        },
+        {
+          "rank": 7,
+          "request": 26,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "exchange",
+          "operation": "CollectReply",
+          "duration_us": 91993.839,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            2048,
+            2048,
+            2048,
+            2048
+          ]
+        },
+        {
+          "rank": 4,
+          "request": 26,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "exchange",
+          "operation": "SendRequest",
+          "duration_us": 89242.41,
+          "grid": [
+            8,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            2048,
+            2048,
+            2048,
+            2048
+          ]
+        },
+        {
+          "rank": 5,
+          "request": 26,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "exchange",
+          "operation": "CollectReply",
+          "duration_us": 92019.027,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            2048,
+            2048,
+            2048,
+            2048
+          ]
+        },
+        {
+          "rank": 6,
+          "request": 26,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "exchange",
+          "operation": "CollectReply",
+          "duration_us": 92013.568,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            2048,
+            2048,
+            2048,
+            2048
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "large",
+      "variant": "pipeline",
+      "request": 1,
+      "kernels_over_10ms": [
+        {
+          "rank": 3,
+          "request": 1,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "reply",
+          "operation": "PublishPartialAndWait",
+          "duration_us": 83315.836,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 0,
+          "request": 1,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "receive",
+          "operation": "PublishPackAndCredit",
+          "duration_us": 83327.878,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 3,
+          "request": 1,
+          "chunk": 1,
+          "slot": 1,
+          "phase": "reply",
+          "operation": "PublishPartialAndWait",
+          "duration_us": 83244.476,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 1,
+          "request": 1,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "reply",
+          "operation": "PublishPartialAndWait",
+          "duration_us": 83238.012,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 2,
+          "request": 1,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "reply",
+          "operation": "PublishPartialAndWait",
+          "duration_us": 83314.868,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 1,
+          "request": 1,
+          "chunk": 1,
+          "slot": 1,
+          "phase": "reply",
+          "operation": "PublishPartialAndWait",
+          "duration_us": 83083.997,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 2,
+          "request": 1,
+          "chunk": 1,
+          "slot": 1,
+          "phase": "reply",
+          "operation": "PublishPartialAndWait",
+          "duration_us": 83230.869,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 5,
+          "request": 1,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "collect",
+          "operation": "CollectReply",
+          "duration_us": 86757.544,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 7,
+          "request": 1,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "collect",
+          "operation": "CollectReply",
+          "duration_us": 86820.983,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 4,
+          "request": 1,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "collect",
+          "operation": "CollectReply",
+          "duration_us": 86911.958,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 6,
+          "request": 1,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "collect",
+          "operation": "CollectReply",
+          "duration_us": 86708.628,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "large",
+      "variant": "pipeline_graph",
+      "request": 3,
+      "kernels_over_10ms": [
+        {
+          "rank": 3,
+          "request": 3,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "receive",
+          "operation": "PublishPackAndCredit",
+          "duration_us": 83693.565,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 3,
+          "request": 3,
+          "chunk": 1,
+          "slot": 1,
+          "phase": "receive",
+          "operation": "Histogram",
+          "duration_us": 87773.001,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 0,
+          "request": 3,
+          "chunk": 1,
+          "slot": 1,
+          "phase": "receive",
+          "operation": "Histogram",
+          "duration_us": 87373.666,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 0,
+          "request": 3,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "reply",
+          "operation": "PublishPartialAndWait",
+          "duration_us": 88114.522,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 2,
+          "request": 3,
+          "chunk": 1,
+          "slot": 1,
+          "phase": "receive",
+          "operation": "BeginWorker",
+          "duration_us": 89006.759,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 2,
+          "request": 3,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "reply",
+          "operation": "PublishPartialAndWait",
+          "duration_us": 87795.281,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 1,
+          "request": 3,
+          "chunk": 1,
+          "slot": 1,
+          "phase": "receive",
+          "operation": "Histogram",
+          "duration_us": 87370.004,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 1,
+          "request": 3,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "reply",
+          "operation": "PublishPartialAndWait",
+          "duration_us": 88110.417,
+          "grid": [
+            1,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 6,
+          "request": 3,
+          "chunk": 1,
+          "slot": 1,
+          "phase": "dispatch",
+          "operation": "SendRequest",
+          "duration_us": 88174.39,
+          "grid": [
+            8,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 7,
+          "request": 3,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "collect",
+          "operation": "CollectReply",
+          "duration_us": 90103.447,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 4,
+          "request": 3,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "collect",
+          "operation": "CollectReply",
+          "duration_us": 90033.975,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        },
+        {
+          "rank": 5,
+          "request": 3,
+          "chunk": 0,
+          "slot": 0,
+          "phase": "collect",
+          "operation": "CollectReply",
+          "duration_us": 90058.868,
+          "grid": [
+            132,
+            1,
+            1
+          ],
+          "dynamic_shared_bytes": 0,
+          "chunk_source_rows": [
+            1024,
+            1024,
+            1024,
+            1024
+          ]
+        }
+      ]
+    }
+  ],
+  "findings": [
+    "Both pipeline variants exhibit cross-slot GEMM overlap with positive-row FFN-local ReduceReply and SendReply operations; whole and split-serial controls exhibit zero cross-slot overlap.",
+    "The overlap fraction is modest, and splitting increases total GEMM kernel duration in both profiled workloads; this is evidence of a tradeoff, not a speedup claim.",
+    "In the fixed-large profile, baseline whole request26 has source4 SendRequest89.242ms, FFN0 BeginWorker89.398ms, otherFFN Histogram~88.35ms.",
+    "Consolidated pipeline request3 has source6/chunk1 SendRequest88.174ms, FFN2/chunk1 BeginWorker89.007ms, and FFN0/1/chunk0 PublishPartialAndWait~88.1ms; FFN3/chunk0 PublishPackAndCredit83.694ms also delays that microbatch.",
+    "Phase-pipeline request1 FFN0 PublishPackAndCredit lasts83.328ms while allotherFFNs finish the same phase by~1.35ms; native code places GIN credit signal/flush after the local pack barrier, so completion/progress is a candidate cause. Exact fabric/backend root cause remains unresolved.",
+    "No >30ms ExpertGEMM kernel occurs in these profiles. Long request times are exposed in request publication/readiness, credit completion and peer-ready phases.",
+    "All profiled cases have zero recorded cgroup-throttled periods; earlier CPU16 diagnostics are separate."
+  ]
+}
