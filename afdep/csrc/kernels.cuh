@@ -88,8 +88,10 @@ __device__ __forceinline__ void transfer(const DeviceArgs& a, size_t src, size_t
         // Empty sources still advance their phase so workers cannot deadlock.
         gin.signal(direct ? ncclTeamWorld(a.comm) : ncclTeamRail(a.comm), peer, action);
     }
-    // Local source consumption only. Remote readiness is the signal above.
-    gin.flush(ncclCoopThread());
+    // The strong signal publishes remote readiness. RequestCredit/ReplyCredit
+    // prevent this packet's source storage from being overwritten until every
+    // receiver has consumed it, which also proves local DMA consumption.
+    // Keep credit flushes in send_credit(): no per-payload flush is needed here.
 }
 
 __device__ __forceinline__ int direct_signal(int phase, int peer) { return phase * 4 + peer; }
@@ -170,6 +172,11 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
     } else if constexpr (kOperation == BeginWorker) {
         if (tid == 0) {
             ++state->epoch;
+            // Reply payloads are posted asynchronously. Protect their local
+            // partial storage before this epoch can write it, not just the
+            // remote inbox before the next SendReply.
+            for (int source = 0; source < 4; ++source)
+                wait_signal(0, direct_signal(ReplyCredit, source), state->epoch - 1, a);
             for (int source = 0; source < 4; ++source) {
                 for (int q = 0; q < a.stripes; ++q)
                     wait_signal(q, direct_signal(RequestReady, source), state->epoch, a);
@@ -344,6 +351,9 @@ __global__ void directional_kernel(DeviceArgs a) {
     } else if constexpr (kOperation == BeginWorker) {
         if (tid == 0) {
             ++state->epoch;
+            // The previous reply's local DMA source must be consumed before
+            // ReduceReply can overwrite worker_reply in this epoch.
+            wait_signal(0, ReplyCredit, state->epoch - 1, a);
             for (int q = 0; q < a.stripes; ++q)
                 wait_signal(q, RequestReady, state->epoch, a);
             release(&state->request_ready, state->epoch);
