@@ -136,6 +136,20 @@ Local FP32 sums round to BF16 partials before the final FP32 sum/BF16 reply
 (on the FFN side in hybrid mode, on the Attention side in direct mode);
 this need not match one-rounding FP32 summation bit for bit.
 
+For caller-owned receive storage, reserve once outside capture and reuse it:
+
+```python
+r = buffer.reserve_worker_receive(bucket=bucket)  # FFN ranks only
+r = buffer.worker_receive(bucket=bucket, out=r)
+```
+
+The reservation allocates storage without advancing an exchange. Its bucket,
+shapes, dtypes, device, and FP8 scale layout must match the buffer. Storage must
+not overlap other live inputs/outputs or be used by concurrent exchanges.
+Every receive clears routing weights and receipts; activation padding remains
+unspecified. Keep the reservation alive through reply completion. Distinct
+graphs may reuse it only in the same sequential order as the transport.
+
 ## Ordering and lifetime
 
 Use one ordered current PyTorch CUDA stream per buffer. Keep inputs, receive

@@ -179,11 +179,70 @@ class Buffer:
         self._runtime.source_dispatch(x, x_scale, ids, weights, bucket)
 
     def worker_receive(
-        self, *, bucket: int, read_host_counts: bool = False
+        self,
+        *,
+        bucket: int,
+        read_host_counts: bool = False,
+        out: ReceiveResult | None = None,
     ) -> ReceiveResult:
         """Receive expert rows; disable host counts during CUDA graph capture."""
         self._check_live("ffn")
+        if read_host_counts and torch.cuda.is_current_stream_capturing():
+            raise RuntimeError(
+                "Host receive counts are unavailable during CUDA capture"
+            )
+        if out is not None:
+            return ReceiveResult(
+                *self._runtime.worker_receive_into(
+                    bucket,
+                    read_host_counts,
+                    out.recv_x,
+                    out.recv_scale,
+                    out.recv_topk_weights,
+                    out.recv_count_psum,
+                    out.receipt,
+                )
+            )
         return ReceiveResult(*self._runtime.worker_receive(bucket, read_host_counts))
+
+    def reserve_worker_receive(self, *, bucket: int) -> ReceiveResult:
+        """Allocate reusable receive storage without starting an exchange."""
+        self._check_live("ffn")
+        if torch.cuda.is_current_stream_capturing():
+            raise RuntimeError("Reserve receive storage outside CUDA capture")
+        config = self.config
+        if type(bucket) is not int or not 0 < bucket <= config.capacity_tokens_per_rank:
+            raise ValueError("Receive bucket must be positive and within capacity")
+        rows = config.attention_ranks * bucket * min(
+            config.top_k, config.experts_per_rank
+        ) + config.experts_per_rank * (config.expert_alignment - 1)
+        device = torch.device("cuda", self.device)
+        scales = None
+        if config.payload == "fp8":
+            scales = torch.empty_strided(
+                (rows, config.hidden_size // 128),
+                (1, (rows + 3) // 4 * 4),
+                dtype=torch.float32,
+                device=device,
+            )
+        return ReceiveResult(
+            torch.empty(
+                (rows, config.hidden_size),
+                dtype=(
+                    torch.float8_e4m3fn if config.payload == "fp8" else torch.bfloat16
+                ),
+                device=device,
+            ),
+            scales,
+            torch.empty(rows, dtype=torch.float32, device=device),
+            torch.empty(config.experts_per_rank, dtype=torch.int32, device=device),
+            [],
+            torch.empty(
+                (config.attention_ranks, bucket, config.top_k),
+                dtype=torch.int32,
+                device=device,
+            ),
+        )
 
     def worker_reply(self, rows: torch.Tensor, receipt: torch.Tensor) -> None:
         """Return BF16 expert rows already weighted by recv_topk_weights."""

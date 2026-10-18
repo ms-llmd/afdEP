@@ -66,4 +66,6 @@ eight-H100 checks on October 18. [H100 experiment details](docs/performance.md).
 
 [Contributing](CONTRIBUTING.md) · [CI](https://github.com/ms-llmd/afdEP/actions/workflows/ci.yml)
 
+Optional: [FFN prefill workspace experiment](experiments/prefill/README.md).
+
 Apache-2.0; upstream-derived components retain their [original notices](THIRD_PARTY_NOTICES.md).

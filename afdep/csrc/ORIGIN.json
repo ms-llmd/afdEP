@@ -17,7 +17,8 @@
     "Default to measured tuned 132 local SMs and eight transport stripes; preserve user configuration.",
     "Add index bounds validation and initialization-failure cleanup.",
     "Remove unused cpu_timeout_s constructor argument; GPU timeout and distributed bootstrap timeout remain explicit in their respective layers.",
-    "Validate 16-byte alignment of nonempty source activation and output pointers before vector-copy kernels, including storage-offset views."
+    "Validate 16-byte alignment of nonempty source activation and output pointers before vector-copy kernels, including storage-offset views.",
+    "Add validated caller-owned receive tensors with per-exchange weight/receipt resets; preserve native device protocol and reader credits."
   ],
   "verification": "The original implementation was validated on eight H100 GPUs. This extracted build requires its own GPU validation before claiming equivalence or performance.",
   "extracted_file_sha256": {

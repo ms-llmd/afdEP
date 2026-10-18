@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import torch
 import torch.distributed as dist
@@ -27,6 +27,7 @@ from examples.round_trip import (
     TOP_K,
     Case,
     Exchange,
+    expert_rows,
     initialize,
     make_exchange,
     make_inputs,
@@ -254,6 +255,119 @@ def alignment_checks(buffer: afdep.Buffer, config: afdep.Config, rank: int) -> N
     dist.barrier()
 
 
+def reusable_receive_checks(
+    buffer: afdep.Buffer, config: afdep.Config, rank: int, epochs: int
+) -> dict:
+    """Reuse each bucket's receive storage across changing eager/graph exchanges."""
+    reservations = {}
+    pointers = {}
+
+    def storage_pointers(received: afdep.ReceiveResult) -> tuple[int, ...]:
+        return tuple(
+            tensor.data_ptr()
+            for tensor in (
+                received.recv_x,
+                received.recv_scale,
+                received.recv_topk_weights,
+                received.recv_count_psum,
+                received.receipt,
+            )
+            if tensor is not None
+        )
+
+    def run(exchange: Exchange, *, read_host_counts: bool = False) -> None:
+        if rank >= FFN_RANKS:
+            exchange.run()
+            return
+        bucket = exchange.case.bucket
+        exchange.received = buffer.worker_receive(
+            bucket=bucket,
+            read_host_counts=read_host_counts,
+            out=reservations[bucket],
+        )
+        assert storage_pointers(exchange.received) == pointers[bucket]
+        buffer.worker_reply(
+            expert_rows(exchange.received, rank, config), exchange.received.receipt
+        )
+
+    checked_cases = cases(config.capacity_tokens_per_rank)
+    if rank < FFN_RANKS:
+        for bucket in sorted({case.bucket for case in checked_cases}):
+            reservations[bucket] = buffer.reserve_worker_receive(bucket=bucket)
+            pointers[bucket] = storage_pointers(reservations[bucket])
+        reserved = reservations[1]
+        malformed = [
+            replace(reserved, recv_x=reserved.recv_x[:-1]),
+            replace(reserved, recv_topk_weights=reserved.recv_topk_weights[:-1]),
+            replace(reserved, recv_count_psum=reserved.recv_count_psum[:-1]),
+            replace(reserved, receipt=reserved.receipt[:, :0]),
+        ]
+        if reserved.recv_scale is not None:
+            malformed.append(
+                replace(reserved, recv_scale=reserved.recv_scale.contiguous())
+            )
+        for bad in malformed:
+            try:
+                buffer.worker_receive(bucket=1, out=bad)
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError("malformed reusable receive storage was accepted")
+        if config.capacity_tokens_per_rank > 1:
+            try:
+                buffer.worker_receive(
+                    bucket=config.capacity_tokens_per_rank, out=reserved
+                )
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError("reusable storage accepted a different bucket")
+    dist.barrier()
+    captures = []
+    for case in checked_cases:
+        exchange = make_exchange(buffer, config, rank, case)
+        if rank < FFN_RANKS:
+            # Dense garbage must not survive a receive with empty/skipped routes.
+            reservations[case.bucket].recv_topk_weights.fill_(7)
+            reservations[case.bucket].receipt.fill_(0)
+        run(exchange, read_host_counts=True)
+        torch.cuda.synchronize()
+        if rank < FFN_RANKS:
+            check_received(exchange, 0)
+        else:
+            exchange.check_output()
+        dist.barrier()
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            run(exchange)
+        torch.cuda.synchronize()
+        dist.barrier()
+        captures.append((graph, exchange))
+    for epoch in range(epochs):
+        graph, exchange = captures[epoch % len(captures)]
+        if rank == DELAYED_WORKER and epoch == DELAYED_EPOCH:
+            time.sleep(DELAY_SECONDS)
+        exchange.update(epoch + 1)
+        graph.replay()
+        if rank >= FFN_RANKS:
+            torch.cuda.synchronize()
+            exchange.check_output()
+    torch.cuda.synchronize()
+    if rank < FFN_RANKS:
+        for bucket, reservation in reservations.items():
+            assert storage_pointers(reservation) == pointers[bucket]
+    dist.barrier()
+    return {
+        "cases": [case.name for case in checked_cases],
+        "graph_epochs": epochs,
+        "stable_receive_pointers": True,
+        "poisoned_weights_and_receipts_reset": True,
+        "malformed_storage_rejected_before_exchange": True,
+        "delayed_worker_seconds": DELAY_SECONDS,
+        "per_epoch_cpu_barrier": False,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--payload", choices=("bf16", "fp8"), default="bf16")
@@ -281,6 +395,7 @@ def main() -> None:
     eager = eager_checks(buffer, config, rank)
     graph = graph_checks(buffer, config, rank, args.epochs)
     alignment_checks(buffer, config, rank)
+    reusable = reusable_receive_checks(buffer, config, rank, args.epochs)
     buffer.close()
     results = [None] * dist.get_world_size()
     dist.all_gather_object(results, {"rank": rank, "ok": True})
@@ -293,6 +408,7 @@ def main() -> None:
                     "config": asdict(config),
                     "eager_cases": eager,
                     "graph": graph,
+                    "reusable_receive": reusable,
                     "misaligned_contiguous_source_and_output_rejected": True,
                     "ranks": results,
                 }

@@ -194,18 +194,50 @@ class DirectionalM2NBuffer {
         const auto options = torch::TensorOptions().device(torch::kCUDA, device);
         auto recv_x = torch::empty({worker_rows, layout.hidden},
                                    options.dtype(layout.fp8 ? torch::kFloat8_e4m3fn : torch::kBFloat16));
-        auto recv_weights = torch::zeros({worker_rows}, options.dtype(torch::kFloat32));
+        auto recv_weights = torch::empty({worker_rows}, options.dtype(torch::kFloat32));
         auto psum = torch::empty({layout.local_experts()}, options.dtype(torch::kInt32));
-        auto receipt = torch::full({4, bucket, layout.topk}, -1, options.dtype(torch::kInt32));
+        auto receipt = torch::empty({4, bucket, layout.topk}, options.dtype(torch::kInt32));
         std::optional<torch::Tensor> recv_scale;
-        auto a = args(bucket);
         if (layout.fp8) {
             const int scale_stride = (worker_rows + 3) / 4 * 4;
             recv_scale = torch::empty_strided({worker_rows, layout.scale_groups()}, {1, scale_stride},
                                               options.dtype(torch::kFloat32));
-            a.recv_scales = recv_scale->data_ptr<float>();
-            a.recv_scale_stride1 = scale_stride;
         }
+        return worker_receive_into(bucket, read_host_counts, recv_x, recv_scale, recv_weights, psum, receipt);
+    }
+
+    std::tuple<torch::Tensor, std::optional<torch::Tensor>, torch::Tensor, torch::Tensor, std::vector<int>,
+               torch::Tensor>
+    worker_receive_into(int bucket, bool read_host_counts, const torch::Tensor &recv_x,
+                        const std::optional<torch::Tensor> &recv_scale,
+                        const torch::Tensor &recv_weights, const torch::Tensor &psum,
+                        const torch::Tensor &receipt) {
+        check_live(true);
+        TORCH_CHECK(bucket > 0 && bucket <= layout.capacity, "Directional worker bucket exceeds capacity");
+        const int rows = 4 * bucket * std::min(layout.topk, layout.local_experts()) +
+                         layout.local_experts() * (layout.alignment - 1);
+        check_tensor(recv_x, layout.fp8 ? torch::kFloat8_e4m3fn : torch::kBFloat16, 2);
+        check_vector_alignment(recv_x);
+        check_tensor(recv_weights, torch::kFloat32, 1);
+        check_tensor(psum, torch::kInt32, 1);
+        check_tensor(receipt, torch::kInt32, 3);
+        TORCH_CHECK(recv_x.size(0) == rows && recv_x.size(1) == layout.hidden &&
+                        recv_weights.size(0) == rows && psum.size(0) == layout.local_experts() &&
+                        receipt.size(0) == 4 && receipt.size(1) == bucket && receipt.size(2) == layout.topk,
+                    "Reusable receive tensors must match their bucket and buffer configuration");
+        TORCH_CHECK(recv_scale.has_value() == bool(layout.fp8), "Reusable receive scales mismatch payload");
+        auto a = args(bucket);
+        if (recv_scale.has_value()) {
+            check_tensor(*recv_scale, torch::kFloat32, 2, false);
+            TORCH_CHECK(recv_scale->size(0) == rows && recv_scale->size(1) == layout.scale_groups() &&
+                            recv_scale->stride(0) == 1 && recv_scale->stride(1) >= rows &&
+                            recv_scale->stride(1) % 4 == 0,
+                        "Reusable FP8 scales require padded column-major storage");
+            a.recv_scales = recv_scale->data_ptr<float>();
+            a.recv_scale_stride1 = recv_scale->stride(1);
+        }
+        worker_bucket = bucket;
+        worker_rows = rows;
         a.recv_x = static_cast<uint8_t *>(recv_x.data_ptr());
         a.recv_weights = recv_weights.data_ptr<float>();
         a.counts = counts.data_ptr<int>();
@@ -213,6 +245,8 @@ class DirectionalM2NBuffer {
         a.cursors = cursors.data_ptr<int>();
         a.psum = psum.data_ptr<int>();
         a.receipt = receipt.data_ptr<int>();
+        recv_weights.zero_();
+        receipt.fill_(-1);
         counts.zero_();
         launch(BeginWorker, a);
         launch(Histogram, a, num_sms);
@@ -288,6 +322,7 @@ inline void register_apis(pybind11::module_ &m) {
         .def("registered_bytes", &DirectionalM2NBuffer::registered_bytes)
         .def("source_dispatch", &DirectionalM2NBuffer::source_dispatch)
         .def("worker_receive", &DirectionalM2NBuffer::worker_receive)
+        .def("worker_receive_into", &DirectionalM2NBuffer::worker_receive_into)
         .def("worker_reply", &DirectionalM2NBuffer::worker_reply)
         .def("source_collect", &DirectionalM2NBuffer::source_collect)
         .def("destroy", &DirectionalM2NBuffer::destroy);
