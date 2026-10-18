@@ -22,13 +22,14 @@ contains code adapted from DeepEP and remains licensed under MIT.
 The license and runtime API header match that FastAFD revision byte-for-byte.
 The AFD plugin runtime input includes its marked patch allowing single-node
 use without GIN; its hash is retained separately from the pristine FastAFD
-hash. afdEP requires rail GIN for its supported two-domain topology and does
-not retain that optional-GIN path.
+hash. afdEP requires GIN for its supported two-domain topology (rail
+connectivity in hybrid mode, full connectivity in direct mode) and does not
+retain that optional-GIN path.
 
 The extracted runtime implements NCCL communicator bootstrap, topology queries,
-registered windows, and a GPU-initiated rail communicator. afdEP does not ship
-or invoke DeepEP's expert dispatch/combine kernels, dummy expert layouts, or
-its generic JIT compiler. No DeepGEMM, CUTLASS, or fmt source is included.
+registered windows, and a GPU-initiated rail or full-connectivity
+communicator. afdEP does not ship or invoke DeepEP's expert dispatch/combine
+kernels, dummy expert layouts, or its generic JIT compiler. No DeepGEMM, CUTLASS, or fmt source is included.
 
 ## AFD plugin directional protocol
 

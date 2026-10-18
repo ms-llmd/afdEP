@@ -6,12 +6,14 @@ afdEP connects Attention token sources to FFN expert workers: dispatch routed
 tokens, receive expert inputs, and return combined results. Routing, quantization,
 expert compute, and serving scheduling stay with the caller.
 
-![afdEP round trip: Attention GPUs dispatch tokens to FFN expert GPUs and collect replies, compared with Masked DeepEP](docs/assets/communication.svg)
+![afdEP round trip in the default hybrid mode: Attention GPUs dispatch tokens to FFN expert GPUs and collect replies, compared with Masked DeepEP](docs/assets/communication.svg)
 
 The current backend uses NCCL GPU-Initiated Networking (GIN) and NVLink, with
 afdEP's own request/reply kernels. No DeepEP or vLLM runtime package is required.
 `Config.allow_hybrid_mode` selects ingress/NVLink forwarding (`True`, default)
-or direct worker delivery (`False`); see [modes](docs/api.md#api).
+or direct worker delivery (`False`); see [modes](docs/api.md#communication-modes).
+The diagram shows hybrid mode; direct mode sends to each selected worker over
+GIN and sums the replies in `source_collect`.
 
 ## Support
 
@@ -50,13 +52,15 @@ Apply routing weights **once** before `worker_reply`.
 
 ## H100 experiment
 
-Eight H100s, four Attention + four FFN ranks, CUDA graphs, communication only:
+Eight H100s, four Attention + four FFN ranks, CUDA graphs, communication only,
+hybrid mode:
 
 ![H100 communication latency and registered buffer comparison](docs/assets/h100-performance.svg)
 
 - At 512 tokens/source, BF16 and FP8 round-trip latencies were about **30% lower**.
 - At 2048, BF16 was approximately tied; FP8 latency was **12% lower**.
-- Registered transport buffers were **68–72% smaller**.
+- Registered transport buffers were **68–72% smaller**. Direct mode reserves
+  1.7–2× hybrid's windows ([details](docs/performance.md#hybriddirect-extension)).
 
 October 15: directional prototype vs **Masked DeepEP**,
 with different tuned execution budgets. The standalone wheel passed separate
