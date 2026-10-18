@@ -64,6 +64,37 @@ __device__ __forceinline__ uint4 load_remote_vector(const void* pointer) {
     return value;
 }
 
+// A token may select several experts on this worker. Read each activation
+// vector once (over NVLink in hybrid mode), then fan it out to all local rows.
+template <bool kRemote>
+__device__ __forceinline__ void copy_expert_rows(const DeviceArgs& a, const uint8_t* packet,
+                                                int tokens, int token, const int* slots) {
+    const Layout l = a.layout;
+    bool selected = false;
+    for (int k = 0; k < l.topk; ++k) selected |= slots[k] >= 0;
+    if (!selected) return;
+    const int vectors = l.hidden * l.element_bytes() / sizeof(uint4);
+    for (int h = threadIdx.x; h < vectors; h += blockDim.x) {
+        const auto* source = reinterpret_cast<const uint4*>(packet + l.packet_x()) + token * vectors + h;
+        uint4 value;
+        if constexpr (kRemote) value = load_remote_vector(source);
+        else value = *source;
+        for (int k = 0; k < l.topk; ++k)
+            if (slots[k] >= 0)
+                reinterpret_cast<uint4*>(a.recv_x)[slots[k] * vectors + h] = value;
+    }
+    for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x) {
+        const auto* source = reinterpret_cast<const float*>(packet + l.packet_scales(tokens)) +
+                             token * l.scale_groups() + group;
+        float value;
+        if constexpr (kRemote) value = *reinterpret_cast<const volatile float*>(source);
+        else value = *source;
+        for (int k = 0; k < l.topk; ++k)
+            if (slots[k] >= 0)
+                a.recv_scales[slots[k] + group * a.recv_scale_stride1] = value;
+    }
+}
+
 // One final strong signal per active context. Each receiver waits every one;
 // a signal on context zero cannot order transfers issued on other contexts.
 __device__ __forceinline__ void transfer(const DeviceArgs& a, size_t src, size_t dst,
@@ -229,17 +260,7 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                     slots[k] = row;
                 }
                 __syncthreads();
-                for (int k = 0; k < l.topk; ++k) {
-                    const int row = slots[k];
-                    if (row < 0) continue;
-                    const int vectors = l.hidden * l.element_bytes() / 16;
-                    for (int h = threadIdx.x; h < vectors; h += blockDim.x)
-                        reinterpret_cast<uint4*>(a.recv_x)[row * vectors + h] =
-                            reinterpret_cast<const uint4*>(packet + l.packet_x())[compact_token * vectors + h];
-                    for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x)
-                        a.recv_scales[row + group * a.recv_scale_stride1] =
-                            reinterpret_cast<const float*>(packet + l.packet_scales(n))[compact_token * l.scale_groups() + group];
-                }
+                copy_expert_rows<false>(a, packet, n, compact_token, slots);
                 __syncthreads();
             }
             compact_token -= n;
@@ -423,17 +444,7 @@ __global__ void directional_kernel(DeviceArgs a) {
                     slots[k] = row;
                 }
                 __syncthreads();
-                for (int k = 0; k < l.topk; ++k) {
-                    const int row = slots[k];
-                    if (row < 0) continue;
-                    const int vectors = l.hidden * l.element_bytes() / 16;
-                    for (int h = threadIdx.x; h < vectors; h += blockDim.x)
-                        reinterpret_cast<uint4*>(a.recv_x)[row * vectors + h] =
-                            load_remote_vector(packet + l.packet_x() + size_t(token * vectors + h) * sizeof(uint4));
-                    for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x)
-                        a.recv_scales[row + group * a.recv_scale_stride1] =
-                            reinterpret_cast<const volatile float*>(packet + l.packet_scales(n))[token * l.scale_groups() + group];
-                }
+                copy_expert_rows<true>(a, packet, n, token, slots);
                 __syncthreads();
             }
             token -= n;

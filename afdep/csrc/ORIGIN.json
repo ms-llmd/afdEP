@@ -28,7 +28,7 @@
   },
   "current_file_sha256": {
     "afdep/csrc/layout.hpp": "3a644833bff462ae2a2044b1cf1e07a6972c7abd159af9876ee557f9e57bd9a0",
-    "afdep/csrc/kernels.cuh": "699e6d019cbbc4f69d455a5c1e01b7612dfde00b1d56c18b6d3dcfe7f3c19b36"
+    "afdep/csrc/kernels.cuh": "cc79411c9675d97a1cb3119f6daf189bde103110b0db69d4209b06bc94a01150"
   },
   "protocol_changes": [
     {
@@ -46,6 +46,10 @@
     {
       "date": "2026-10-18",
       "description": "Post consumption-credit signals asynchronously as well. Preserve every signal and wait, and explicitly drain every active GIN context during collective close before rank synchronization and window teardown. Early reply-credit waits protect local outgoing storage before any overwrite; no credit or readiness dependency is removed."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Read each received activation vector and FP8 scale once per selected worker and fan it out to that worker's selected expert rows. Avoid repeated NVLink reads when multiple selected experts share a worker. Preserve row assignment, receipts, tensor values, and every readiness/credit dependency."
     }
   ]
 }
