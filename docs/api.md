@@ -43,7 +43,8 @@ torchrun --nnodes=2 --nproc-per-node=4 --node-rank="$NODE_RANK" \
   --module tests.gpu.correctness --payload bf16
 ```
 
-Repeat with `--payload fp8`. Use `--module examples.round_trip` for a weighted
+Run all four combinations of `--payload bf16|fp8` and `--mode hybrid|direct`
+(defaults `bf16` and `hybrid`). Use `--module examples.round_trip` for a weighted
 expert example, or `--module benchmarks.round_trip --graph --iterations 100`
 for communication timing. Add `--nvtx` only in a separate profiling run.
 
@@ -61,6 +62,7 @@ config = afdep.Config(
     num_experts=128,
     top_k=8,
     payload="bf16",
+    allow_hybrid_mode=True,  # False selects direct delivery.
 )
 buffer = afdep.Buffer(group=group, config=config)
 # Attention role:
@@ -101,6 +103,25 @@ contiguous views with offset storage can fail this check. IDs are real experts
 FP8 is caller-prequantized block-128 data with FP32 dequantization scales;
 afdEP transports it without choosing a quantizer.
 
+## Communication modes
+
+`allow_hybrid_mode` follows DeepEP's flag of the same name. It selects one
+protocol and never falls back to the other.
+
+| `allow_hybrid_mode` | Dispatch / reply organization |
+|---|---|
+| `True` (default) | Rail-aligned GIN to an ingress worker; NVLink distribution and reduction on the FFN side |
+| `False` | Full-connectivity GIN directly to selected workers; each worker returns its partial, and the source reduces replies |
+
+Mode is fixed at construction and must agree on every rank. Direct mode requires
+full GIN connectivity; a rail-only fabric can support hybrid but reject direct.
+Both modes currently require the same two pure-role four-GPU NVLink domains.
+
+Direct mode reserves a request and a reply slot per peer. At equal capacity its
+registered windows total about 1.7× (FP8) to 2× (BF16) hybrid's, and each
+Attention rank's window is 4× larger. `Buffer.num_buffer_bytes` reports the
+registered size of each rank.
+
 ## Receive rows and replies
 
 `ReceiveResult` provides `recv_x`, optional `recv_scale`, `recv_topk_weights`,
@@ -121,8 +142,10 @@ counts; reading them synchronizes and is forbidden during graph capture.
 Supply contiguous BF16 `[allocated_rows,H]` expert outputs, **already multiplied
 by the received routing weights exactly once**. afdEP sums rows without applying
 weights again, using the matching unchanged receipt. Padding outputs are ignored.
-Local FP32 sums round to BF16 partials before the final FP32 sum/BF16 reply;
-this need not match one-rounding FP32 summation bit for bit.
+Each FFN worker rounds its local FP32 sum to a BF16 partial. Partials are then
+summed in FP32 and rounded to the BF16 reply, on the FFN side in hybrid mode or
+in `source_collect` in direct mode. This need not match one-rounding FP32
+summation bit for bit.
 
 ## Ordering and lifetime
 

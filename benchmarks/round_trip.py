@@ -41,6 +41,7 @@ DEFAULT_BUCKETS = (1, 128, 512, 2048)
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--payload", choices=("bf16", "fp8"), default="bf16")
+    parser.add_argument("--mode", choices=("hybrid", "direct"), default="hybrid")
     parser.add_argument("--tokens", nargs="+", type=int, default=DEFAULT_BUCKETS)
     parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--warmup", type=int, default=DEFAULT_WARMUP)
@@ -61,6 +62,7 @@ def main() -> None:
         num_experts=NUM_EXPERTS,
         top_k=TOP_K,
         payload=args.payload,
+        allow_hybrid_mode=args.mode == "hybrid",
         rdma_traffic_class=args.rdma_traffic_class,
     )
     buffer = afdep.Buffer(group=dist.group.WORLD, config=config)
@@ -108,7 +110,10 @@ def main() -> None:
         for iteration in range(args.warmup + args.iterations):
             torch.cuda.synchronize()
             dist.barrier()
-            label = f"AFDEP/rank={rank}/tokens={tokens}/iteration={iteration}"
+            label = (
+                f"afdEP/mode={args.mode}/rank={rank}/tokens={tokens}"
+                f"/iteration={iteration}"
+            )
             context = torch.cuda.nvtx.range(label) if args.nvtx else nullcontext()
             with context:
                 start = time.perf_counter()
@@ -157,6 +162,7 @@ def main() -> None:
             json.dumps(
                 {
                     "ok": True,
+                    "mode": args.mode,
                     "config": asdict(config),
                     "graph": args.graph,
                     "profiled": args.nvtx,

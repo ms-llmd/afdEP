@@ -13,6 +13,7 @@ cudaError_t launch_kernel(int operation, DeviceArgs args, int blocks, cudaStream
         break
     switch (operation) {
         AFDEP_LAUNCH(BeginSource);
+        AFDEP_LAUNCH(PlanDirectRequests);
         AFDEP_LAUNCH(PackSource);
         AFDEP_LAUNCH(SendRequest);
         AFDEP_LAUNCH(BeginWorker);

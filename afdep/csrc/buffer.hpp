@@ -31,7 +31,8 @@ class DirectionalM2NBuffer {
     std::shared_ptr<NcclContext> context;
     torch::Tensor counts, starts, cursors;
 
-    static Layout checked_layout(int capacity, int hidden, int topk, int experts, int alignment, bool fp8) {
+    static Layout checked_layout(int capacity, int hidden, int topk, int experts, int alignment, bool fp8,
+                                 bool allow_hybrid_mode) {
         TORCH_CHECK(capacity > 0 && hidden > 0 && hidden % 128 == 0,
                     "Directional capacity must be positive and hidden a positive multiple of 128");
         TORCH_CHECK(topk > 0 && topk <= 32 && topk <= experts && experts > 0 && experts % 4 == 0,
@@ -45,7 +46,7 @@ class DirectionalM2NBuffer {
                         int64_t(capacity) * hidden * 2 / 16 <= kMaxIndex &&
                         rows * (int64_t(hidden) * 2 / 16) <= kMaxIndex,
                     "Directional dimensions exceed the supported 32-bit device index range");
-        return Layout::make(capacity, hidden, topk, experts, alignment, fp8);
+        return Layout::make(capacity, hidden, topk, experts, alignment, fp8, allow_hybrid_mode);
     }
 
     void check_live(bool worker) const {
@@ -101,8 +102,9 @@ class DirectionalM2NBuffer {
     DirectionalM2NBuffer(int64_t nccl_comm, int rank, int world, int ffn_size, int attn_size, int capacity,
                          int hidden, int topk, int real_experts, int expert_alignment, bool use_fp8,
                          int num_qps, int gpu_timeout_s, int traffic_class, int transport_stripes = 8,
-                         int num_sms = 132)
-        : layout(checked_layout(capacity, hidden, topk, real_experts, expert_alignment, use_fp8)), rank(rank),
+                         int num_sms = 132, bool allow_hybrid_mode = true)
+        : layout(checked_layout(capacity, hidden, topk, real_experts, expert_alignment, use_fp8,
+                                allow_hybrid_mode)), rank(rank),
           stripes(transport_stripes), num_sms(num_sms),
           num_buffer_bytes(rank < 4 ? layout.worker_bytes : layout.source_bytes) {
         TORCH_CHECK(world == 8 && ffn_size == 4 && attn_size == 4 && rank >= 0 && rank < 8,
@@ -125,7 +127,7 @@ class DirectionalM2NBuffer {
         timeout_cycles = uint64_t(gpu_timeout_s) * uint64_t(clock_rate_khz) * 1000;
 
         context = std::make_shared<NcclContext>(nccl_comm, world, rank, size_t(num_buffer_bytes), 128,
-                                                traffic_class, num_qps);
+                                                traffic_class, num_qps, allow_hybrid_mode);
         try {
             TORCH_CHECK(stripes <= context->dev_comm.ginContextCount,
                         "NCCL provided fewer GIN contexts than requested transport stripes");
@@ -175,8 +177,10 @@ class DirectionalM2NBuffer {
             a.scale_stride1 = scale->stride(1);
         }
         launch(BeginSource, a);
+        if (!layout.hybrid)
+            launch(PlanDirectRequests, a, num_sms);
         launch(PackSource, a, num_sms);
-        launch(SendRequest, a, stripes);
+        launch(SendRequest, a, stripes * (layout.hybrid ? 1 : 4));
     }
 
     std::tuple<torch::Tensor, std::optional<torch::Tensor>, torch::Tensor, torch::Tensor, std::vector<int>,
@@ -237,10 +241,12 @@ class DirectionalM2NBuffer {
         a.rows = static_cast<const uint16_t *>(rows.data_ptr());
         a.receipt = receipt.data_ptr<int>();
         launch(MakePartials, a, num_sms);
-        launch(PublishPartialAndWait, a);
-        launch(ReduceReply, a, num_sms);
+        if (layout.hybrid) {
+            launch(PublishPartialAndWait, a);
+            launch(ReduceReply, a, num_sms);
+        }
         launch(PublishConsumedAndWaitCredit, a);
-        launch(SendReply, a, stripes);
+        launch(SendReply, a, stripes * (layout.hybrid ? 1 : 4));
     }
 
     void source_collect(const torch::Tensor &out) {
@@ -272,12 +278,12 @@ class DirectionalM2NBuffer {
 inline void register_apis(pybind11::module_ &m) {
     namespace py = pybind11;
     py::class_<DirectionalM2NBuffer>(m, "DirectionalM2NBuffer", py::module_local())
-        .def(py::init<int64_t, int, int, int, int, int, int, int, int, int, bool, int, int, int, int, int>(),
+        .def(py::init<int64_t, int, int, int, int, int, int, int, int, int, bool, int, int, int, int, int, bool>(),
              py::arg("nccl_comm"), py::arg("rank"), py::arg("world"), py::arg("ffn_size"),
              py::arg("attn_size"), py::arg("capacity"), py::arg("hidden"), py::arg("top_k"),
              py::arg("real_experts"), py::arg("expert_alignment"), py::arg("use_fp8"), py::arg("num_qps"),
              py::arg("gpu_timeout_s"), py::arg("traffic_class"), py::arg("transport_stripes") = 8,
-             py::arg("num_sms") = 132)
+             py::arg("num_sms") = 132, py::arg("allow_hybrid_mode") = true)
         .def_readonly("num_buffer_bytes", &DirectionalM2NBuffer::num_buffer_bytes)
         .def("registered_bytes", &DirectionalM2NBuffer::registered_bytes)
         .def("source_dispatch", &DirectionalM2NBuffer::source_dispatch)

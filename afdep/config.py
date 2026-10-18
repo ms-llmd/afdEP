@@ -29,8 +29,11 @@ class Config:
     num_sms: int = 132
     gpu_timeout_s: int = 60
     rdma_traffic_class: int = 0
+    allow_hybrid_mode: bool = True
 
     def __post_init__(self) -> None:
+        if type(self.allow_hybrid_mode) is not bool:
+            raise ValueError("allow_hybrid_mode must be a boolean")
         positive_fields = (
             "capacity_tokens_per_rank",
             "hidden_size",

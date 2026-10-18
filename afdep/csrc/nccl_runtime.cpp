@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "checks.hpp"
+#include "layout.hpp"
 #include "nccl_runtime.hpp"
 
 namespace afdep {
@@ -55,7 +56,7 @@ std::tuple<int, int> get_physical_domain_size(int64_t handle) {
 }
 
 NcclContext::NcclContext(int64_t handle, int world_size, int rank, size_t size, size_t alignment,
-                         int traffic_class, int num_qps)
+                         int traffic_class, int num_qps, bool allow_hybrid_mode)
     : rank_idx(rank), num_ranks(world_size), comm(reinterpret_cast<ncclComm_t>(handle)) {
     TORCH_CHECK(handle != 0 && num_qps > 0, "NCCL communicator and positive GIN contexts are required");
     const char *disable_gin = std::getenv("EP_DISABLE_GIN");
@@ -71,21 +72,22 @@ NcclContext::NcclContext(int64_t handle, int world_size, int rank, size_t size, 
     TORCH_CHECK(actual_rank == rank && actual_world == world_size && communicator_device == current_device,
                 "AFDEP NCCL communicator rank, size, or CUDA device does not match its buffer");
 
-    // AFDEP-specific extraction of DeepEP's host runtime: rail-only GIN,
+    // AFDEP-specific extraction of DeepEP's host runtime: rail/full GIN,
     // physical domain validation, explicit initialization-failure cleanup.
     ncclCommProperties properties = NCCL_COMM_PROPERTIES_INITIALIZER;
     AFDEP_NCCL_CHECK(ncclCommQueryProperties(comm, &properties));
     TORCH_CHECK(
-        properties.railedGinType != NCCL_GIN_TYPE_NONE,
+        (allow_hybrid_mode ? properties.railedGinType : properties.ginType) != NCCL_GIN_TYPE_NONE,
         "The current directional backend requires NCCL GPU-initiated RDMA between its NVLink domains");
     ncclDevCommRequirements_t requirements = NCCL_DEV_COMM_REQUIREMENTS_INITIALIZER;
     requirements.ginContextCount = num_qps;
     requirements.ginExclusiveContexts = true;
     requirements.ginQueueDepth = 1024;
     requirements.ginTrafficClass = traffic_class;
-    // Preserve the measured runtime's allocation, including unused signals.
-    requirements.ginSignalCount = world_size + 2 * 2;
-    requirements.ginConnectionType = NCCL_GIN_CONNECTION_RAIL;
+    // Hybrid retains the measured allocation; direct uses one signal per peer
+    // for each request/reply readiness and credit phase.
+    requirements.ginSignalCount = allow_hybrid_mode ? world_size + 2 * 2 : kDirectSignalCount;
+    requirements.ginConnectionType = allow_hybrid_mode ? NCCL_GIN_CONNECTION_RAIL : NCCL_GIN_CONNECTION_FULL;
     try {
         AFDEP_NCCL_CHECK(ncclDevCommCreate(comm, &requirements, &dev_comm));
         device_comm_created = true;

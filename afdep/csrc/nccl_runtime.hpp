@@ -19,7 +19,7 @@ void destroy_nccl_comm(int64_t handle);
 std::tuple<int, int> get_physical_domain_size(int64_t handle);
 int get_nccl_version();
 
-// Only registered memory and the GPU-initiated rail communicator are retained
+// Only registered memory and the GPU-initiated communicator are retained
 // from DeepEP's runtime. No dispatch/combine layout or expert protocol is used.
 struct NcclContext {
   private:
@@ -38,7 +38,7 @@ struct NcclContext {
     std::vector<void *> nvl_window_ptrs;
 
     NcclContext(int64_t handle, int world_size, int rank, size_t size, size_t alignment, int traffic_class,
-                int num_qps);
+                int num_qps, bool allow_hybrid_mode = true);
     NcclContext(const NcclContext &) = delete;
     NcclContext &operator=(const NcclContext &) = delete;
 

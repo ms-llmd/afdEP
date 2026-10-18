@@ -3,7 +3,8 @@
 On eight H100 80GB GPUs, the tuned directional prototype had lower small/medium
 communication latency than Masked DeepEP. At 2048 tokens/source, BF16 was near
 parity and FP8 latency was about 12% lower. Registered transport capacity fell 68–72%.
-These are communication-only measurements.
+These are communication-only measurements of the protocol that is now the default
+hybrid mode; direct mode was not compared.
 
 ![H100 prototype latency and memory comparison](assets/h100-performance.svg)
 
@@ -26,6 +27,8 @@ The **Masked DeepEP** baseline uses DeepEP's general EP dispatch/combine with
 unused roles masked out. Its useful payload is already directional. afdEP's
 protocol makes the source and expert-worker roles explicit.
 This comparison predates extraction into the standalone afdEP package.
+Both paths used hierarchical network/NVLink communication. These results do
+not compare direct mode or establish the best DeepEP mode for each batch size.
 
 | Setup | Value |
 |---|---|
@@ -100,3 +103,31 @@ communication benchmarks (five warmups/20 samples). They passed BF16/FP8 in
 eager and graph modes. **No DeepEP baseline was rerun**; these checks establish
 package correctness, not an additional relative speedup.
 Current hardware/topology support is listed in the [README](../README.md#support).
+
+### Hybrid/direct extension
+
+Both modes passed eight-H100 BF16/FP8 eager and graph correctness: 12 cases,
+26 changing-input graph replays per combination, selective worker destinations,
+empty/skewed routes, and delayed-peer reuse. All eight communication smoke runs
+also passed (two modes × two payloads × eager/graph; five warmups/20 samples).
+At capacity 2048/source, registered windows summed across eight ranks were
+257.5/226.5 MiB for hybrid BF16/FP8 and 518.5/394.5 MiB for direct. Direct
+reserves per-peer request/reply slots, so the cost falls mostly on Attention
+ranks: per rank, BF16 hybrid uses 16.2 MiB per source and 48.2 MiB per worker,
+while direct uses 64.8 MiB on every rank. At the experiment's 8192 capacity,
+direct would total 2074.0/1578.0 MiB, 35%/51% below the Masked DeepEP windows
+rather than 68–72%.
+
+The benchmark routes each token to consecutive expert IDs, reaching about 1.2
+workers per token. Direct sends one activation per selected worker, so these
+timings sit near its best case; uniform top-8-of-128 routing reaches about 3.6.
+
+Hybrid timings in this run were 0.7–1.4 ms higher than the October 18 package
+record at 1–512 tokens/source, with the same capacity, warmups, and samples.
+The cause has not been isolated, so the two records should not be compared, and
+a same-host rerun of the previous commit in hybrid mode is still needed to rule
+out a regression. No mode speedup or new DeepEP comparison is claimed.
+[Mode validation record](validation-modes-2026-10-18.json).
+
+The suite has since gained two cases that fill each direct-mode request slot and
+route every token to all four workers; they have not yet run on GPUs.

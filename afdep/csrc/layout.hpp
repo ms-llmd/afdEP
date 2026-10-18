@@ -17,7 +17,7 @@
 namespace afdep {
 
 // This protocol is deliberately independent of DeepEP expert/world layouts.
-// A rail joins source j on node 1 to ingress j on the four-worker node 0.
+// Hybrid rails join source j to ingress j; direct mode addresses all workers.
 struct Control {
     uint64_t epoch;
     uint64_t request_ready;
@@ -31,13 +31,15 @@ struct Control {
 
 struct Packet {
     uint64_t tokens;
+    // Direct packets carry the original source extent; hybrid leaves this zero.
     uint64_t reserved;
 };
 
 struct Layout {
-    int capacity, hidden, topk, experts, alignment, fp8;
+    int capacity, hidden, topk, experts, alignment, fp8, hybrid;
     size_t request, partials, source_reply, worker_reply;
     size_t source_bytes, worker_bytes;
+    size_t request_stride, reply_stride, token_map;
 
     AFDEP_HD static size_t aligned(size_t n) { return (n + 127) / 128 * 128; }
     AFDEP_HD int local_experts() const { return experts / 4; }
@@ -56,16 +58,32 @@ struct Layout {
     AFDEP_HD size_t packet_bytes(int n) const {
         return aligned(packet_weights(n) + size_t(n) * topk * sizeof(float));
     }
+    AFDEP_HD size_t direct_packet_bytes(int n) const {
+        return aligned(packet_bytes(n) + size_t(n) * sizeof(int));
+    }
+    AFDEP_HD size_t request_slot(int peer) const { return request + size_t(peer) * request_stride; }
+    AFDEP_HD size_t reply_slot(int peer) const { return source_reply + size_t(peer) * reply_stride; }
+    AFDEP_HD size_t token_index(int peer, int token) const {
+        return token_map + (size_t(peer) * capacity + token) * sizeof(int);
+    }
     AFDEP_HD size_t partial(int source, int token) const {
         return partials + (size_t(source) * capacity + token) * hidden * sizeof(uint16_t);
     }
 
     static Layout make(int capacity, int hidden, int topk, int experts,
-                       int alignment, bool fp8) {
+                       int alignment, bool fp8, bool hybrid = true) {
         Layout l{};
         l.capacity = capacity; l.hidden = hidden; l.topk = topk;
-        l.experts = experts; l.alignment = alignment; l.fp8 = fp8;
+        l.experts = experts; l.alignment = alignment; l.fp8 = fp8; l.hybrid = hybrid;
         l.request = aligned(sizeof(Control));
+        if (!hybrid) {
+            l.request_stride = l.direct_packet_bytes(capacity);
+            l.reply_stride = size_t(capacity) * hidden * sizeof(uint16_t);
+            l.source_reply = l.partials = aligned(l.request + 4 * l.request_stride);
+            l.token_map = aligned(l.source_reply + 4 * l.reply_stride);
+            l.source_bytes = l.worker_bytes = aligned(l.token_map + size_t(4) * capacity * sizeof(int));
+            return l;
+        }
         const size_t request_end = aligned(l.request + l.packet_bytes(capacity));
         const size_t reply_bytes = size_t(capacity) * hidden * sizeof(uint16_t);
         l.source_reply = request_end;
@@ -78,15 +96,16 @@ struct Layout {
 };
 
 enum Operation {
-    BeginSource, PackSource, SendRequest, BeginWorker, Histogram, Prefix,
+    BeginSource, PlanDirectRequests, PackSource, SendRequest, BeginWorker, Histogram, Prefix,
     PackRows, PublishPackAndCredit, MakePartials, PublishPartialAndWait,
     ReduceReply, PublishConsumedAndWaitCredit, SendReply, CollectReply,
     ReplyConsumedCredit, NumOperations
 };
 
 enum Signal { RequestReady, ReplyReady, RequestCredit, ReplyCredit };
+constexpr int kDirectSignalCount = 4 * 4;
 
-// Passed by value to JIT kernels. Peer pointers refer only to the worker LSA
+// Passed by value to CUDA kernels. Peer pointers refer only to the worker LSA
 // domain. Network operations always use explicit windows and byte offsets.
 struct DeviceArgs {
     Layout layout;

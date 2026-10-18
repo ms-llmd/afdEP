@@ -147,6 +147,7 @@ class Buffer:
                 config.rdma_traffic_class,
                 config.transport_stripes,
                 config.num_sms,
+                config.allow_hybrid_mode,
             )
             self.num_buffer_bytes = int(self._runtime.num_buffer_bytes)
             torch.cuda.synchronize(self.device)
@@ -190,7 +191,7 @@ class Buffer:
         self._runtime.worker_reply(rows, receipt)
 
     def source_collect(self, out: torch.Tensor) -> None:
-        """Wait for the reduced reply and copy it into BF16 [tokens,hidden]."""
+        """Collect worker contributions into BF16 [tokens,hidden]."""
         self._check_live("attention")
         self._runtime.source_collect(out)
 

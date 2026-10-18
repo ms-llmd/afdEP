@@ -2,7 +2,8 @@
 """Eight-rank standalone transport validation.
 
 Launch on both hosts with the same torchrun arguments as examples.round_trip,
-replacing its module with ``tests.gpu.correctness --payload bf16`` (then fp8).
+replacing its module with ``tests.gpu.correctness --payload bf16 --mode hybrid``.
+Run both payloads and both modes; each invocation validates one combination.
 This intentionally is not collected by ordinary CPU pytest runs.
 """
 
@@ -32,7 +33,7 @@ from examples.round_trip import (
 )
 
 DEFAULT_CAPACITY = 128
-DEFAULT_GRAPH_EPOCHS = 18
+DEFAULT_GRAPH_EPOCHS = 28
 DELAYED_WORKER = 1
 DELAYED_EPOCH = 8
 DELAY_SECONDS = 0.02
@@ -121,8 +122,27 @@ def cases(capacity: int) -> list[Case]:
         Case("uneven", (capacity, 0, 1, min(7, capacity))),
         Case("empty", (0,) * ATTENTION_RANKS),
         Case("decode", (1,) * ATTENTION_RANKS),
-        Case("hot_worker", (uniform,) * ATTENTION_RANKS, hot_worker=True),
+        *(
+            Case(f"only_worker_{worker}", (uniform,) * ATTENTION_RANKS, worker=worker)
+            for worker in range(FFN_RANKS)
+        ),
+        Case(
+            "rotating_worker_per_source",
+            (uniform,) * ATTENTION_RANKS,
+            rotate_worker=True,
+        ),
         Case("all_sources_at_capacity", (capacity,) * ATTENTION_RANKS),
+        # Fill one worker's direct-mode request slot from each source.
+        Case(
+            "rotating_worker_at_capacity",
+            (capacity,) * ATTENTION_RANKS,
+            rotate_worker=True,
+        ),
+        Case(
+            "all_workers_per_token",
+            (capacity,) * ATTENTION_RANKS,
+            spread_workers=True,
+        ),
         Case(
             "nonempty_all_routes_skipped",
             (uniform,) * ATTENTION_RANKS,
@@ -191,6 +211,7 @@ def graph_checks(
         "epochs": epochs,
         "cases": [exchange.case.name for _, exchange in captures],
         "changed_payload_and_routes": True,
+        "changing_destination_workers": True,
         "per_epoch_cpu_barrier": False,
         "delayed_worker_seconds": DELAY_SECONDS,
     }
@@ -247,6 +268,7 @@ def alignment_checks(buffer: afdep.Buffer, config: afdep.Config, rank: int) -> N
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--payload", choices=("bf16", "fp8"), default="bf16")
+    parser.add_argument("--mode", choices=("hybrid", "direct"), default="hybrid")
     parser.add_argument("--capacity", type=int, default=DEFAULT_CAPACITY)
     parser.add_argument("--epochs", type=int, default=DEFAULT_GRAPH_EPOCHS)
     parser.add_argument("--rdma-traffic-class", type=int, default=0)
@@ -263,6 +285,7 @@ def main() -> None:
         num_experts=NUM_EXPERTS,
         top_k=TOP_K,
         payload=args.payload,
+        allow_hybrid_mode=args.mode == "hybrid",
         rdma_traffic_class=args.rdma_traffic_class,
     )
     buffer = afdep.Buffer(group=dist.group.WORLD, config=config)
@@ -277,6 +300,7 @@ def main() -> None:
             json.dumps(
                 {
                     "ok": True,
+                    "mode": args.mode,
                     "config": asdict(config),
                     "eager_cases": eager,
                     "graph": graph,

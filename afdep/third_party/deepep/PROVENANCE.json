@@ -19,10 +19,10 @@
     "afdep/csrc/nccl_runtime.cpp"
   ],
   "differences": [
-    "Retain only NCCL unique ID/communicator, physical topology query, registered windows and GIN rail device communicator.",
+    "Retain NCCL unique ID/communicator, physical topology query, registered windows and GIN device communicator; select rail connectivity for hybrid or full connectivity for direct mode.",
     "Remove DeepEP logical expert/dispatch/combine interfaces and environment-based optional GIN support; AFDEP requires cross-domain GIN.",
     "Rename namespace and APIs, use AFDEP checked errors, validate IDs and physical four-GPU NVLink placement.",
-    "Preserve measured GIN context, queue depth, signal allocation and traffic-class settings.",
+    "Preserve measured hybrid GIN context, queue depth, signal allocation and traffic-class settings; direct mode allocates per-peer phase signals.",
     "Track allocated resources for explicit idempotent close and initialization-failure cleanup."
   ],
   "omitted": [
@@ -59,5 +59,5 @@
       "matches_local_input": false
     }
   },
-  "upstream_verification_note": "LICENSE and api.cuh match FastAFD byte-for-byte. nccl.cu differs by the prior marked afd-plugin NVLink-only/optional-GIN patch; that inherited input hash is preserved independently from the pristine FastAFD hash. AFDEP extracts and requires rail GIN rather than retaining the optional-GIN path."
+  "upstream_verification_note": "LICENSE and api.cuh match FastAFD byte-for-byte. nccl.cu differs by the prior marked afd-plugin NVLink-only/optional-GIN patch; that inherited input hash is preserved independently from the pristine FastAFD hash. AFDEP extracts and requires GIN (rail connectivity for hybrid mode, full connectivity with per-peer signals for direct mode) rather than retaining the optional-GIN path."
 }

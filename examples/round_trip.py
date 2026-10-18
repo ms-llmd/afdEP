@@ -5,7 +5,7 @@ For the validated two-host, four-GPU-per-host configuration::
 
     torchrun --nnodes=2 --nproc-per-node=4 --node-rank=$NODE_RANK \
       --master-addr=$MASTER_ADDR --master-port=29500 \
-      --module examples.round_trip --payload bf16
+      --module examples.round_trip --payload bf16 --mode hybrid
 
 Node 0 owns experts, node 1 originates tokens. The worker operation is an
 elementwise expert-dependent transform, not a model GEMM. Top-k weights must
@@ -44,9 +44,11 @@ MICROSECONDS_PER_SECOND = 1_000_000
 class Case:
     name: str
     counts: tuple[int, ...]
-    hot_worker: bool = False
+    worker: int | None = None
+    rotate_worker: bool = False
     skip_all_experts: bool = False
     strided_scales: bool = False
+    spread_workers: bool = False
 
     @property
     def bucket(self) -> int:
@@ -122,7 +124,8 @@ class Exchange:
             return
         # Independent token-major reference. All chosen values are powers of
         # two, and the bounded sums are exactly representable in BF16.
-        factors = (self.inputs.ids.remainder(4) + 1).float()
+        owner = self.inputs.ids.div(self.config.experts_per_rank, rounding_mode="floor")
+        factors = torch.pow(2.0, (self.inputs.ids.remainder(2) + owner).float())
         factors = torch.where(self.inputs.ids >= 0, factors, 0)
         expected = self.inputs.decoded() * (self.inputs.weights * factors).sum(
             dim=1, keepdim=True
@@ -154,12 +157,31 @@ def make_inputs(case: Case, source: int, epoch: int, config: afdep.Config) -> In
     magnitude = torch.pow(2.0, (column // FP8_BLOCK_SIZE).remainder(3).float())
     x = (bits * magnitude).bfloat16()
     slot = torch.arange(config.top_k, device="cuda", dtype=torch.int64)
-    expert_limit = (
-        config.num_experts // FFN_RANKS if case.hot_worker else config.num_experts
-    )
-    ids = (
-        row[:, None] * config.top_k + slot[None, :] + source + epoch * ROUTE_STRIDE
-    ).remainder(expert_limit)
+    if case.spread_workers:
+        # Interleave slots across workers so every token reaches all of them,
+        # filling each direct-mode request slot and the full source reduction.
+        slots_per_worker = config.top_k // FFN_RANKS
+        local = (
+            row[:, None] * slots_per_worker
+            + slot[None, :] // FFN_RANKS
+            + source
+            + epoch * ROUTE_STRIDE
+        ).remainder(config.experts_per_rank)
+        ids = slot[None, :].remainder(FFN_RANKS) * config.experts_per_rank + local
+    else:
+        worker = (
+            (source + epoch // FFN_RANKS) % FFN_RANKS
+            if case.rotate_worker
+            else case.worker
+        )
+        expert_limit = (
+            config.experts_per_rank if worker is not None else config.num_experts
+        )
+        ids = (
+            row[:, None] * config.top_k + slot[None, :] + source + epoch * ROUTE_STRIDE
+        ).remainder(expert_limit)
+        if worker is not None:
+            ids += worker * config.experts_per_rank
     # Skipped choices test -1 semantics and force epoch-dependent zero counts.
     omitted = (row[:, None] + slot[None, :] + epoch).remainder(11) == 0
     ids = torch.where(omitted, -1, ids).contiguous()
@@ -197,8 +219,7 @@ def expert_rows(
         ).reshape(received.recv_x.shape)
     row = torch.arange(received.recv_x.shape[0], device="cuda", dtype=torch.int32)
     local_expert = torch.bucketize(row, received.recv_count_psum, right=True)
-    global_expert = local_expert + rank * (config.num_experts // FFN_RANKS)
-    factor = (global_expert.remainder(4) + 1).float()
+    factor = (1 << rank) * torch.pow(2.0, local_expert.remainder(2).float())
     # AFDEP does not multiply routing weights in its reply reduction.
     weighted = decoded * factor[:, None] * received.recv_topk_weights[:, None]
     # Receive padding contains unspecified activation bytes. Selecting zero
@@ -239,6 +260,7 @@ def initialize(timeout_s: int = 180) -> int:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--payload", choices=("bf16", "fp8"), default="bf16")
+    parser.add_argument("--mode", choices=("hybrid", "direct"), default="hybrid")
     parser.add_argument("--tokens", type=int, default=16)
     parser.add_argument("--rdma-traffic-class", type=int, default=0)
     return parser.parse_args()
@@ -253,6 +275,7 @@ def main() -> None:
         num_experts=NUM_EXPERTS,
         top_k=TOP_K,
         payload=args.payload,
+        allow_hybrid_mode=args.mode == "hybrid",
         rdma_traffic_class=args.rdma_traffic_class,
     )
     buffer = afdep.Buffer(group=dist.group.WORLD, config=config)
@@ -266,7 +289,12 @@ def main() -> None:
     if rank == 0:
         print(
             json.dumps(
-                {"ok": True, "payload": args.payload, "tokens_per_source": args.tokens}
+                {
+                    "ok": True,
+                    "mode": args.mode,
+                    "payload": args.payload,
+                    "tokens_per_source": args.tokens,
+                }
             ),
             flush=True,
         )

@@ -35,6 +35,10 @@ VALID = {
         ("attention_ranks", 2),
         ("expert_alignment", 0),
         ("payload", "fp16"),
+        ("allow_hybrid_mode", 0),
+        ("allow_hybrid_mode", 1),
+        ("allow_hybrid_mode", "direct"),
+        ("allow_hybrid_mode", None),
         ("num_gin_contexts", 0),
         ("transport_stripes", 9),
         ("num_sms", 0),
@@ -74,6 +78,8 @@ def test_native_index_bound_rejected():
 def test_configuration_is_immutable_and_serializable():
     config = Config(**VALID)
     assert asdict(config)["payload"] == "bf16"
+    assert asdict(config)["allow_hybrid_mode"] is True
+    assert Config(**(VALID | {"allow_hybrid_mode": False})).allow_hybrid_mode is False
     with pytest.raises(FrozenInstanceError):
         config.payload = "fp8"
 
