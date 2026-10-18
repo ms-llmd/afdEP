@@ -204,8 +204,13 @@ its participants rather than reuse partially advanced communication state.
 from afdep import DeepEPBuffer, DeepEPConfig
 
 config = DeepEPConfig(
-    capacity_tokens_per_rank=2048, hidden_size=2048, num_experts=128,
-    top_k=8, ffn_ranks=2, attention_ranks=2, payload="bf16",
+    capacity_tokens_per_rank=2048,
+    hidden_size=2048,
+    num_experts=128,
+    top_k=8,
+    ffn_ranks=2,
+    attention_ranks=2,
+    payload="bf16",
 )
 buffer = DeepEPBuffer(group=group, config=config)  # FFN ranks first.
 # Attention:
