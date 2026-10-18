@@ -46,7 +46,6 @@ __device__ __forceinline__ void send_credit(int signal, int peer, const DeviceAr
     ncclGin gin(a.comm, 0, NCCL_GIN_RESOURCE_SHARING_CTA);
     gin.signal(direct ? ncclTeamWorld(a.comm) : ncclTeamRail(a.comm), peer,
                ncclGin_StrongSignalInc{static_cast<ncclGinSignal_t>(signal)});
-    gin.flush(ncclCoopThread());
 }
 __device__ __forceinline__ int packet_tokens(uint8_t* base, const Layout& l) {
     return static_cast<int>(reinterpret_cast<volatile Packet*>(base + l.request)->tokens);
@@ -63,6 +62,93 @@ __device__ __forceinline__ uint4 load_remote_vector(const void* pointer) {
                  : "=r"(value.x), "=r"(value.y), "=r"(value.z), "=r"(value.w)
                  : "l"(pointer) : "memory");
     return value;
+}
+
+// A token may select several experts on this worker. Read each activation
+// vector once (over NVLink in hybrid mode), then fan it out to all local rows.
+template <bool kRemote>
+__device__ __forceinline__ void copy_expert_rows(const DeviceArgs& a, const uint8_t* packet,
+                                                int tokens, int token, const int* slots) {
+    const Layout l = a.layout;
+    bool selected = false;
+    for (int k = 0; k < l.topk; ++k) selected |= slots[k] >= 0;
+    if (!selected) return;
+    const int vectors = l.hidden * l.element_bytes() / sizeof(uint4);
+    for (int h = threadIdx.x; h < vectors; h += blockDim.x) {
+        const auto* source = reinterpret_cast<const uint4*>(packet + l.packet_x()) + token * vectors + h;
+        uint4 value;
+        if constexpr (kRemote) value = load_remote_vector(source);
+        else value = *source;
+        for (int k = 0; k < l.topk; ++k)
+            if (slots[k] >= 0)
+                reinterpret_cast<uint4*>(a.recv_x)[slots[k] * vectors + h] = value;
+    }
+    for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x) {
+        const auto* source = reinterpret_cast<const float*>(packet + l.packet_scales(tokens)) +
+                             token * l.scale_groups() + group;
+        float value;
+        if constexpr (kRemote) value = *reinterpret_cast<const volatile float*>(source);
+        else value = *source;
+        for (int k = 0; k < l.topk; ++k)
+            if (slots[k] >= 0)
+                a.recv_scales[slots[k] + group * a.recv_scale_stride1] = value;
+    }
+}
+
+// Eight adjacent BF16 values share one vector load/store and one route lookup.
+struct BF16VectorSum {
+    static constexpr int kValues = sizeof(uint4) / sizeof(nv_bfloat16);
+    float values[kValues] = {};
+    __device__ __forceinline__ void add(uint4 input) {
+        const uint32_t words[] = {input.x, input.y, input.z, input.w};
+#pragma unroll
+        for (int pair = 0; pair < kValues / 2; ++pair) {
+            const __nv_bfloat162_raw bits = {static_cast<uint16_t>(words[pair]),
+                                            static_cast<uint16_t>(words[pair] >> 16)};
+            const float2 value = __bfloat1622float2(__nv_bfloat162(bits));
+            values[2 * pair] += value.x;
+            values[2 * pair + 1] += value.y;
+        }
+    }
+    __device__ __forceinline__ uint4 pack() const {
+        uint32_t words[kValues / 2];
+#pragma unroll
+        for (int pair = 0; pair < kValues / 2; ++pair) {
+            const __nv_bfloat162_raw bits =
+                __floats2bfloat162_rn(values[2 * pair], values[2 * pair + 1]);
+            words[pair] = uint32_t(bits.x) | (uint32_t(bits.y) << 16);
+        }
+        return make_uint4(words[0], words[1], words[2], words[3]);
+    }
+};
+
+template <bool kDirect>
+__device__ __forceinline__ void make_partial_vectors(const DeviceArgs& a) {
+    const Layout l = a.layout;
+    const Control* state = control(a.base);
+    constexpr int kMaxTopK = 32;
+    __shared__ int rows[kMaxTopK];
+    const int vectors = l.hidden / BF16VectorSum::kValues;
+    int compact_token = blockIdx.x;
+    for (int source = 0; source < 4; ++source) {
+        const int n = state->received_tokens[source];
+        for (; compact_token < n; compact_token += gridDim.x) {
+            const int token = kDirect ?
+                *reinterpret_cast<const int*>(a.base + l.token_index(source, compact_token)) : compact_token;
+            if (threadIdx.x < l.topk)
+                rows[threadIdx.x] = a.receipt[(source * a.bucket + token) * l.topk + threadIdx.x];
+            __syncthreads();
+            for (int h = threadIdx.x; h < vectors; h += blockDim.x) {
+                BF16VectorSum sum;
+                for (int k = 0; k < l.topk; ++k)
+                    if (rows[k] >= 0)
+                        sum.add(reinterpret_cast<const uint4*>(a.rows)[size_t(rows[k]) * vectors + h]);
+                reinterpret_cast<uint4*>(a.base + l.partial(source, compact_token))[h] = sum.pack();
+            }
+            __syncthreads();
+        }
+        compact_token -= n;
+    }
 }
 
 // One final strong signal per active context. Each receiver waits every one;
@@ -88,8 +174,11 @@ __device__ __forceinline__ void transfer(const DeviceArgs& a, size_t src, size_t
         // Empty sources still advance their phase so workers cannot deadlock.
         gin.signal(direct ? ncclTeamWorld(a.comm) : ncclTeamRail(a.comm), peer, action);
     }
-    // Local source consumption only. Remote readiness is the signal above.
-    gin.flush(ncclCoopThread());
+    // The strong signal publishes remote readiness. RequestCredit/ReplyCredit
+    // prevent this packet's source storage from being overwritten until every
+    // receiver has consumed it, which also proves local DMA consumption.
+    // Credits carry no reusable source payload. Drain active contexts at close,
+    // rather than flushing each payload and credit on the execution path.
 }
 
 __device__ __forceinline__ int direct_signal(int phase, int peer) { return phase * 4 + peer; }
@@ -170,6 +259,11 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
     } else if constexpr (kOperation == BeginWorker) {
         if (tid == 0) {
             ++state->epoch;
+            // Reply payloads are posted asynchronously. Protect their local
+            // partial storage before this epoch can write it, not just the
+            // remote inbox before the next SendReply.
+            for (int source = 0; source < 4; ++source)
+                wait_signal(0, direct_signal(ReplyCredit, source), state->epoch - 1, a);
             for (int source = 0; source < 4; ++source) {
                 for (int q = 0; q < a.stripes; ++q)
                     wait_signal(q, direct_signal(RequestReady, source), state->epoch, a);
@@ -222,17 +316,7 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                     slots[k] = row;
                 }
                 __syncthreads();
-                for (int k = 0; k < l.topk; ++k) {
-                    const int row = slots[k];
-                    if (row < 0) continue;
-                    const int vectors = l.hidden * l.element_bytes() / 16;
-                    for (int h = threadIdx.x; h < vectors; h += blockDim.x)
-                        reinterpret_cast<uint4*>(a.recv_x)[row * vectors + h] =
-                            reinterpret_cast<const uint4*>(packet + l.packet_x())[compact_token * vectors + h];
-                    for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x)
-                        a.recv_scales[row + group * a.recv_scale_stride1] =
-                            reinterpret_cast<const float*>(packet + l.packet_scales(n))[compact_token * l.scale_groups() + group];
-                }
+                copy_expert_rows<false>(a, packet, n, compact_token, slots);
                 __syncthreads();
             }
             compact_token -= n;
@@ -245,22 +329,7 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                 send_credit(direct_signal(RequestCredit, worker), source + 4, a, true);
         }
     } else if constexpr (kOperation == MakePartials) {
-        size_t i = tid;
-        for (int source = 0; source < 4; ++source) {
-            const int n = state->received_tokens[source];
-            for (; i < size_t(n) * l.hidden; i += stride) {
-                const int compact_token = i / l.hidden, h = i % l.hidden;
-                const int token = *reinterpret_cast<const int*>(a.base + l.token_index(source, compact_token));
-                float sum = 0;
-                for (int k = 0; k < l.topk; ++k) {
-                    const int row = a.receipt[(source * a.bucket + token) * l.topk + k];
-                    if (row >= 0)
-                        sum += __bfloat162float(reinterpret_cast<const nv_bfloat16*>(a.rows)[size_t(row) * l.hidden + h]);
-                }
-                reinterpret_cast<nv_bfloat16*>(a.base + l.partial(source, compact_token))[h] = __float2bfloat16(sum);
-            }
-            i -= size_t(n) * l.hidden;
-        }
+        make_partial_vectors<true>(a);
     } else if constexpr (kOperation == PublishConsumedAndWaitCredit) {
         if (tid == 0)
             for (int source = 0; source < 4; ++source)
@@ -276,18 +345,18 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                 for (int q = 0; q < a.stripes; ++q)
                     wait_signal(q, direct_signal(ReplyReady, peer), state->epoch, a);
         __syncthreads();
-        for (size_t i = tid; i < size_t(state->source_tokens) * l.hidden; i += stride) {
-            const int token = i / l.hidden, h = i % l.hidden;
-            float sum = 0;
-            for (int peer = 0; peer < 4; ++peer) {
-                const int slot = *reinterpret_cast<const int*>(a.base + l.token_index(peer, token));
-                if (slot >= 0)
-                    sum += __bfloat162float(__ushort_as_bfloat16(
-                        reinterpret_cast<const volatile uint16_t*>(a.base + l.reply_slot(peer))[
-                            size_t(slot) * l.hidden + h]));
+        const int vectors = l.hidden / BF16VectorSum::kValues;
+        for (int token = blockIdx.x; token < state->source_tokens; token += gridDim.x)
+            for (int h = threadIdx.x; h < vectors; h += blockDim.x) {
+                BF16VectorSum sum;
+                for (int peer = 0; peer < 4; ++peer) {
+                    const int slot = *reinterpret_cast<const int*>(a.base + l.token_index(peer, token));
+                    if (slot >= 0)
+                        sum.add(load_remote_vector(a.base + l.reply_slot(peer) +
+                                                   (size_t(slot) * vectors + h) * sizeof(uint4)));
+                }
+                reinterpret_cast<uint4*>(a.out)[size_t(token) * vectors + h] = sum.pack();
             }
-            reinterpret_cast<nv_bfloat16*>(a.out)[i] = __float2bfloat16(sum);
-        }
     } else if constexpr (kOperation == ReplyConsumedCredit) {
         if (tid == 0)
             for (int peer = 0; peer < 4; ++peer)
@@ -297,6 +366,14 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
 
 template <int kOperation>
 __global__ void directional_kernel(DeviceArgs a) {
+    if constexpr (kOperation == Drain) {
+        if (threadIdx.x == 0) {
+            ncclGin gin(a.comm, blockIdx.x, a.layout.hybrid ?
+                        NCCL_GIN_RESOURCE_SHARING_CTA : NCCL_GIN_RESOURCE_SHARING_GPU);
+            gin.flush(ncclCoopThread());
+        }
+        return;
+    }
     const Layout l = a.layout;
     if (!l.hybrid && kOperation != Prefix) {
         direct_operation<kOperation>(a);
@@ -344,24 +421,26 @@ __global__ void directional_kernel(DeviceArgs a) {
     } else if constexpr (kOperation == BeginWorker) {
         if (tid == 0) {
             ++state->epoch;
+            // The previous reply's local DMA source must be consumed before
+            // ReduceReply can overwrite worker_reply in this epoch.
+            wait_signal(0, ReplyCredit, state->epoch - 1, a);
             for (int q = 0; q < a.stripes; ++q)
                 wait_signal(q, RequestReady, state->epoch, a);
             release(&state->request_ready, state->epoch);
+            // One waiter per worker acquires peer readiness and headers.
+            // The next kernel inherits this stream dependency; launching a
+            // waiter on every histogram CTA floods the peer control lines.
+            for (int source = 0; source < 4; ++source) {
+                wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
+                const int n = packet_tokens(a.peers[source], l);
+                if (n < 0 || n > a.bucket) fail("source tokens exceed bucket", a);
+                state->received_tokens[source] = n;
+            }
         }
     } else if constexpr (kOperation == Histogram) {
-        if (threadIdx.x == 0) {
-            for (int source = 0; source < 4; ++source)
-                wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
-        }
-        __syncthreads();
         int i = tid;
         for (int source = 0; source < 4; ++source) {
-            // Every CTA reads the ready packet directly. received_tokens is
-            // published for subsequent kernels, not cross-CTA reads here.
-            const int n = packet_tokens(a.peers[source], l);
-            if (n < 0 || n > a.bucket) fail("source tokens exceed bucket", a);
-            if (tid == 0)
-                state->received_tokens[source] = n;
+            const int n = state->received_tokens[source];
             const uint8_t* packet = a.peers[source] + l.request;
             for (; i < n * l.topk; i += stride) {
                 const int64_t expert = reinterpret_cast<const volatile int64_t*>(packet + l.packet_ids(n))[i];
@@ -405,17 +484,7 @@ __global__ void directional_kernel(DeviceArgs a) {
                     slots[k] = row;
                 }
                 __syncthreads();
-                for (int k = 0; k < l.topk; ++k) {
-                    const int row = slots[k];
-                    if (row < 0) continue;
-                    const int vectors = l.hidden * l.element_bytes() / 16;
-                    for (int h = threadIdx.x; h < vectors; h += blockDim.x)
-                        reinterpret_cast<uint4*>(a.recv_x)[row * vectors + h] =
-                            load_remote_vector(packet + l.packet_x() + size_t(token * vectors + h) * sizeof(uint4));
-                    for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x)
-                        a.recv_scales[row + group * a.recv_scale_stride1] =
-                            reinterpret_cast<const volatile float*>(packet + l.packet_scales(n))[token * l.scale_groups() + group];
-                }
+                copy_expert_rows<true>(a, packet, n, token, slots);
                 __syncthreads();
             }
             token -= n;
@@ -434,21 +503,7 @@ __global__ void directional_kernel(DeviceArgs a) {
                 wait_local(&control(a.peers[i])->partials_consumed, state->epoch - 1, a);
         }
         __syncthreads();
-        size_t i = tid;
-        for (int source = 0; source < 4; ++source) {
-            const int n = state->received_tokens[source];
-            for (; i < size_t(n) * l.hidden; i += stride) {
-                const int token = i / l.hidden, h = i % l.hidden;
-                float sum = 0;
-                for (int k = 0; k < l.topk; ++k) {
-                    const int row = a.receipt[(source * a.bucket + token) * l.topk + k];
-                    if (row >= 0)
-                        sum += __bfloat162float(reinterpret_cast<const nv_bfloat16*>(a.rows)[size_t(row) * l.hidden + h]);
-                }
-                reinterpret_cast<nv_bfloat16*>(a.base + l.partial(source, token))[h] = __float2bfloat16(sum);
-            }
-            i -= size_t(n) * l.hidden;
-        }
+        make_partial_vectors<false>(a);
     } else if constexpr (kOperation == PublishPartialAndWait) {
         if (tid == 0) {
             release(&state->partial_done, state->epoch);
@@ -457,15 +512,14 @@ __global__ void directional_kernel(DeviceArgs a) {
         }
     } else if constexpr (kOperation == ReduceReply) {
         const int n = state->received_tokens[worker];
-        for (size_t i = tid; i < size_t(n) * l.hidden; i += stride) {
-            const int token = i / l.hidden, h = i % l.hidden;
-            float sum = 0;
-            for (int iworker = 0; iworker < 4; ++iworker)
-                sum += __bfloat162float(__ushort_as_bfloat16(
-                    reinterpret_cast<const volatile uint16_t*>(
-                        a.peers[iworker] + l.partial(worker, token))[h]));
-            reinterpret_cast<nv_bfloat16*>(a.base + l.worker_reply)[i] = __float2bfloat16(sum);
-        }
+        const int vectors = l.hidden / BF16VectorSum::kValues;
+        for (int token = blockIdx.x; token < n; token += gridDim.x)
+            for (int h = threadIdx.x; h < vectors; h += blockDim.x) {
+                BF16VectorSum sum;
+                for (int peer = 0; peer < 4; ++peer)
+                    sum.add(load_remote_vector(a.peers[peer] + l.partial(worker, token) + h * sizeof(uint4)));
+                reinterpret_cast<uint4*>(a.base + l.worker_reply)[size_t(token) * vectors + h] = sum.pack();
+            }
     } else if constexpr (kOperation == PublishConsumedAndWaitCredit) {
         if (tid == 0) {
             // All reduction-grid readers finished before partials may be reused.

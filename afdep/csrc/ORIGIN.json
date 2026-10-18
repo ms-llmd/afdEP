@@ -27,8 +27,8 @@
     "afdep/csrc/kernels.cuh": "05b50095f694231db3012821aed1fdf48e86b7a06d9c81eaeb8aee3e4db08bc0"
   },
   "current_file_sha256": {
-    "afdep/csrc/layout.hpp": "3a67c2a0e06c6cc5e053f2d5b0e4ac4a6eed48227576b0ab2a80f43ac1ff7d9c",
-    "afdep/csrc/kernels.cuh": "820c16685d6b803b6c5db0f022dc2b14ec646848ce174ed3f79af09e8ce3f215"
+    "afdep/csrc/layout.hpp": "3a644833bff462ae2a2044b1cf1e07a6972c7abd159af9876ee557f9e57bd9a0",
+    "afdep/csrc/kernels.cuh": "b7882c8dfbe28c7734005826ffb430bf8df309ccc70f87e5e02a388fe4395af4"
   },
   "protocol_changes": [
     {
@@ -38,6 +38,26 @@
     {
       "date": "2026-10-18",
       "description": "Add opt-in device-side live source token counts for fixed-capacity inputs and CUDA graphs. BeginSource validates and caches the live prefix once; packing, compact maps, packet layouts and GIN request bytes use that count in both modes. Iterate worker histogram, packing and partial generation over actual per-source counts while preserving every readiness signal, reuse credit and receipt bucket stride."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Post request/reply payloads without per-payload local flush. Strong readiness signals still cover every active context; all request/reply consumption credits and their flushes remain. Wait for previous reply credits at BeginWorker before any local reply-source storage can be overwritten, rather than relying on the old payload flush for local DMA lifetime. No arithmetic, routing, or allocation policy changes."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Post consumption-credit signals asynchronously as well. Preserve every signal and wait, and explicitly drain every active GIN context during collective close before rank synchronization and window teardown. Early reply-credit waits protect local outgoing storage before any overwrite; no credit or readiness dependency is removed."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Read each received activation vector and FP8 scale once per selected worker and fan it out to that worker's selected expert rows. Avoid repeated NVLink reads when multiple selected experts share a worker. Preserve row assignment, receipts, tensor values, and every readiness/credit dependency."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Vectorize BF16 partial, hybrid reply, and direct source reductions over eight adjacent values. Use one CTA per token and share expert receipt rows within that CTA, avoiding per-element integer divisions and redundant route lookups. Preserve FP32 addition order, BF16 rounding, actual-count bounds and every credit/readiness dependency."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Acquire hybrid peer readiness and packet token counts once in the single-CTA BeginWorker kernel. Publish counts locally before Histogram via the CUDA stream kernel dependency, rather than having every histogram CTA poll the same remote control/header lines. Preserve all peer and GIN-context readiness waits, bounds checks, epochs and consumption credits."
     }
   ]
 }

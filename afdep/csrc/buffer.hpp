@@ -357,6 +357,11 @@ class DirectionalM2NBuffer {
         launch(ReplyConsumedCredit, a);
     }
 
+    void drain() {
+        check_live(rank < 4);
+        launch(Drain, args(1), stripes);
+    }
+
     void destroy() {
         if (destroyed)
             return;
@@ -390,6 +395,7 @@ inline void register_apis(pybind11::module_ &m) {
         .def("worker_receive_into", &DirectionalM2NBuffer::worker_receive_into)
         .def("worker_reply", &DirectionalM2NBuffer::worker_reply)
         .def("source_collect", &DirectionalM2NBuffer::source_collect)
+        .def("drain", &DirectionalM2NBuffer::drain)
         .def("destroy", &DirectionalM2NBuffer::destroy);
 }
 
