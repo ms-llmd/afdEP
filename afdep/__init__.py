@@ -9,9 +9,17 @@ from .config import Config
 
 if TYPE_CHECKING:
     from .buffer import Buffer, ReceiveResult
+    from .pipeline import PipelineBuffer, SlotLease
 
 __version__ = "0.1.0.dev0"
-__all__ = ["Buffer", "Config", "ReceiveResult", "__version__"]
+__all__ = [
+    "Buffer",
+    "Config",
+    "PipelineBuffer",
+    "ReceiveResult",
+    "SlotLease",
+    "__version__",
+]
 
 
 def __getattr__(name: str):
@@ -21,4 +29,8 @@ def __getattr__(name: str):
         from .buffer import Buffer, ReceiveResult
 
         return {"Buffer": Buffer, "ReceiveResult": ReceiveResult}[name]
+    if name in {"PipelineBuffer", "SlotLease"}:
+        from .pipeline import PipelineBuffer, SlotLease
+
+        return {"PipelineBuffer": PipelineBuffer, "SlotLease": SlotLease}[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -186,6 +186,29 @@ routes, including optional `live_tokens`, may change in place; different buckets
 use separate graphs replayed in the same logical order on every rank.
 Concurrent use of one buffer is unsupported.
 
+For caller-scheduled microbatch overlap, `PipelineBuffer(group=group,
+config=config, slots=2)` owns independent `Buffer` instances. Each slot has its
+own NCCL communicator, registered windows, epochs/credits, and communication
+stream; registered capacity grows with the number of slots. It does not split
+batches or schedule GEMMs. Use `pool.buffer(i)` and `pool.stream(i)` to capture
+fixed-storage receive/compute/reply phases at startup, then acquire a slot for
+each logical exchange:
+
+```python
+lease = pool.acquire(i)  # GPU dependency on prior completion; no CPU wait
+lease.wait_on(staging_stream)  # Also protect slot storage on other streams.
+# Enqueue/replay phases, joining receive -> compute -> reply with CUDA events.
+lease.release(stream=final_stream)  # Must cover every slot reader/writer.
+```
+
+Acquire/release are outside capture and must run for every replayed exchange.
+Raw buffer access does not enforce leases. Every rank must follow the same
+slot/exchange order, including empty contributions. The caller owns cross-stream
+events, tensor lifetimes, and completion before reusing output storage. Capture
+and warm up before timed replay; no automatic graph scheduler is provided.
+Release all leases before collective `pool.close()`. CUDA overlap and performance
+require GPU validation; independent slots alone do not guarantee either.
+
 `close()` is collective, outside capture, after final GPU work; it drains peers
 before releasing windows. Do not use collective close as rank-local exception
 cleanup. A timeout/device error is fatal to the job: terminate and reconstruct
