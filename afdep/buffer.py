@@ -283,6 +283,8 @@ class Buffer:
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError("Close AFDEP buffers outside CUDA graph capture")
         torch.cuda.synchronize(self.device)
+        self._runtime.drain()
+        torch.cuda.synchronize(self.device)
         dist.barrier(group=self._group)
         self._runtime.destroy()
         self._module.destroy_nccl_comm(self._comm)

@@ -46,7 +46,6 @@ __device__ __forceinline__ void send_credit(int signal, int peer, const DeviceAr
     ncclGin gin(a.comm, 0, NCCL_GIN_RESOURCE_SHARING_CTA);
     gin.signal(direct ? ncclTeamWorld(a.comm) : ncclTeamRail(a.comm), peer,
                ncclGin_StrongSignalInc{static_cast<ncclGinSignal_t>(signal)});
-    gin.flush(ncclCoopThread());
 }
 __device__ __forceinline__ int packet_tokens(uint8_t* base, const Layout& l) {
     return static_cast<int>(reinterpret_cast<volatile Packet*>(base + l.request)->tokens);
@@ -91,7 +90,8 @@ __device__ __forceinline__ void transfer(const DeviceArgs& a, size_t src, size_t
     // The strong signal publishes remote readiness. RequestCredit/ReplyCredit
     // prevent this packet's source storage from being overwritten until every
     // receiver has consumed it, which also proves local DMA consumption.
-    // Keep credit flushes in send_credit(): no per-payload flush is needed here.
+    // Credits carry no reusable source payload. Drain active contexts at close,
+    // rather than flushing each payload and credit on the execution path.
 }
 
 __device__ __forceinline__ int direct_signal(int phase, int peer) { return phase * 4 + peer; }
@@ -304,6 +304,14 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
 
 template <int kOperation>
 __global__ void directional_kernel(DeviceArgs a) {
+    if constexpr (kOperation == Drain) {
+        if (threadIdx.x == 0) {
+            ncclGin gin(a.comm, blockIdx.x, a.layout.hybrid ?
+                        NCCL_GIN_RESOURCE_SHARING_CTA : NCCL_GIN_RESOURCE_SHARING_GPU);
+            gin.flush(ncclCoopThread());
+        }
+        return;
+    }
     const Layout l = a.layout;
     if (!l.hybrid && kOperation != Prefix) {
         direct_operation<kOperation>(a);

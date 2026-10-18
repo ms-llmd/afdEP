@@ -179,6 +179,8 @@ Keep the buffer's CUDA device current for every operation, including `close()`.
 Complete dispatch→collect or receive→reply before the next exchange. Device
 epochs and credits protect request, partial, and reply storage until all readers
 finish; readiness is awaited on every active GIN context, including empty stripes.
+Payloads and credits are posted without a per-message flush. Credits protect
+registered source storage; collective `close()` drains every active GIN context.
 
 Initialize/warm up outside CUDA capture. Capture a complete role-specific
 exchange, use device counts, and retain fixed addresses/shapes/bucket. Values and

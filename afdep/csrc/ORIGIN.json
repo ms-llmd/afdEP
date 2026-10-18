@@ -27,8 +27,8 @@
     "afdep/csrc/kernels.cuh": "05b50095f694231db3012821aed1fdf48e86b7a06d9c81eaeb8aee3e4db08bc0"
   },
   "current_file_sha256": {
-    "afdep/csrc/layout.hpp": "3a67c2a0e06c6cc5e053f2d5b0e4ac4a6eed48227576b0ab2a80f43ac1ff7d9c",
-    "afdep/csrc/kernels.cuh": "87b9661e43c857593a778c67221b664b4b92b17f762730da05026dba33c5756d"
+    "afdep/csrc/layout.hpp": "3a644833bff462ae2a2044b1cf1e07a6972c7abd159af9876ee557f9e57bd9a0",
+    "afdep/csrc/kernels.cuh": "699e6d019cbbc4f69d455a5c1e01b7612dfde00b1d56c18b6d3dcfe7f3c19b36"
   },
   "protocol_changes": [
     {
@@ -42,6 +42,10 @@
     {
       "date": "2026-10-18",
       "description": "Post request/reply payloads without per-payload local flush. Strong readiness signals still cover every active context; all request/reply consumption credits and their flushes remain. Wait for previous reply credits at BeginWorker before any local reply-source storage can be overwritten, rather than relying on the old payload flush for local DMA lifetime. No arithmetic, routing, or allocation policy changes."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Post consumption-credit signals asynchronously as well. Preserve every signal and wait, and explicitly drain every active GIN context during collective close before rank synchronization and window teardown. Early reply-credit waits protect local outgoing storage before any overwrite; no credit or readiness dependency is removed."
     }
   ]
 }
