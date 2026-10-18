@@ -18,6 +18,8 @@ Two backends use NCCL and NVLink; neither requires a DeepEP or vLLM package:
 The DeepEP backend preserves its optimized kernels and graph execution.
 It retains masking internally; extraction alone does not remove that overhead.
 [Backend contracts](docs/api.md#deepep-backend).
+The [vLLM serving comparison](https://github.com/ms-llmd/afd-plugin/blob/832e61e4a4acc24fa55e3fa08abdaae780b8b6f6/recipe/gpu/AfdEPConnector/qwen3_30b_fp8/README.md)
+measures this backend separately on four H100s.
 
 ## Support
 

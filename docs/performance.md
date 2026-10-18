@@ -9,6 +9,11 @@ The newer DeepEP-derived backend has a separate
 [four-H100 correctness record](validation-deepep-2026-10-18.json).
 It retains the Masked DeepEP protocol; the directional results below do not
 measure that backend.
+Its [separate vLLM serving experiment](https://github.com/ms-llmd/afd-plugin/blob/832e61e4a4acc24fa55e3fa08abdaae780b8b6f6/recipe/gpu/AfdEPConnector/qwen3_30b_fp8/README.md)
+closely matches Masked DeepEP on Qwen3-30B-A3B-FP8: lower median ITL and higher
+throughput than P2P, but worse TTFT. That natural-path comparison changes payload
+and gate placement; concurrent outputs differ, so it establishes neither
+transport-only gains nor accuracy equivalence.
 
 ![H100 prototype latency and memory comparison](assets/h100-performance.svg)
 
