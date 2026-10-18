@@ -1,0 +1,116 @@
+{
+  "scope": "Single-acquisition hybrid peer readiness correctness; not a serving performance claim",
+  "date": "2026-10-18",
+  "source_commit": "9ad705fa3bc08018ff7e0c3128aec86be84f64f8",
+  "hardware": "8 NVIDIA H100 80GB HBM3 GPUs across two hosts",
+  "nccl": "2.30.7, GIN_IB_GDAKI type 3",
+  "config": {
+    "capacity_tokens_per_rank": 128,
+    "hidden_size": 2048,
+    "num_experts": 128,
+    "top_k": 8,
+    "ffn_ranks": 4,
+    "attention_ranks": 4,
+    "expert_alignment": 128,
+    "num_gin_contexts": 8,
+    "transport_stripes": 8,
+    "num_sms": 132,
+    "gpu_timeout_s": 60,
+    "rdma_traffic_class": 0
+  },
+  "cases": [
+    "uniform",
+    "uneven",
+    "empty",
+    "decode",
+    "only_worker_0",
+    "only_worker_1",
+    "only_worker_2",
+    "only_worker_3",
+    "rotating_worker_per_source",
+    "all_sources_at_capacity",
+    "nonempty_all_routes_skipped",
+    "strided_source_fp8_scales"
+  ],
+  "checks": [
+    "Eager and exact-sized receive",
+    "Changing graph payloads, routes, buckets and destination workers",
+    "Empty, all-skipped, hot-worker and capacity-sized inputs",
+    "Delayed peers and buffer reuse without per-epoch CPU barriers",
+    "Reusable receive pointers and poisoned metadata reset",
+    "One fixed-capacity graph with GPU live counts and untouched output tails",
+    "Strided FP8 scales and alignment rejection",
+    "Collective close drains outstanding GIN contexts"
+  ],
+  "unit_tests_passed": 31,
+  "runs": [
+    {
+      "mode": "hybrid",
+      "payload": "bf16",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "passed_ranks": 8,
+      "graph_epochs": 26,
+      "reusable_receive_graph_epochs": 26,
+      "live_count_graph_epochs": 26,
+      "delayed_worker_seconds": 0.02,
+      "log_sha256": [
+        "6df7fe3e4f51d0cecffa966a7e91c7dda1ebf594075753e58766df11c9fee86e",
+        "7757c1edd0f148aba86155931cd92f2422a09fc0788df2c2747b4277ea2ea24f"
+      ]
+    },
+    {
+      "mode": "hybrid",
+      "payload": "fp8",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "passed_ranks": 8,
+      "graph_epochs": 26,
+      "reusable_receive_graph_epochs": 26,
+      "live_count_graph_epochs": 26,
+      "delayed_worker_seconds": 0.02,
+      "log_sha256": [
+        "e0a6bdf880a55ae3e23d70f11303b273d9df2b982ed81c829ab16117d8b4bc6d",
+        "64cba1f510c8c43c95a3266d27f906f57ec64c433b712c019a53ef1777548fc6"
+      ]
+    },
+    {
+      "mode": "direct",
+      "payload": "bf16",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "passed_ranks": 8,
+      "graph_epochs": 26,
+      "reusable_receive_graph_epochs": 26,
+      "live_count_graph_epochs": 26,
+      "delayed_worker_seconds": 0.02,
+      "log_sha256": [
+        "49cb45d1e2d5a1f9c402ff7af5081794c8ef110612a691a40e05b9ff160a6535",
+        "f8115201f90803d4a2ea4804645b6d31912367e576f7f6e0a00b40b1e97b640a"
+      ]
+    },
+    {
+      "mode": "direct",
+      "payload": "fp8",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "passed_ranks": 8,
+      "graph_epochs": 26,
+      "reusable_receive_graph_epochs": 26,
+      "live_count_graph_epochs": 26,
+      "delayed_worker_seconds": 0.02,
+      "log_sha256": [
+        "90311200c8f279621547a3fea4f308bfd6098fb28086206a50b435c6f1d13058",
+        "d7c89b2d18732f245ec68b8511013949947d76580b9c09901a9ad1013f8800d8"
+      ]
+    }
+  ]
+}
