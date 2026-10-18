@@ -96,6 +96,64 @@ class DirectionalM2NBuffer {
         AFDEP_CUDA_CHECK(launch_kernel(operation, arguments, blocks, stream.stream()));
     }
 
+    int receive_row_capacity(int bucket) const {
+        return 4 * bucket * std::min(layout.topk, layout.local_experts()) +
+               layout.local_experts() * (layout.alignment - 1);
+    }
+
+    DeviceArgs discover_receive(int bucket, const torch::Tensor &psum) {
+        auto a = args(bucket);
+        a.counts = counts.data_ptr<int>();
+        a.starts = starts.data_ptr<int>();
+        a.cursors = cursors.data_ptr<int>();
+        a.psum = psum.data_ptr<int>();
+        counts.zero_();
+        launch(BeginWorker, a);
+        launch(Histogram, a, num_sms);
+        launch(Prefix, a);
+        return a;
+    }
+
+    std::vector<int> host_receive_counts(int bucket) const {
+        const auto cpu_counts = counts.to(torch::kCPU);
+        const auto *data = cpu_counts.data_ptr<int>();
+        std::vector<int> result;
+        int64_t assignments = 0, rows = 0;
+        for (int e = 0; e < layout.local_experts(); ++e) {
+            TORCH_CHECK(data[e] >= 0 && int64_t(data[e]) <= int64_t(4) * bucket,
+                        "Received expert count exceeds the source-token bound");
+            const int64_t aligned = (int64_t(data[e]) + layout.alignment - 1) /
+                                    layout.alignment * layout.alignment;
+            assignments += data[e];
+            rows += aligned;
+            TORCH_CHECK(rows <= receive_row_capacity(bucket),
+                        "Received aligned counts exceed the receive capacity");
+            result.push_back(static_cast<int>(aligned));
+        }
+        TORCH_CHECK(assignments <= int64_t(4) * bucket *
+                                       std::min(layout.topk, layout.local_experts()),
+                    "Received assignments exceed the routing bound");
+        return result;
+    }
+
+    void pack_receive(DeviceArgs a, int rows, const torch::Tensor &recv_x,
+                      const std::optional<torch::Tensor> &recv_scale,
+                      const torch::Tensor &recv_weights, const torch::Tensor &receipt) {
+        worker_bucket = a.bucket;
+        worker_rows = rows;
+        a.recv_x = static_cast<uint8_t *>(recv_x.data_ptr());
+        a.recv_weights = recv_weights.data_ptr<float>();
+        a.receipt = receipt.data_ptr<int>();
+        if (recv_scale.has_value()) {
+            a.recv_scales = recv_scale->data_ptr<float>();
+            a.recv_scale_stride1 = recv_scale->stride(1);
+        }
+        recv_weights.zero_();
+        receipt.fill_(-1);
+        launch(PackRows, a, num_sms);
+        launch(PublishPackAndCredit, a);
+    }
+
   public:
     const int64_t num_buffer_bytes;
 
@@ -152,7 +210,8 @@ class DirectionalM2NBuffer {
     int64_t registered_bytes() const { return num_buffer_bytes; }
 
     void source_dispatch(const torch::Tensor &x, const std::optional<torch::Tensor> &scale,
-                         const torch::Tensor &ids, const torch::Tensor &weights, int bucket) {
+                         const torch::Tensor &ids, const torch::Tensor &weights, int bucket,
+                         const std::optional<torch::Tensor> &live_tokens = std::nullopt) {
         check_live(false);
         check_tensor(x, layout.fp8 ? torch::kFloat8_e4m3fn : torch::kBFloat16, 2);
         check_vector_alignment(x);
@@ -168,6 +227,12 @@ class DirectionalM2NBuffer {
         a.x = static_cast<const uint8_t *>(x.data_ptr());
         a.ids = ids.data_ptr<int64_t>();
         a.weights = weights.data_ptr<float>();
+        if (live_tokens.has_value()) {
+            check_tensor(*live_tokens, torch::kInt32, 1);
+            TORCH_CHECK(live_tokens->numel() == 1,
+                        "Live source token count must have shape [1]");
+            a.live_tokens = live_tokens->data_ptr<int>();
+        }
         if (scale.has_value()) {
             check_tensor(*scale, torch::kFloat32, 2, false);
             TORCH_CHECK(scale->size(0) == x.size(0) && scale->size(1) == layout.hidden / 128,
@@ -185,25 +250,45 @@ class DirectionalM2NBuffer {
 
     std::tuple<torch::Tensor, std::optional<torch::Tensor>, torch::Tensor, torch::Tensor, std::vector<int>,
                torch::Tensor>
-    worker_receive(int bucket, bool read_host_counts) {
+    worker_receive(int bucket, bool read_host_counts, bool exact_rows = false) {
         check_live(true);
         TORCH_CHECK(bucket > 0 && bucket <= layout.capacity, "Directional worker bucket exceeds capacity");
-        worker_bucket = bucket;
-        worker_rows = 4 * bucket * std::min(layout.topk, layout.local_experts()) +
-                      layout.local_experts() * (layout.alignment - 1);
+        TORCH_CHECK(!exact_rows || read_host_counts,
+                    "Exact receive allocation requires host receive counts");
+        if (exact_rows) {
+            cudaStreamCaptureStatus capture;
+            AFDEP_CUDA_CHECK(cudaStreamIsCapturing(at::cuda::getCurrentCUDAStream().stream(), &capture));
+            TORCH_CHECK(capture == cudaStreamCaptureStatusNone,
+                        "Exact receive allocation is unavailable during CUDA capture");
+        }
         const auto options = torch::TensorOptions().device(torch::kCUDA, device);
-        auto recv_x = torch::empty({worker_rows, layout.hidden},
-                                   options.dtype(layout.fp8 ? torch::kFloat8_e4m3fn : torch::kBFloat16));
-        auto recv_weights = torch::empty({worker_rows}, options.dtype(torch::kFloat32));
         auto psum = torch::empty({layout.local_experts()}, options.dtype(torch::kInt32));
+        auto rows = receive_row_capacity(bucket);
+        DeviceArgs discovered{};
+        std::vector<int> host_counts;
+        if (exact_rows) {
+            // Sources retain request storage until packing publishes credits.
+            // Only count metadata is allocated before this host decision.
+            discovered = discover_receive(bucket, psum);
+            host_counts = host_receive_counts(bucket);
+            rows = 0;
+            for (const int count : host_counts)
+                rows += count;
+        }
+        auto recv_x = torch::empty({rows, layout.hidden},
+                                   options.dtype(layout.fp8 ? torch::kFloat8_e4m3fn : torch::kBFloat16));
+        auto recv_weights = torch::empty({rows}, options.dtype(torch::kFloat32));
         auto receipt = torch::empty({4, bucket, layout.topk}, options.dtype(torch::kInt32));
         std::optional<torch::Tensor> recv_scale;
         if (layout.fp8) {
-            const int scale_stride = (worker_rows + 3) / 4 * 4;
-            recv_scale = torch::empty_strided({worker_rows, layout.scale_groups()}, {1, scale_stride},
+            const int scale_stride = std::max(4, (rows + 3) / 4 * 4);
+            recv_scale = torch::empty_strided({rows, layout.scale_groups()}, {1, scale_stride},
                                               options.dtype(torch::kFloat32));
         }
-        return worker_receive_into(bucket, read_host_counts, recv_x, recv_scale, recv_weights, psum, receipt);
+        if (!exact_rows)
+            return worker_receive_into(bucket, read_host_counts, recv_x, recv_scale, recv_weights, psum, receipt);
+        pack_receive(discovered, rows, recv_x, recv_scale, recv_weights, receipt);
+        return {recv_x, recv_scale, recv_weights, psum, host_counts, receipt};
     }
 
     std::tuple<torch::Tensor, std::optional<torch::Tensor>, torch::Tensor, torch::Tensor, std::vector<int>,
@@ -214,8 +299,7 @@ class DirectionalM2NBuffer {
                         const torch::Tensor &receipt) {
         check_live(true);
         TORCH_CHECK(bucket > 0 && bucket <= layout.capacity, "Directional worker bucket exceeds capacity");
-        const int rows = 4 * bucket * std::min(layout.topk, layout.local_experts()) +
-                         layout.local_experts() * (layout.alignment - 1);
+        const int rows = receive_row_capacity(bucket);
         check_tensor(recv_x, layout.fp8 ? torch::kFloat8_e4m3fn : torch::kBFloat16, 2);
         check_vector_alignment(recv_x);
         check_tensor(recv_weights, torch::kFloat32, 1);
@@ -226,40 +310,18 @@ class DirectionalM2NBuffer {
                         receipt.size(0) == 4 && receipt.size(1) == bucket && receipt.size(2) == layout.topk,
                     "Reusable receive tensors must match their bucket and buffer configuration");
         TORCH_CHECK(recv_scale.has_value() == bool(layout.fp8), "Reusable receive scales mismatch payload");
-        auto a = args(bucket);
         if (recv_scale.has_value()) {
             check_tensor(*recv_scale, torch::kFloat32, 2, false);
             TORCH_CHECK(recv_scale->size(0) == rows && recv_scale->size(1) == layout.scale_groups() &&
                             recv_scale->stride(0) == 1 && recv_scale->stride(1) >= rows &&
                             recv_scale->stride(1) % 4 == 0,
                         "Reusable FP8 scales require padded column-major storage");
-            a.recv_scales = recv_scale->data_ptr<float>();
-            a.recv_scale_stride1 = recv_scale->stride(1);
         }
-        worker_bucket = bucket;
-        worker_rows = rows;
-        a.recv_x = static_cast<uint8_t *>(recv_x.data_ptr());
-        a.recv_weights = recv_weights.data_ptr<float>();
-        a.counts = counts.data_ptr<int>();
-        a.starts = starts.data_ptr<int>();
-        a.cursors = cursors.data_ptr<int>();
-        a.psum = psum.data_ptr<int>();
-        a.receipt = receipt.data_ptr<int>();
-        recv_weights.zero_();
-        receipt.fill_(-1);
-        counts.zero_();
-        launch(BeginWorker, a);
-        launch(Histogram, a, num_sms);
-        launch(Prefix, a);
-        launch(PackRows, a, num_sms);
-        launch(PublishPackAndCredit, a);
+        auto a = discover_receive(bucket, psum);
+        pack_receive(a, rows, recv_x, recv_scale, recv_weights, receipt);
         std::vector<int> host_counts;
-        if (read_host_counts) {
-            const auto cpu_counts = counts.to(torch::kCPU);
-            const auto *data = cpu_counts.data_ptr<int>();
-            for (int e = 0; e < layout.local_experts(); ++e)
-                host_counts.push_back((data[e] + layout.alignment - 1) / layout.alignment * layout.alignment);
-        }
+        if (read_host_counts)
+            host_counts = host_receive_counts(bucket);
         return {recv_x, recv_scale, recv_weights, psum, host_counts, receipt};
     }
 
@@ -320,8 +382,11 @@ inline void register_apis(pybind11::module_ &m) {
              py::arg("num_sms") = 132, py::arg("allow_hybrid_mode") = true)
         .def_readonly("num_buffer_bytes", &DirectionalM2NBuffer::num_buffer_bytes)
         .def("registered_bytes", &DirectionalM2NBuffer::registered_bytes)
-        .def("source_dispatch", &DirectionalM2NBuffer::source_dispatch)
-        .def("worker_receive", &DirectionalM2NBuffer::worker_receive)
+        .def("source_dispatch", &DirectionalM2NBuffer::source_dispatch, py::arg("x"),
+             py::arg("scale"), py::arg("ids"), py::arg("weights"), py::arg("bucket"),
+             py::arg("live_tokens") = py::none())
+        .def("worker_receive", &DirectionalM2NBuffer::worker_receive, py::arg("bucket"),
+             py::arg("read_host_counts"), py::arg("exact_rows") = false)
         .def("worker_receive_into", &DirectionalM2NBuffer::worker_receive_into)
         .def("worker_reply", &DirectionalM2NBuffer::worker_reply)
         .def("source_collect", &DirectionalM2NBuffer::source_collect)

@@ -173,10 +173,15 @@ class Buffer:
         x_scale: torch.Tensor | None = None,
         *,
         bucket: int,
+        live_tokens: torch.Tensor | None = None,
     ) -> None:
-        """Publish activations and routes; FP8 requires caller-provided scales."""
+        """Publish activations/routes, optionally using a GPU int32[1] live count.
+
+        The count selects a leading prefix within the fixed input/output shape.
+        Keep its storage alive and ordered on the buffer stream through dispatch.
+        """
         self._check_live("attention")
-        self._runtime.source_dispatch(x, x_scale, ids, weights, bucket)
+        self._runtime.source_dispatch(x, x_scale, ids, weights, bucket, live_tokens)
 
     def worker_receive(
         self,
@@ -184,9 +189,18 @@ class Buffer:
         bucket: int,
         read_host_counts: bool = False,
         out: ReceiveResult | None = None,
+        exact_rows: bool = False,
     ) -> ReceiveResult:
-        """Receive expert rows; disable host counts during CUDA graph capture."""
+        """Receive rows, optionally sizing fresh storage after reading host counts.
+
+        ``exact_rows`` requires host counts, no ``out``, and eager execution.
+        Default and caller-owned storage use the conservative bucket capacity.
+        """
         self._check_live("ffn")
+        if exact_rows and not read_host_counts:
+            raise ValueError("Exact receive allocation requires read_host_counts=True")
+        if exact_rows and out is not None:
+            raise ValueError("Exact receive allocation cannot use caller-owned storage")
         if read_host_counts and torch.cuda.is_current_stream_capturing():
             raise RuntimeError(
                 "Host receive counts are unavailable during CUDA capture"
@@ -203,7 +217,9 @@ class Buffer:
                     out.receipt,
                 )
             )
-        return ReceiveResult(*self._runtime.worker_receive(bucket, read_host_counts))
+        return ReceiveResult(
+            *self._runtime.worker_receive(bucket, read_host_counts, exact_rows)
+        )
 
     def reserve_worker_receive(self, *, bucket: int) -> ReceiveResult:
         """Allocate reusable receive storage without starting an exchange."""

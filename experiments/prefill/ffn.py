@@ -101,12 +101,12 @@ def load_deepgemm() -> ModuleType:
     return module
 
 
-@triton.jit
+@triton.jit(do_not_specialize=["ROWS"])
 def _swiglu(
     gate_up,
     activated,
     psum,
-    ROWS: tl.constexpr,
+    ROWS,
     INTERMEDIATE: tl.constexpr,
     ALIGNMENT: tl.constexpr,
     BLOCK: tl.constexpr,
@@ -132,12 +132,12 @@ def _swiglu(
         row += tl.num_programs(0)
 
 
-@triton.jit
+@triton.jit(do_not_specialize=["ROWS"])
 def _weight_outputs(
     out,
     weights,
     psum,
-    ROWS: tl.constexpr,
+    ROWS,
     HIDDEN: tl.constexpr,
     ALIGNMENT: tl.constexpr,
     BLOCK: tl.constexpr,

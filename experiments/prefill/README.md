@@ -1,55 +1,54 @@
-# Prefill workspace experiment
+# Mixed-size FFN workspace experiment
 
-**Graph-compatible FFN execution works; large-prefill speedup is not established.**
+**Fixed workspaces and GPU counts support changing requests; performance remains
+mixed.**
 
-![Prefill round-trip latency and FFN workspace memory](performance.svg)
+![Mixed-request latency, profiling and FFN allocation costs](mixed-performance.svg)
 
-Eight H100s: four Attention sources and four FFN workers. One synthetic BF16
-SwiGLU layer uses real DeepGEMM grouped GEMMs: hidden 2048, intermediate 4096,
-128 experts, top-8 routing. Attention uses the **same CUDA-graph execution** in
-every variant.
+Eight H100s, four Attention + four FFN ranks; one BF16 DeepGEMM SwiGLU layer:
+hidden 2048, intermediate 4096, 128 experts, top-8 routing.
 
-| FFN variant | Receive counts | Compute intermediates |
+| Variant | Receive/compute storage | Execution |
 |---|---|---|
-| Eager exact compute | CPU wait | Allocate for actual aligned rows |
-| Eager pooled | GPU only | Reuse bounded workspace |
-| Graph pooled | GPU only | Replay with the same bounded workspace |
+| `dynamic_eager` | GPU counts → CPU wait → exact receive and intermediate allocations | Eager |
+| `pooled_eager` | Reusable receive storage + one maximum-capacity FFN arena; GPU counts | Eager |
+| `pooled_graph` | Same storage, six cached bucket graphs | CUDA graphs |
 
-At 2048 tokens/source, graph and exact-compute latencies were **approximately
-tied in both modes**. Pooling increased the mean per-FFN-rank allocator peak
-increment from **929 to 2177 MiB**. Smaller gains were modest and variable.
+Each FFN GPU shares storage among its experts. GPU prefix sums partition it;
+**128-row expert alignment remains**. A device live-token count sends **actual
+source rows without bucket wire padding**, while graph storage stays fixed.
 
-Nsight guided the removal of unused-capacity scanning: pooled activation and
-weighting kernel time fell from about **0.30 to 0.17 ms** in separate profiled
-runs. [Stage measurements and provenance](results-h100.json) accompany the timings.
+- Graph p50 latency: hybrid **1.347 → 1.314 ms**; direct **2.259 → 2.386 ms**.
+  No overall throughput improvement.
+- Pooling removes roughly **1,559 FFN allocation requests per 300 requests**.
+  Dynamic eager mostly uses cached memory, with few physical device allocations.
+- Mean FFN allocator peak increment: **1,465 → 2,177 MiB/GPU**. Resident weights
+  and native GIN windows are excluded.
 
-Each FFN GPU shares a bounded activation/intermediate pool among local experts.
-GPU prefix sums partition it; **128-row alignment remains**. Receive and reply
-storage is reused with afdEP's completion/credit protocol.
+Nsight confirms comparable send stages after removing padding. Large tails
+remain in GIN completion; their cause is unresolved.
 
-“Exact” applies **only to GEMM intermediates**; all variants reserve conservative
-receive storage. Timings cover receive–compute–reply for one microbatch. This
-optional experiment establishes neither serving performance nor a DeepEP
-comparison.
+Three rotated repeats use 300 mixed requests each: changing non-aligned batch
+sizes, unseen random routing, hot workers and empty sources. Input staging is
+timed; capture, instantiation and first replay are excluded. Input generation
+is outside request latency but included in trace throughput. This is a
+**closed-loop, single-layer component study**, not vLLM serving.
+[Measurements, checks and provenance](results-mixed-h100.json).
 
 ## Run
 
-Provision [afdEP/NCCL](../../docs/api.md) and the compatible DeepGEMM BF16 grouped
-**psum** API recorded in [results-h100.json](results-h100.json). For a staged
-extension, set `AFDEP_DEEPGEMM_MODULE` to its `.so` and `AFDEP_DEEPGEMM_ROOT` to
-the matching `deep_gemm` source directory.
+Provision [afdEP/NCCL](../../docs/api.md) and the recorded DeepGEMM BF16 grouped
+psum API. For a staged extension, set `AFDEP_DEEPGEMM_MODULE` to its `.so` and
+`AFDEP_DEEPGEMM_ROOT` to the matching source directory.
 
-Run on both four-GPU hosts, with node 0 hosting FFN workers:
+Run on both four-GPU hosts; node 0 hosts FFN workers:
 
 ```bash
 torchrun --nnodes=2 --nproc-per-node=4 --node-rank="$NODE_RANK" \
   --master-addr="$MASTER_ADDR" --master-port=29500 \
-  --module experiments.prefill.benchmark --mode hybrid \
-  --source-execution graph --tokens 128 512 2048 \
-  --hidden 2048 --intermediate 4096 --experts 128 --top-k 8 \
-  --correctness-epochs 2 --check-timed-output
+  --module experiments.prefill.serving --mode hybrid \
+  --requests 300 --repeats 3 --live-token-count --cuda-events
 ```
 
-Use `--mode direct` for direct delivery. Checks include PyTorch references,
-changing/skewed/empty routes and delayed peers. Repeats rotate order and exclude
-cold JIT. Profile separately with `--nvtx`.
+Use `--mode direct` for direct delivery. Profile separately with `--nvtx`.
+Historical fixed-bucket control: [figure](performance.svg), [results](results-h100.json).

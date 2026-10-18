@@ -51,6 +51,12 @@ __device__ __forceinline__ void send_credit(int signal, int peer, const DeviceAr
 __device__ __forceinline__ int packet_tokens(uint8_t* base, const Layout& l) {
     return static_cast<int>(reinterpret_cast<volatile Packet*>(base + l.request)->tokens);
 }
+__device__ __forceinline__ int live_source_tokens(const DeviceArgs& a) {
+    const int tokens = a.live_tokens ? *a.live_tokens : a.tokens;
+    if (tokens < 0 || tokens > a.tokens || tokens > a.bucket)
+        fail("live source tokens exceed input capacity/bucket", a);
+    return tokens;
+}
 __device__ __forceinline__ uint4 load_remote_vector(const void* pointer) {
     uint4 value;
     asm volatile("ld.volatile.global.v4.u32 {%0,%1,%2,%3}, [%4];"
@@ -91,6 +97,8 @@ __device__ __forceinline__ int direct_signal(int phase, int peer) { return phase
 // Direct requests contain one activation per selected worker, even if several
 // selected experts live there. All peers still exchange phase signals: an empty
 // message is completion, not permission to skip an epoch or buffer-reuse credit.
+// Worker loops carry residual grid-stride indices across actual-length source
+// segments, retaining parallelism without scanning inactive bucket rows.
 template <int kOperation>
 __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
     const Layout l = a.layout;
@@ -107,10 +115,10 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                 state->received_tokens[peer] = 0;
             }
             state->epoch = next;
-            state->source_tokens = a.tokens;
+            state->source_tokens = live_source_tokens(a);
         }
     } else if constexpr (kOperation == PlanDirectRequests) {
-        for (int token = tid; token < a.tokens; token += stride) {
+        for (int token = tid; token < state->source_tokens; token += stride) {
             unsigned workers = 0;
             for (int k = 0; k < l.topk; ++k) {
                 const int64_t expert = a.ids[token * l.topk + k];
@@ -125,13 +133,14 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                     workers & (1u << peer) ? atomicAdd(state->received_tokens + peer, 1) : -1;
         }
     } else if constexpr (kOperation == PackSource) {
+        const int source_tokens = state->source_tokens;
         if (tid < 4) {
             auto* packet = reinterpret_cast<Packet*>(a.base + l.request_slot(tid));
             packet->tokens = state->received_tokens[tid];
-            packet->reserved = a.tokens;
+            packet->reserved = source_tokens;
         }
-        for (int index = blockIdx.x; index < 4 * a.tokens; index += gridDim.x) {
-            const int peer = index / a.tokens, token = index % a.tokens;
+        for (int index = blockIdx.x; index < 4 * source_tokens; index += gridDim.x) {
+            const int peer = index / source_tokens, token = index % source_tokens;
             const int slot = *reinterpret_cast<const int*>(a.base + l.token_index(peer, token));
             if (slot < 0) continue;
             const int n = state->received_tokens[peer];
@@ -173,57 +182,60 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
             }
         }
     } else if constexpr (kOperation == Histogram) {
-        for (int i = tid; i < 4 * a.bucket * l.topk; i += stride) {
-            const int source = i / (a.bucket * l.topk);
-            const int token = (i / l.topk) % a.bucket, k = i % l.topk;
+        int i = tid;
+        for (int source = 0; source < 4; ++source) {
             const int n = state->received_tokens[source];
-            if (token >= n) continue;
             const uint8_t* packet = a.base + l.request_slot(source);
-            const int64_t expert = reinterpret_cast<const int64_t*>(packet + l.packet_ids(n))[token * l.topk + k];
-            if (expert < -1 || expert >= l.experts) fail("invalid real expert", a);
-            if (expert >= worker * l.local_experts() && expert < (worker + 1) * l.local_experts())
-                atomicAdd(a.counts + expert - worker * l.local_experts(), 1);
+            for (; i < n * l.topk; i += stride) {
+                const int64_t expert = reinterpret_cast<const int64_t*>(packet + l.packet_ids(n))[i];
+                if (expert < -1 || expert >= l.experts) fail("invalid real expert", a);
+                if (expert >= worker * l.local_experts() && expert < (worker + 1) * l.local_experts())
+                    atomicAdd(a.counts + expert - worker * l.local_experts(), 1);
+            }
+            i -= n * l.topk;
         }
     } else if constexpr (kOperation == PackRows) {
         __shared__ int slots[32];
-        for (int index = blockIdx.x; index < 4 * a.bucket; index += gridDim.x) {
-            const int source = index / a.bucket, compact_token = index % a.bucket;
+        int compact_token = blockIdx.x;
+        for (int source = 0; source < 4; ++source) {
             const int n = state->received_tokens[source];
-            if (compact_token >= n) continue;
             const uint8_t* packet = a.base + l.request_slot(source);
-            const int token = reinterpret_cast<const int*>(packet + l.packet_bytes(n))[compact_token];
-            if (token < 0 || uint64_t(token) >= reinterpret_cast<const Packet*>(packet)->reserved)
-                fail("direct original token outside source extent", a);
-            if (threadIdx.x == 0)
-                *reinterpret_cast<int*>(a.base + l.token_index(source, compact_token)) = token;
-            if (threadIdx.x < l.topk) {
-                const int k = threadIdx.x;
-                const int64_t expert = reinterpret_cast<const int64_t*>(packet + l.packet_ids(n))[compact_token * l.topk + k];
-                int row = -1;
-                if (expert >= worker * l.local_experts() && expert < (worker + 1) * l.local_experts()) {
-                    const int e = expert - worker * l.local_experts();
-                    row = a.starts[e] + atomicAdd(a.cursors + e, 1);
-                    const int max_rows = 4 * a.bucket * min(l.topk, l.local_experts()) +
-                                         l.local_experts() * (l.alignment - 1);
-                    if (row < 0 || row >= max_rows) fail("expert row overflow", a);
-                    a.recv_weights[row] = reinterpret_cast<const float*>(packet + l.packet_weights(n))[compact_token * l.topk + k];
-                    a.receipt[(source * a.bucket + token) * l.topk + k] = row;
+            for (; compact_token < n; compact_token += gridDim.x) {
+                const int token = reinterpret_cast<const int*>(packet + l.packet_bytes(n))[compact_token];
+                if (token < 0 || uint64_t(token) >= reinterpret_cast<const Packet*>(packet)->reserved)
+                    fail("direct original token outside source extent", a);
+                if (threadIdx.x == 0)
+                    *reinterpret_cast<int*>(a.base + l.token_index(source, compact_token)) = token;
+                if (threadIdx.x < l.topk) {
+                    const int k = threadIdx.x;
+                    const int64_t expert = reinterpret_cast<const int64_t*>(packet + l.packet_ids(n))[compact_token * l.topk + k];
+                    int row = -1;
+                    if (expert >= worker * l.local_experts() && expert < (worker + 1) * l.local_experts()) {
+                        const int e = expert - worker * l.local_experts();
+                        row = a.starts[e] + atomicAdd(a.cursors + e, 1);
+                        const int max_rows = 4 * a.bucket * min(l.topk, l.local_experts()) +
+                                             l.local_experts() * (l.alignment - 1);
+                        if (row < 0 || row >= max_rows) fail("expert row overflow", a);
+                        a.recv_weights[row] = reinterpret_cast<const float*>(packet + l.packet_weights(n))[compact_token * l.topk + k];
+                        a.receipt[(source * a.bucket + token) * l.topk + k] = row;
+                    }
+                    slots[k] = row;
                 }
-                slots[k] = row;
+                __syncthreads();
+                for (int k = 0; k < l.topk; ++k) {
+                    const int row = slots[k];
+                    if (row < 0) continue;
+                    const int vectors = l.hidden * l.element_bytes() / 16;
+                    for (int h = threadIdx.x; h < vectors; h += blockDim.x)
+                        reinterpret_cast<uint4*>(a.recv_x)[row * vectors + h] =
+                            reinterpret_cast<const uint4*>(packet + l.packet_x())[compact_token * vectors + h];
+                    for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x)
+                        a.recv_scales[row + group * a.recv_scale_stride1] =
+                            reinterpret_cast<const float*>(packet + l.packet_scales(n))[compact_token * l.scale_groups() + group];
+                }
+                __syncthreads();
             }
-            __syncthreads();
-            for (int k = 0; k < l.topk; ++k) {
-                const int row = slots[k];
-                if (row < 0) continue;
-                const int vectors = l.hidden * l.element_bytes() / 16;
-                for (int h = threadIdx.x; h < vectors; h += blockDim.x)
-                    reinterpret_cast<uint4*>(a.recv_x)[row * vectors + h] =
-                        reinterpret_cast<const uint4*>(packet + l.packet_x())[compact_token * vectors + h];
-                for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x)
-                    a.recv_scales[row + group * a.recv_scale_stride1] =
-                        reinterpret_cast<const float*>(packet + l.packet_scales(n))[compact_token * l.scale_groups() + group];
-            }
-            __syncthreads();
+            compact_token -= n;
         }
     } else if constexpr (kOperation == PublishPackAndCredit) {
         if (tid == 0) {
@@ -233,18 +245,21 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                 send_credit(direct_signal(RequestCredit, worker), source + 4, a, true);
         }
     } else if constexpr (kOperation == MakePartials) {
-        for (size_t i = tid; i < size_t(4) * a.bucket * l.hidden; i += stride) {
-            const int source = i / (size_t(a.bucket) * l.hidden);
-            const int compact_token = (i / l.hidden) % a.bucket, h = i % l.hidden;
-            if (compact_token >= state->received_tokens[source]) continue;
-            const int token = *reinterpret_cast<const int*>(a.base + l.token_index(source, compact_token));
-            float sum = 0;
-            for (int k = 0; k < l.topk; ++k) {
-                const int row = a.receipt[(source * a.bucket + token) * l.topk + k];
-                if (row >= 0)
-                    sum += __bfloat162float(reinterpret_cast<const nv_bfloat16*>(a.rows)[size_t(row) * l.hidden + h]);
+        size_t i = tid;
+        for (int source = 0; source < 4; ++source) {
+            const int n = state->received_tokens[source];
+            for (; i < size_t(n) * l.hidden; i += stride) {
+                const int compact_token = i / l.hidden, h = i % l.hidden;
+                const int token = *reinterpret_cast<const int*>(a.base + l.token_index(source, compact_token));
+                float sum = 0;
+                for (int k = 0; k < l.topk; ++k) {
+                    const int row = a.receipt[(source * a.bucket + token) * l.topk + k];
+                    if (row >= 0)
+                        sum += __bfloat162float(reinterpret_cast<const nv_bfloat16*>(a.rows)[size_t(row) * l.hidden + h]);
+                }
+                reinterpret_cast<nv_bfloat16*>(a.base + l.partial(source, compact_token))[h] = __float2bfloat16(sum);
             }
-            reinterpret_cast<nv_bfloat16*>(a.base + l.partial(source, compact_token))[h] = __float2bfloat16(sum);
+            i -= size_t(n) * l.hidden;
         }
     } else if constexpr (kOperation == PublishConsumedAndWaitCredit) {
         if (tid == 0)
@@ -297,34 +312,35 @@ __global__ void directional_kernel(DeviceArgs a) {
             const uint64_t next = state->epoch + 1;
             wait_signal(0, RequestCredit, next - 1, a);
             state->epoch = next;
-            state->source_tokens = a.tokens;
+            state->source_tokens = live_source_tokens(a);
         }
     } else if constexpr (kOperation == PackSource) {
+        const int tokens = state->source_tokens;
         uint8_t* packet = a.base + l.request;
         if (tid == 0) {
-            reinterpret_cast<Packet*>(packet)->tokens = a.tokens;
+            reinterpret_cast<Packet*>(packet)->tokens = tokens;
             reinterpret_cast<Packet*>(packet)->reserved = 0;
         }
-        const size_t xbytes = size_t(a.tokens) * l.hidden * l.element_bytes();
+        const size_t xbytes = size_t(tokens) * l.hidden * l.element_bytes();
         for (size_t i = tid; i < xbytes / 16; i += stride)
             reinterpret_cast<uint4*>(packet + l.packet_x())[i] =
                 reinterpret_cast<const uint4*>(a.x)[i];
-        for (int i = tid; i < a.tokens * l.topk; i += stride) {
+        for (int i = tid; i < tokens * l.topk; i += stride) {
             const int64_t expert = a.ids[i];
             if (expert < -1 || expert >= l.experts) fail("invalid real expert", a);
             for (int previous = 0; expert >= 0 && previous < i % l.topk; ++previous)
                 if (a.ids[i - i % l.topk + previous] == expert)
                     fail("duplicate expert for one token", a);
-            reinterpret_cast<int64_t*>(packet + l.packet_ids(a.tokens))[i] = a.ids[i];
-            reinterpret_cast<float*>(packet + l.packet_weights(a.tokens))[i] = a.weights[i];
+            reinterpret_cast<int64_t*>(packet + l.packet_ids(tokens))[i] = a.ids[i];
+            reinterpret_cast<float*>(packet + l.packet_weights(tokens))[i] = a.weights[i];
         }
-        for (int i = tid; i < a.tokens * l.scale_groups(); i += stride) {
+        for (int i = tid; i < tokens * l.scale_groups(); i += stride) {
             const int token = i / l.scale_groups(), group = i % l.scale_groups();
-            reinterpret_cast<float*>(packet + l.packet_scales(a.tokens))[i] =
+            reinterpret_cast<float*>(packet + l.packet_scales(tokens))[i] =
                 a.scales[token * a.scale_stride0 + group * a.scale_stride1];
         }
     } else if constexpr (kOperation == SendRequest) {
-        transfer(a, l.request, l.request, l.packet_bytes(a.tokens), 0, RequestReady);
+        transfer(a, l.request, l.request, l.packet_bytes(state->source_tokens), 0, RequestReady);
     } else if constexpr (kOperation == BeginWorker) {
         if (tid == 0) {
             ++state->epoch;
@@ -338,23 +354,22 @@ __global__ void directional_kernel(DeviceArgs a) {
                 wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
         }
         __syncthreads();
-        if (tid == 0) {
-            for (int source = 0; source < 4; ++source) {
-                const int n = packet_tokens(a.peers[source], l);
-                if (n < 0 || n > a.bucket) fail("source tokens exceed bucket", a);
-                state->received_tokens[source] = n;
-            }
-        }
-        for (int i = tid; i < 4 * a.bucket * l.topk; i += stride) {
-            const int source = i / (a.bucket * l.topk);
-            const int token = (i / l.topk) % a.bucket, k = i % l.topk;
+        int i = tid;
+        for (int source = 0; source < 4; ++source) {
+            // Every CTA reads the ready packet directly. received_tokens is
+            // published for subsequent kernels, not cross-CTA reads here.
             const int n = packet_tokens(a.peers[source], l);
-            if (token >= n) continue;
+            if (n < 0 || n > a.bucket) fail("source tokens exceed bucket", a);
+            if (tid == 0)
+                state->received_tokens[source] = n;
             const uint8_t* packet = a.peers[source] + l.request;
-            const int64_t expert = reinterpret_cast<const volatile int64_t*>(packet + l.packet_ids(n))[token * l.topk + k];
-            if (expert < -1 || expert >= l.experts) fail("invalid real expert", a);
-            if (expert >= worker * l.local_experts() && expert < (worker + 1) * l.local_experts())
-                atomicAdd(a.counts + expert - worker * l.local_experts(), 1);
+            for (; i < n * l.topk; i += stride) {
+                const int64_t expert = reinterpret_cast<const volatile int64_t*>(packet + l.packet_ids(n))[i];
+                if (expert < -1 || expert >= l.experts) fail("invalid real expert", a);
+                if (expert >= worker * l.local_experts() && expert < (worker + 1) * l.local_experts())
+                    atomicAdd(a.counts + expert - worker * l.local_experts(), 1);
+            }
+            i -= n * l.topk;
         }
     } else if constexpr (kOperation == Prefix) {
         if (tid == 0) {
@@ -369,39 +384,41 @@ __global__ void directional_kernel(DeviceArgs a) {
         }
     } else if constexpr (kOperation == PackRows) {
         __shared__ int slots[32];
-        for (int index = blockIdx.x; index < 4 * a.bucket; index += gridDim.x) {
-            const int source = index / a.bucket, token = index % a.bucket;
+        int token = blockIdx.x;
+        for (int source = 0; source < 4; ++source) {
             const int n = state->received_tokens[source];
-            if (token >= n) continue;
             const uint8_t* packet = a.peers[source] + l.request;
-            if (threadIdx.x < l.topk) {
-                const int k = threadIdx.x;
-                const int64_t expert = reinterpret_cast<const volatile int64_t*>(packet + l.packet_ids(n))[token * l.topk + k];
-                int row = -1;
-                if (expert >= worker * l.local_experts() && expert < (worker + 1) * l.local_experts()) {
-                    const int e = expert - worker * l.local_experts();
-                    row = a.starts[e] + atomicAdd(a.cursors + e, 1);
-                    const int max_rows = 4 * a.bucket * min(l.topk, l.local_experts()) +
-                                         l.local_experts() * (l.alignment - 1);
-                    if (row < 0 || row >= max_rows) fail("expert row overflow", a);
-                    a.recv_weights[row] = reinterpret_cast<const volatile float*>(packet + l.packet_weights(n))[token * l.topk + k];
-                    a.receipt[(source * a.bucket + token) * l.topk + k] = row;
+            for (; token < n; token += gridDim.x) {
+                if (threadIdx.x < l.topk) {
+                    const int k = threadIdx.x;
+                    const int64_t expert = reinterpret_cast<const volatile int64_t*>(packet + l.packet_ids(n))[token * l.topk + k];
+                    int row = -1;
+                    if (expert >= worker * l.local_experts() && expert < (worker + 1) * l.local_experts()) {
+                        const int e = expert - worker * l.local_experts();
+                        row = a.starts[e] + atomicAdd(a.cursors + e, 1);
+                        const int max_rows = 4 * a.bucket * min(l.topk, l.local_experts()) +
+                                             l.local_experts() * (l.alignment - 1);
+                        if (row < 0 || row >= max_rows) fail("expert row overflow", a);
+                        a.recv_weights[row] = reinterpret_cast<const volatile float*>(packet + l.packet_weights(n))[token * l.topk + k];
+                        a.receipt[(source * a.bucket + token) * l.topk + k] = row;
+                    }
+                    slots[k] = row;
                 }
-                slots[k] = row;
+                __syncthreads();
+                for (int k = 0; k < l.topk; ++k) {
+                    const int row = slots[k];
+                    if (row < 0) continue;
+                    const int vectors = l.hidden * l.element_bytes() / 16;
+                    for (int h = threadIdx.x; h < vectors; h += blockDim.x)
+                        reinterpret_cast<uint4*>(a.recv_x)[row * vectors + h] =
+                            load_remote_vector(packet + l.packet_x() + size_t(token * vectors + h) * sizeof(uint4));
+                    for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x)
+                        a.recv_scales[row + group * a.recv_scale_stride1] =
+                            reinterpret_cast<const volatile float*>(packet + l.packet_scales(n))[token * l.scale_groups() + group];
+                }
+                __syncthreads();
             }
-            __syncthreads();
-            for (int k = 0; k < l.topk; ++k) {
-                const int row = slots[k];
-                if (row < 0) continue;
-                const int vectors = l.hidden * l.element_bytes() / 16;
-                for (int h = threadIdx.x; h < vectors; h += blockDim.x)
-                    reinterpret_cast<uint4*>(a.recv_x)[row * vectors + h] =
-                        load_remote_vector(packet + l.packet_x() + size_t(token * vectors + h) * sizeof(uint4));
-                for (int group = threadIdx.x; group < l.scale_groups(); group += blockDim.x)
-                    a.recv_scales[row + group * a.recv_scale_stride1] =
-                        reinterpret_cast<const volatile float*>(packet + l.packet_scales(n))[token * l.scale_groups() + group];
-            }
-            __syncthreads();
+            token -= n;
         }
     } else if constexpr (kOperation == PublishPackAndCredit) {
         if (tid == 0) {
@@ -417,16 +434,20 @@ __global__ void directional_kernel(DeviceArgs a) {
                 wait_local(&control(a.peers[i])->partials_consumed, state->epoch - 1, a);
         }
         __syncthreads();
-        for (size_t i = tid; i < size_t(4) * a.bucket * l.hidden; i += stride) {
-            const int source = i / (size_t(a.bucket) * l.hidden);
-            const int token = (i / l.hidden) % a.bucket, h = i % l.hidden;
-            float sum = 0;
-            for (int k = 0; k < l.topk; ++k) {
-                const int row = a.receipt[(source * a.bucket + token) * l.topk + k];
-                if (row >= 0)
-                    sum += __bfloat162float(reinterpret_cast<const nv_bfloat16*>(a.rows)[size_t(row) * l.hidden + h]);
+        size_t i = tid;
+        for (int source = 0; source < 4; ++source) {
+            const int n = state->received_tokens[source];
+            for (; i < size_t(n) * l.hidden; i += stride) {
+                const int token = i / l.hidden, h = i % l.hidden;
+                float sum = 0;
+                for (int k = 0; k < l.topk; ++k) {
+                    const int row = a.receipt[(source * a.bucket + token) * l.topk + k];
+                    if (row >= 0)
+                        sum += __bfloat162float(reinterpret_cast<const nv_bfloat16*>(a.rows)[size_t(row) * l.hidden + h]);
+                }
+                reinterpret_cast<nv_bfloat16*>(a.base + l.partial(source, token))[h] = __float2bfloat16(sum);
             }
-            reinterpret_cast<nv_bfloat16*>(a.base + l.partial(source, token))[h] = __float2bfloat16(sum);
+            i -= size_t(n) * l.hidden;
         }
     } else if constexpr (kOperation == PublishPartialAndWait) {
         if (tid == 0) {

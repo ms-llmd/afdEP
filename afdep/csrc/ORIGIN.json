@@ -18,7 +18,8 @@
     "Add index bounds validation and initialization-failure cleanup.",
     "Remove unused cpu_timeout_s constructor argument; GPU timeout and distributed bootstrap timeout remain explicit in their respective layers.",
     "Validate 16-byte alignment of nonempty source activation and output pointers before vector-copy kernels, including storage-offset views.",
-    "Add validated caller-owned receive tensors with per-exchange weight/receipt resets; preserve native device protocol and reader credits."
+    "Add validated caller-owned receive tensors with per-exchange weight/receipt resets; preserve native device protocol and reader credits.",
+    "Add opt-in eager exact receive allocation: discover GPU counts and read aligned counts on the CPU before allocating receive payload tensors, then retain the same packing and credit protocol."
   ],
   "verification": "The original implementation was validated on eight H100 GPUs. This extracted build requires its own GPU validation before claiming equivalence or performance.",
   "extracted_file_sha256": {
@@ -26,13 +27,17 @@
     "afdep/csrc/kernels.cuh": "05b50095f694231db3012821aed1fdf48e86b7a06d9c81eaeb8aee3e4db08bc0"
   },
   "current_file_sha256": {
-    "afdep/csrc/layout.hpp": "9cfcfcc6aa9b2e13c279478002a813f5722629b7ae92e9fb6c0bc4aa7fbd0771",
-    "afdep/csrc/kernels.cuh": "2245b2231b46a8e2ac0c76b91286d9d855a9d15633c4ee965db64c7025bc8593"
+    "afdep/csrc/layout.hpp": "3a67c2a0e06c6cc5e053f2d5b0e4ac4a6eed48227576b0ab2a80f43ac1ff7d9c",
+    "afdep/csrc/kernels.cuh": "820c16685d6b803b6c5db0f022dc2b14ec646848ce174ed3f79af09e8ce3f215"
   },
   "protocol_changes": [
     {
       "date": "2026-10-18",
       "description": "Add opt-in direct delivery alongside the original hybrid protocol. Compact one request per selected worker with original-token maps, return worker partials directly to the source, and reduce there. Use FULL GIN/world addressing, per-peer readiness and reuse credits, and GPU-shared GIN contexts for concurrent peer sends. Hybrid remains the default; its allocation and protocol ordering are retained."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Add opt-in device-side live source token counts for fixed-capacity inputs and CUDA graphs. BeginSource validates and caches the live prefix once; packing, compact maps, packet layouts and GIN request bytes use that count in both modes. Iterate worker histogram, packing and partial generation over actual per-source counts while preserving every readiness signal, reuse credit and receipt bucket stride."
     }
   ]
 }

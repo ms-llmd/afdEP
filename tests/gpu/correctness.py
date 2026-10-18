@@ -40,7 +40,7 @@ DELAYED_EPOCH = 8
 DELAY_SECONDS = 0.02
 
 
-def check_received(exchange: Exchange, epoch: int) -> None:
+def check_received(exchange: Exchange, epoch: int, *, exact_rows: bool = False) -> None:
     """Verify every routed row, weight, expert boundary, and receipt mapping."""
     received = exchange.received
     config = exchange.config
@@ -108,6 +108,16 @@ def check_received(exchange: Exchange, epoch: int) -> None:
         )
     assert received.recv_count_psum.cpu().tolist() == expected_ends
     assert received.recv_counts_host == expected_padded_counts
+    if exact_rows:
+        assert received.recv_x.shape[0] == sum(expected_padded_counts), (
+            "exact receive storage does not match GPU-discovered aligned counts"
+        )
+        assert received.recv_topk_weights.shape == (sum(expected_padded_counts),)
+        if received.recv_scale is not None:
+            assert received.recv_scale.shape == (
+                sum(expected_padded_counts),
+                config.hidden_size // FP8_BLOCK_SIZE,
+            )
     positions = real_rows.nonzero(as_tuple=True)[0]
     actual_experts = torch.bucketize(positions, received.recv_count_psum, right=True)
     torch.testing.assert_close(actual_experts, row_experts[positions], rtol=0, atol=0)
@@ -146,7 +156,13 @@ def cases(capacity: int) -> list[Case]:
     ]
 
 
-def eager_checks(buffer: afdep.Buffer, config: afdep.Config, rank: int) -> list[str]:
+def eager_checks(
+    buffer: afdep.Buffer,
+    config: afdep.Config,
+    rank: int,
+    *,
+    exact_rows: bool = False,
+) -> list[str]:
     checked = []
     for case in cases(config.capacity_tokens_per_rank):
         exchange = make_exchange(buffer, config, rank, case)
@@ -154,16 +170,65 @@ def eager_checks(buffer: afdep.Buffer, config: afdep.Config, rank: int) -> list[
             assert not exchange.inputs.scale.is_contiguous()
         for epoch in range(2):
             exchange.update(epoch)
-            exchange.run(read_host_counts=True)
+            if exact_rows and rank < FFN_RANKS:
+                if rank == DELAYED_WORKER and case.name == "uneven" and epoch == 1:
+                    time.sleep(DELAY_SECONDS)
+                exchange.received = buffer.worker_receive(
+                    bucket=case.bucket, read_host_counts=True, exact_rows=True
+                )
+                buffer.worker_reply(
+                    expert_rows(exchange.received, rank, config),
+                    exchange.received.receipt,
+                )
+            else:
+                exchange.run(read_host_counts=True)
             torch.cuda.synchronize()
             if rank < FFN_RANKS:
-                check_received(exchange, epoch)
+                check_received(exchange, epoch, exact_rows=exact_rows)
             else:
                 exchange.check_output()
             # Eager tests are diagnostic and may perform host inspections.
             dist.barrier()
         checked.append(case.name)
     return checked
+
+
+def exact_receive_checks(buffer: afdep.Buffer, config: afdep.Config, rank: int) -> dict:
+    """Discover row capacity on the GPU, then allocate without stale epochs."""
+    if rank < FFN_RANKS:
+        reserved = buffer.reserve_worker_receive(bucket=1)
+        invalid = (
+            {"exact_rows": True},
+            {"exact_rows": True, "read_host_counts": True, "out": reserved},
+        )
+        for options in invalid:
+            try:
+                buffer.worker_receive(bucket=1, **options)
+            except (ValueError, RuntimeError):
+                pass
+            else:
+                raise AssertionError("invalid exact receive options were accepted")
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            try:
+                buffer.worker_receive(bucket=1, read_host_counts=True, exact_rows=True)
+            except RuntimeError as error:
+                assert "captur" in str(error).lower(), str(error)
+            else:
+                raise AssertionError("exact receive allowed host counts in a graph")
+    dist.barrier()
+    # A successful exchange after all invalid calls proves that they did not
+    # advance the transport epoch or enqueue a receive waiting for absent peers.
+    checked = eager_checks(buffer, config, rank, exact_rows=True)
+    return {
+        "cases": checked,
+        "capacity_matches_discovered_aligned_counts": True,
+        "zero_row_allocations": True,
+        "invalid_options_rejected_before_exchange": True,
+        "captured_count_sync_rejected_before_exchange": True,
+        "changing_buckets_and_routes": True,
+        "delayed_worker_seconds": DELAY_SECONDS,
+    }
 
 
 def graph_checks(
@@ -368,6 +433,126 @@ def reusable_receive_checks(
     }
 
 
+def live_token_checks(
+    buffer: afdep.Buffer, config: afdep.Config, rank: int, epochs: int
+) -> dict:
+    """Replay one graph while GPU source counts change inside fixed storage."""
+    capacity = config.capacity_tokens_per_rank
+    full = Case("live_capacity", (capacity,) * ATTENTION_RANKS, strided_scales=True)
+    exchange = make_exchange(buffer, config, rank, full)
+    reservation = (
+        buffer.reserve_worker_receive(bucket=capacity) if rank < FFN_RANKS else None
+    )
+    live_tokens = (
+        torch.full((1,), capacity, dtype=torch.int32, device="cuda")
+        if rank >= FFN_RANKS
+        else None
+    )
+
+    def run() -> None:
+        if rank < FFN_RANKS:
+            received = buffer.worker_receive(bucket=capacity, out=reservation)
+            buffer.worker_reply(expert_rows(received, rank, config), received.receipt)
+        else:
+            buffer.source_dispatch(
+                exchange.inputs.x,
+                exchange.inputs.ids,
+                exchange.inputs.weights,
+                x_scale=exchange.inputs.scale,
+                live_tokens=live_tokens,
+                bucket=capacity,
+            )
+            buffer.source_collect(exchange.output)
+
+    if rank >= FFN_RANKS:
+        malformed = (
+            torch.zeros(1, dtype=torch.int32),
+            torch.zeros(1, dtype=torch.int64, device="cuda"),
+            torch.zeros(0, dtype=torch.int32, device="cuda"),
+            torch.zeros(2, dtype=torch.int32, device="cuda"),
+        )
+        for count in malformed:
+            try:
+                buffer.source_dispatch(
+                    exchange.inputs.x,
+                    exchange.inputs.ids,
+                    exchange.inputs.weights,
+                    x_scale=exchange.inputs.scale,
+                    live_tokens=count,
+                    bucket=capacity,
+                )
+            except (ValueError, RuntimeError):
+                pass
+            else:
+                raise AssertionError("malformed GPU live-token scalar was accepted")
+    dist.barrier()
+    run()  # Successful recovery proves invalid counts did not advance an epoch.
+    torch.cuda.synchronize()
+    exchange.check_output()
+    dist.barrier()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        run()
+    torch.cuda.synchronize()
+    dist.barrier()
+    small = min(17, capacity)
+    changed = (
+        Case("max_unequal", (capacity, capacity // 2, 0, small)),
+        Case("one_hot_worker", (1, 0, 1, 1), worker=1),
+        Case("zero", (0,) * ATTENTION_RANKS),
+        Case("small_rotating", (small, 1, 0, min(7, capacity)), rotate_worker=True),
+        Case("max_allskip", (capacity,) * ATTENTION_RANKS, skip_all_experts=True),
+        Case("max_hot_worker", (capacity,) * ATTENTION_RANKS, worker=2),
+        Case("zero_after_dense", (0,) * ATTENTION_RANKS),
+        Case("capacity_after_zero", (capacity,) * ATTENTION_RANKS),
+        Case("zero_after_capacity", (0,) * ATTENTION_RANKS),
+    )
+    scalar_pointer = live_tokens.data_ptr() if live_tokens is not None else None
+    for epoch in range(epochs):
+        case = changed[epoch % len(changed)]
+        sample = None
+        if rank >= FFN_RANKS:
+            sample = make_inputs(case, rank - FFN_RANKS, epoch + 1, config)
+            count = sample.x.shape[0]
+            # Tail routes are intentionally invalid, not masked with -1. Any
+            # capacity-based source scan instead of the GPU count must fail.
+            exchange.inputs.ids.fill_(-99)
+            exchange.inputs.weights.fill_(float("nan"))
+            exchange.inputs.x[:count].copy_(sample.x)
+            exchange.inputs.ids[:count].copy_(sample.ids)
+            exchange.inputs.weights[:count].copy_(sample.weights)
+            if sample.scale is not None:
+                exchange.inputs.scale.fill_(float("nan"))
+                exchange.inputs.scale[:count].copy_(sample.scale)
+            exchange.output.fill_(float("nan"))
+            live_tokens.fill_(count)
+            assert live_tokens.data_ptr() == scalar_pointer
+        if rank == DELAYED_WORKER and epoch == DELAYED_EPOCH:
+            time.sleep(DELAY_SECONDS)
+        graph.replay()
+        if sample is not None:
+            torch.cuda.synchronize()
+            count = sample.x.shape[0]
+            live = Exchange(buffer, config, rank, case, sample, exchange.output[:count])
+            live.check_output()
+            assert bool(torch.isnan(exchange.output[count:]).all()), (
+                "reply collection wrote beyond the GPU live-token count"
+            )
+    torch.cuda.synchronize()
+    dist.barrier()
+    return {
+        "graph_epochs": epochs,
+        "one_fixed_capacity_graph": True,
+        "cases": [case.name for case in changed],
+        "malformed_counts_rejected_before_exchange": True,
+        "invalid_tail_routes_not_read": True,
+        "output_tail_untouched": True,
+        "stable_gpu_count_pointer": True,
+        "per_epoch_cpu_barrier": False,
+        "delayed_worker_seconds": DELAY_SECONDS,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--payload", choices=("bf16", "fp8"), default="bf16")
@@ -393,9 +578,11 @@ def main() -> None:
     )
     buffer = afdep.Buffer(group=dist.group.WORLD, config=config)
     eager = eager_checks(buffer, config, rank)
+    exact = exact_receive_checks(buffer, config, rank)
     graph = graph_checks(buffer, config, rank, args.epochs)
     alignment_checks(buffer, config, rank)
     reusable = reusable_receive_checks(buffer, config, rank, args.epochs)
+    live_tokens = live_token_checks(buffer, config, rank, args.epochs)
     buffer.close()
     results = [None] * dist.get_world_size()
     dist.all_gather_object(results, {"rank": rank, "ok": True})
@@ -407,8 +594,10 @@ def main() -> None:
                     "mode": args.mode,
                     "config": asdict(config),
                     "eager_cases": eager,
+                    "exact_receive": exact,
                     "graph": graph,
                     "reusable_receive": reusable,
+                    "live_tokens": live_tokens,
                     "misaligned_contiguous_source_and_output_rejected": True,
                     "ranks": results,
                 }

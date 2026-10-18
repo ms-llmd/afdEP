@@ -117,6 +117,7 @@ struct DeviceArgs {
     const float* scales;
     const int64_t* ids;
     const float* weights;
+    const int* live_tokens;
     uint8_t* recv_x;
     float* recv_scales;
     float* recv_weights;

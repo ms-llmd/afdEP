@@ -105,12 +105,22 @@ Gloo lifecycle timeouts are configured on the process group, independently.
 | `ids`, `weights` | Contiguous `[T,K]`, INT64 and FP32 |
 | `x_scale` | FP8 only: FP32 `[T,H/128]`; strides accepted |
 | `out` | Contiguous BF16 `[T,H]`, including for FP8 dispatch |
+| `live_tokens` | Optional contiguous CUDA INT32 `[1]`; live prefix length within `T` |
 
 All tensors use the buffer's CUDA device. `x`/`out` need 16-byte-aligned pointers;
 contiguous views with offset storage can fail this check. IDs are real experts
 `[0,E)` or `-1` for a disabled slot; nonnegative IDs must be unique per token.
 FP8 is caller-prequantized block-128 data with FP32 dequantization scales;
 afdEP transports it without choosing a quantizer.
+
+For fixed-shape graphs with changing token counts, pass
+`source_dispatch(..., bucket=bucket, live_tokens=count)`. The GPU reads `count`
+once per exchange and checks `0 ≤ count[0] ≤ T ≤ bucket`. Only that leading
+prefix is read, transferred, and returned; only `out[:count[0]]` is valid.
+Inactive rows are ignored and are not sent as padding. Keep count storage alive
+and update it on the buffer's ordered CUDA stream before dispatch/replay.
+Without this argument, all `T` rows remain active. Invalid device count values
+are fatal device bounds errors, not a recoverable allocation fallback.
 
 ## Receive rows and replies
 
@@ -125,6 +135,14 @@ start[e] = 0 if e == 0 else round_up(recv_count_psum[e-1], A)
 end[e] = recv_count_psum[e]
 allocated_rows = 4 * bucket * min(K, E/4) + (E/4) * (A-1)
 ```
+
+This is the default allocation. For eager exact sizing, use
+`worker_receive(bucket=bucket, read_host_counts=True, exact_rows=True)` without
+`out`. It discovers GPU counts, waits for their CPU copy, then allocates payload
+storage with `allocated_rows = sum(recv_counts_host)` before packing. Alignment
+gaps remain; an empty receive has zero rows. This option is forbidden during
+CUDA capture and cannot use caller-owned storage. Registered transport windows
+retain their configured capacity in either case.
 
 Only `[start[e], end[e])` contains valid activations; gaps/tails are unspecified.
 Padding weights are zero. Host counts, when requested, are aligned per-expert
@@ -164,8 +182,9 @@ finish; readiness is awaited on every active GIN context, including empty stripe
 
 Initialize/warm up outside CUDA capture. Capture a complete role-specific
 exchange, use device counts, and retain fixed addresses/shapes/bucket. Values and
-routes may change in place; different buckets use separate graphs replayed in
-the same logical order on every rank. Concurrent use of one buffer is unsupported.
+routes, including optional `live_tokens`, may change in place; different buckets
+use separate graphs replayed in the same logical order on every rank.
+Concurrent use of one buffer is unsupported.
 
 `close()` is collective, outside capture, after final GPU work; it drains peers
 before releasing windows. Do not use collective close as rank-local exception
