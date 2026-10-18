@@ -95,6 +95,57 @@ __device__ __forceinline__ void copy_expert_rows(const DeviceArgs& a, const uint
     }
 }
 
+// Eight adjacent BF16 values share one vector load/store and one route lookup.
+struct BF16VectorSum {
+    static constexpr int kValues = sizeof(uint4) / sizeof(nv_bfloat16);
+    float values[kValues] = {};
+    __device__ __forceinline__ void add(uint4 input) {
+#pragma unroll
+        for (int pair = 0; pair < kValues / 2; ++pair) {
+            const float2 value = __bfloat1622float2(reinterpret_cast<const __nv_bfloat162*>(&input)[pair]);
+            values[2 * pair] += value.x;
+            values[2 * pair + 1] += value.y;
+        }
+    }
+    __device__ __forceinline__ uint4 pack() const {
+        uint4 output;
+#pragma unroll
+        for (int pair = 0; pair < kValues / 2; ++pair)
+            reinterpret_cast<__nv_bfloat162*>(&output)[pair] =
+                __floats2bfloat162_rn(values[2 * pair], values[2 * pair + 1]);
+        return output;
+    }
+};
+
+template <bool kDirect>
+__device__ __forceinline__ void make_partial_vectors(const DeviceArgs& a) {
+    const Layout l = a.layout;
+    const Control* state = control(a.base);
+    constexpr int kMaxTopK = 32;
+    __shared__ int rows[kMaxTopK];
+    const int vectors = l.hidden / BF16VectorSum::kValues;
+    int compact_token = blockIdx.x;
+    for (int source = 0; source < 4; ++source) {
+        const int n = state->received_tokens[source];
+        for (; compact_token < n; compact_token += gridDim.x) {
+            const int token = kDirect ?
+                *reinterpret_cast<const int*>(a.base + l.token_index(source, compact_token)) : compact_token;
+            if (threadIdx.x < l.topk)
+                rows[threadIdx.x] = a.receipt[(source * a.bucket + token) * l.topk + threadIdx.x];
+            __syncthreads();
+            for (int h = threadIdx.x; h < vectors; h += blockDim.x) {
+                BF16VectorSum sum;
+                for (int k = 0; k < l.topk; ++k)
+                    if (rows[k] >= 0)
+                        sum.add(reinterpret_cast<const uint4*>(a.rows)[size_t(rows[k]) * vectors + h]);
+                reinterpret_cast<uint4*>(a.base + l.partial(source, compact_token))[h] = sum.pack();
+            }
+            __syncthreads();
+        }
+        compact_token -= n;
+    }
+}
+
 // One final strong signal per active context. Each receiver waits every one;
 // a signal on context zero cannot order transfers issued on other contexts.
 __device__ __forceinline__ void transfer(const DeviceArgs& a, size_t src, size_t dst,
@@ -273,22 +324,7 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                 send_credit(direct_signal(RequestCredit, worker), source + 4, a, true);
         }
     } else if constexpr (kOperation == MakePartials) {
-        size_t i = tid;
-        for (int source = 0; source < 4; ++source) {
-            const int n = state->received_tokens[source];
-            for (; i < size_t(n) * l.hidden; i += stride) {
-                const int compact_token = i / l.hidden, h = i % l.hidden;
-                const int token = *reinterpret_cast<const int*>(a.base + l.token_index(source, compact_token));
-                float sum = 0;
-                for (int k = 0; k < l.topk; ++k) {
-                    const int row = a.receipt[(source * a.bucket + token) * l.topk + k];
-                    if (row >= 0)
-                        sum += __bfloat162float(reinterpret_cast<const nv_bfloat16*>(a.rows)[size_t(row) * l.hidden + h]);
-                }
-                reinterpret_cast<nv_bfloat16*>(a.base + l.partial(source, compact_token))[h] = __float2bfloat16(sum);
-            }
-            i -= size_t(n) * l.hidden;
-        }
+        make_partial_vectors<true>(a);
     } else if constexpr (kOperation == PublishConsumedAndWaitCredit) {
         if (tid == 0)
             for (int source = 0; source < 4; ++source)
@@ -304,18 +340,18 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                 for (int q = 0; q < a.stripes; ++q)
                     wait_signal(q, direct_signal(ReplyReady, peer), state->epoch, a);
         __syncthreads();
-        for (size_t i = tid; i < size_t(state->source_tokens) * l.hidden; i += stride) {
-            const int token = i / l.hidden, h = i % l.hidden;
-            float sum = 0;
-            for (int peer = 0; peer < 4; ++peer) {
-                const int slot = *reinterpret_cast<const int*>(a.base + l.token_index(peer, token));
-                if (slot >= 0)
-                    sum += __bfloat162float(__ushort_as_bfloat16(
-                        reinterpret_cast<const volatile uint16_t*>(a.base + l.reply_slot(peer))[
-                            size_t(slot) * l.hidden + h]));
+        const int vectors = l.hidden / BF16VectorSum::kValues;
+        for (int token = blockIdx.x; token < state->source_tokens; token += gridDim.x)
+            for (int h = threadIdx.x; h < vectors; h += blockDim.x) {
+                BF16VectorSum sum;
+                for (int peer = 0; peer < 4; ++peer) {
+                    const int slot = *reinterpret_cast<const int*>(a.base + l.token_index(peer, token));
+                    if (slot >= 0)
+                        sum.add(load_remote_vector(a.base + l.reply_slot(peer) +
+                                                   (size_t(slot) * vectors + h) * sizeof(uint4)));
+                }
+                reinterpret_cast<uint4*>(a.out)[size_t(token) * vectors + h] = sum.pack();
             }
-            reinterpret_cast<nv_bfloat16*>(a.out)[i] = __float2bfloat16(sum);
-        }
     } else if constexpr (kOperation == ReplyConsumedCredit) {
         if (tid == 0)
             for (int peer = 0; peer < 4; ++peer)
@@ -463,21 +499,7 @@ __global__ void directional_kernel(DeviceArgs a) {
                 wait_local(&control(a.peers[i])->partials_consumed, state->epoch - 1, a);
         }
         __syncthreads();
-        size_t i = tid;
-        for (int source = 0; source < 4; ++source) {
-            const int n = state->received_tokens[source];
-            for (; i < size_t(n) * l.hidden; i += stride) {
-                const int token = i / l.hidden, h = i % l.hidden;
-                float sum = 0;
-                for (int k = 0; k < l.topk; ++k) {
-                    const int row = a.receipt[(source * a.bucket + token) * l.topk + k];
-                    if (row >= 0)
-                        sum += __bfloat162float(reinterpret_cast<const nv_bfloat16*>(a.rows)[size_t(row) * l.hidden + h]);
-                }
-                reinterpret_cast<nv_bfloat16*>(a.base + l.partial(source, token))[h] = __float2bfloat16(sum);
-            }
-            i -= size_t(n) * l.hidden;
-        }
+        make_partial_vectors<false>(a);
     } else if constexpr (kOperation == PublishPartialAndWait) {
         if (tid == 0) {
             release(&state->partial_done, state->epoch);
@@ -486,15 +508,14 @@ __global__ void directional_kernel(DeviceArgs a) {
         }
     } else if constexpr (kOperation == ReduceReply) {
         const int n = state->received_tokens[worker];
-        for (size_t i = tid; i < size_t(n) * l.hidden; i += stride) {
-            const int token = i / l.hidden, h = i % l.hidden;
-            float sum = 0;
-            for (int iworker = 0; iworker < 4; ++iworker)
-                sum += __bfloat162float(__ushort_as_bfloat16(
-                    reinterpret_cast<const volatile uint16_t*>(
-                        a.peers[iworker] + l.partial(worker, token))[h]));
-            reinterpret_cast<nv_bfloat16*>(a.base + l.worker_reply)[i] = __float2bfloat16(sum);
-        }
+        const int vectors = l.hidden / BF16VectorSum::kValues;
+        for (int token = blockIdx.x; token < n; token += gridDim.x)
+            for (int h = threadIdx.x; h < vectors; h += blockDim.x) {
+                BF16VectorSum sum;
+                for (int peer = 0; peer < 4; ++peer)
+                    sum.add(load_remote_vector(a.peers[peer] + l.partial(worker, token) + h * sizeof(uint4)));
+                reinterpret_cast<uint4*>(a.base + l.worker_reply)[size_t(token) * vectors + h] = sum.pack();
+            }
     } else if constexpr (kOperation == PublishConsumedAndWaitCredit) {
         if (tid == 0) {
             // All reduction-grid readers finished before partials may be reused.

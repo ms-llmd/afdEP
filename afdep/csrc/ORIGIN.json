@@ -28,7 +28,7 @@
   },
   "current_file_sha256": {
     "afdep/csrc/layout.hpp": "3a644833bff462ae2a2044b1cf1e07a6972c7abd159af9876ee557f9e57bd9a0",
-    "afdep/csrc/kernels.cuh": "cc79411c9675d97a1cb3119f6daf189bde103110b0db69d4209b06bc94a01150"
+    "afdep/csrc/kernels.cuh": "d08d5a5b8239ad28e320e042f8c72c294d043861eb86f4738b060303383295df"
   },
   "protocol_changes": [
     {
@@ -50,6 +50,10 @@
     {
       "date": "2026-10-18",
       "description": "Read each received activation vector and FP8 scale once per selected worker and fan it out to that worker's selected expert rows. Avoid repeated NVLink reads when multiple selected experts share a worker. Preserve row assignment, receipts, tensor values, and every readiness/credit dependency."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Vectorize BF16 partial, hybrid reply, and direct source reductions over eight adjacent values. Use one CTA per token and share expert receipt rows within that CTA, avoiding per-element integer divisions and redundant route lookups. Preserve FP32 addition order, BF16 rounding, actual-count bounds and every credit/readiness dependency."
     }
   ]
 }
