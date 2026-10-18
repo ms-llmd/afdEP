@@ -1,0 +1,116 @@
+{
+  "scope": "Native GIN completion and vectorized local-work correctness; not a serving performance claim",
+  "date": "2026-10-18",
+  "source_commit": "7ae0c89",
+  "hardware": "8 NVIDIA H100 80GB HBM3 GPUs across two hosts",
+  "nccl": "2.30.7, GIN_IB_GDAKI type 3",
+  "config": {
+    "capacity_tokens_per_rank": 128,
+    "hidden_size": 2048,
+    "num_experts": 128,
+    "top_k": 8,
+    "ffn_ranks": 4,
+    "attention_ranks": 4,
+    "expert_alignment": 128,
+    "num_gin_contexts": 8,
+    "transport_stripes": 8,
+    "num_sms": 132,
+    "gpu_timeout_s": 60,
+    "rdma_traffic_class": 0
+  },
+  "cases": [
+    "uniform",
+    "uneven",
+    "empty",
+    "decode",
+    "only_worker_0",
+    "only_worker_1",
+    "only_worker_2",
+    "only_worker_3",
+    "rotating_worker_per_source",
+    "all_sources_at_capacity",
+    "nonempty_all_routes_skipped",
+    "strided_source_fp8_scales"
+  ],
+  "checks": [
+    "Eager and exact-sized receive",
+    "Changing graph payloads, routes, buckets and destination workers",
+    "Empty, all-skipped, hot-worker and capacity-sized inputs",
+    "Delayed peers and buffer reuse without per-epoch CPU barriers",
+    "Reusable receive pointers and poisoned metadata reset",
+    "One fixed-capacity graph with GPU live counts and untouched output tails",
+    "Strided FP8 scales and alignment rejection",
+    "Collective close drains outstanding GIN contexts"
+  ],
+  "unit_tests_passed": 31,
+  "runs": [
+    {
+      "mode": "hybrid",
+      "payload": "bf16",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "passed_ranks": 8,
+      "graph_epochs": 26,
+      "reusable_receive_graph_epochs": 26,
+      "live_count_graph_epochs": 26,
+      "delayed_worker_seconds": 0.02,
+      "log_sha256": [
+        "e4378e531debf6588d3e3a2c676a23b10aa716cb5511904adb63c81b4fc51c98",
+        "a1aeb5e6df23a1eadccca3b8e8f88fe39bdc4b4ae9a347e319ceee1ad8d1521e"
+      ]
+    },
+    {
+      "mode": "hybrid",
+      "payload": "fp8",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "passed_ranks": 8,
+      "graph_epochs": 26,
+      "reusable_receive_graph_epochs": 26,
+      "live_count_graph_epochs": 26,
+      "delayed_worker_seconds": 0.02,
+      "log_sha256": [
+        "8c143e0f16b62708c1c311b0e90e9393478aefefd1629b685ff3950c3e9d35e8",
+        "30c12f6c47b51a313c905469e5e586c2905db013a5ca6928f507cbbbb9dc52d6"
+      ]
+    },
+    {
+      "mode": "direct",
+      "payload": "bf16",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "passed_ranks": 8,
+      "graph_epochs": 26,
+      "reusable_receive_graph_epochs": 26,
+      "live_count_graph_epochs": 26,
+      "delayed_worker_seconds": 0.02,
+      "log_sha256": [
+        "a2616803ba34c18e6e68b4add95327a703e65da51ed166a58e01408e73db4893",
+        "a130f6f8d0a6cd5f164eb8f13527e4261dd030af527b352de80353b48a5c180e"
+      ]
+    },
+    {
+      "mode": "direct",
+      "payload": "fp8",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "passed_ranks": 8,
+      "graph_epochs": 26,
+      "reusable_receive_graph_epochs": 26,
+      "live_count_graph_epochs": 26,
+      "delayed_worker_seconds": 0.02,
+      "log_sha256": [
+        "03404d824e20e376c5cf573993dd3e7847233ef285f0daef0c246ce16636f4be",
+        "5a5921ae7d4bce79799a58fb1956d4e973bdcc39d5ac72904b1efd2811445a12"
+      ]
+    }
+  ]
+}
