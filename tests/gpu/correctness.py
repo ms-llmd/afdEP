@@ -33,7 +33,7 @@ from examples.round_trip import (
 )
 
 DEFAULT_CAPACITY = 128
-DEFAULT_GRAPH_EPOCHS = 26
+DEFAULT_GRAPH_EPOCHS = 28
 DELAYED_WORKER = 1
 DELAYED_EPOCH = 8
 DELAY_SECONDS = 0.02
@@ -132,6 +132,17 @@ def cases(capacity: int) -> list[Case]:
             rotate_worker=True,
         ),
         Case("all_sources_at_capacity", (capacity,) * ATTENTION_RANKS),
+        # Fill one worker's direct-mode request slot from each source.
+        Case(
+            "rotating_worker_at_capacity",
+            (capacity,) * ATTENTION_RANKS,
+            rotate_worker=True,
+        ),
+        Case(
+            "all_workers_per_token",
+            (capacity,) * ATTENTION_RANKS,
+            spread_workers=True,
+        ),
         Case(
             "nonempty_all_routes_skipped",
             (uniform,) * ATTENTION_RANKS,

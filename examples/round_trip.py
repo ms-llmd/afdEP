@@ -48,6 +48,7 @@ class Case:
     rotate_worker: bool = False
     skip_all_experts: bool = False
     strided_scales: bool = False
+    spread_workers: bool = False
 
     @property
     def bucket(self) -> int:
@@ -156,15 +157,31 @@ def make_inputs(case: Case, source: int, epoch: int, config: afdep.Config) -> In
     magnitude = torch.pow(2.0, (column // FP8_BLOCK_SIZE).remainder(3).float())
     x = (bits * magnitude).bfloat16()
     slot = torch.arange(config.top_k, device="cuda", dtype=torch.int64)
-    worker = (
-        (source + epoch // FFN_RANKS) % FFN_RANKS if case.rotate_worker else case.worker
-    )
-    expert_limit = config.experts_per_rank if worker is not None else config.num_experts
-    ids = (
-        row[:, None] * config.top_k + slot[None, :] + source + epoch * ROUTE_STRIDE
-    ).remainder(expert_limit)
-    if worker is not None:
-        ids += worker * config.experts_per_rank
+    if case.spread_workers:
+        # Interleave slots across workers so every token reaches all of them,
+        # filling each direct-mode request slot and the full source reduction.
+        slots_per_worker = config.top_k // FFN_RANKS
+        local = (
+            row[:, None] * slots_per_worker
+            + slot[None, :] // FFN_RANKS
+            + source
+            + epoch * ROUTE_STRIDE
+        ).remainder(config.experts_per_rank)
+        ids = slot[None, :].remainder(FFN_RANKS) * config.experts_per_rank + local
+    else:
+        worker = (
+            (source + epoch // FFN_RANKS) % FFN_RANKS
+            if case.rotate_worker
+            else case.worker
+        )
+        expert_limit = (
+            config.experts_per_rank if worker is not None else config.num_experts
+        )
+        ids = (
+            row[:, None] * config.top_k + slot[None, :] + source + epoch * ROUTE_STRIDE
+        ).remainder(expert_limit)
+        if worker is not None:
+            ids += worker * config.experts_per_rank
     # Skipped choices test -1 semantics and force epoch-dependent zero counts.
     omitted = (row[:, None] + slot[None, :] + epoch).remainder(11) == 0
     ids = torch.where(omitted, -1, ids).contiguous()

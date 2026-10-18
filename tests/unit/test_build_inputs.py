@@ -9,6 +9,16 @@ from pathlib import Path
 
 from afdep._build import PACKAGE_ROOT, SOURCE_NAMES, source_digest
 
+# Hashes of the initial extraction; later changes update only current hashes.
+EXTRACTED_FILE_SHA256 = {
+    "afdep/csrc/layout.hpp": (
+        "7141d10aabfb8f659f06933b87549a211e98d1d2b3ede9ecd1cc45e9867c1888"
+    ),
+    "afdep/csrc/kernels.cuh": (
+        "05b50095f694231db3012821aed1fdf48e86b7a06d9c81eaeb8aee3e4db08bc0"
+    ),
+}
+
 
 def test_standalone_sources_present():
     for name in SOURCE_NAMES:
@@ -26,6 +36,7 @@ def test_protocol_matches_recorded_provenance():
     # Future device protocol changes require an explicit provenance update,
     # separate from changes to its host packaging or launch adapter.
     assert len(origin["input_files"]) == 3
+    assert origin["extracted_file_sha256"] == EXTRACTED_FILE_SHA256
     assert origin["protocol_changes"]
     for relative, expected_hash in origin["current_file_sha256"].items():
         path = PACKAGE_ROOT.parent / relative
