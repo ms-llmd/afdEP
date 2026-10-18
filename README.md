@@ -42,7 +42,7 @@ python -m pip install --no-build-isolation --no-deps -e .
 python -m afdep doctor --build
 ```
 
-After constructing a buffer on each rank, the roles use separate operations:
+After constructing a directional `Buffer` on each rank, the roles use separate operations:
 
 ```python
 # Attention ranks:
