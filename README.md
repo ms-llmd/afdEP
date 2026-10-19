@@ -17,7 +17,8 @@ slots, registered transport capacity and required synchronization remain.
 Opt in with `from afdep import DirectionalBuffer, DirectionalConfig`.
 V1 remains the default. V2 replaces dispatch/combine with directional requests
 and replies; it reuses DeepEP TMA and reduction primitives.
-[Contracts](docs/directional.md) · [H100 experiment](docs/directional-performance.md).
+[Contracts](docs/directional.md) · [H100 communication experiments](docs/directional-performance.md)
+· [vLLM serving measurements](https://github.com/ms-llmd/afd-plugin/pull/31).
 
 ## Use
 
@@ -68,8 +69,8 @@ prequantized FP8 dispatch return BF16 combined outputs. See the
 
 | Architecture | Backend | Validated scope |
 |---|---|---|
-| Hopper (SM90) | V1 DeepEP reuse | H100: BF16/FP8; eager/CUDA graphs; 2 Attention + 2 FFN, one NVLink domain |
-| Hopper (SM90) | V2 directional | H100: BF16/FP8; eager/CUDA graphs; 2 + 2 NVLink, or 4 + 4 GIN across two domains |
+| Hopper (SM90) | V1 DeepEP reuse | H100/H200: BF16/FP8; eager/CUDA graphs; 2 Attention + 2 FFN, one NVLink domain |
+| Hopper (SM90) | V2 directional | BF16/FP8; eager/CUDA graphs; H100/H200: 2 + 2 NVLink; H100: 4 + 4 GIN across two domains |
 | Blackwell | V1 DeepEP reuse | Not validated |
 | Other architectures | V1 DeepEP reuse | Not validated |
 
