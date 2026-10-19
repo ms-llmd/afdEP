@@ -395,6 +395,13 @@ __device__ __forceinline__ void nvlink_operation(const DeviceArgs& a) {
     } else if constexpr (kOperation == SendRequest) {
         if (tid == 0) release(&state->request_ready, state->epoch);
     } else if constexpr (kOperation == BeginWorker) {
+        // Tiny conservative receives already own their validated weight tensor.
+        // Clear local padding while thread zero waits for remote request epochs.
+        if (a.recv_weights != nullptr) {
+            const int rows = l.sources * a.bucket * min(l.topk, l.local_experts()) +
+                             l.local_experts() * (l.alignment - 1);
+            for (int row = threadIdx.x; row < rows; row += blockDim.x) a.recv_weights[row] = 0;
+        }
         for (int e = threadIdx.x; e < l.local_experts(); e += blockDim.x)
             a.counts[e] = 0;
         if (tid == 0) {

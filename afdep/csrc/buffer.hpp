@@ -146,7 +146,8 @@ class DirectionalM2NBuffer {
                tokens >= kNVLinkWarpMinTokens;
     }
 
-    DeviceArgs discover_receive(int bucket, const torch::Tensor &psum) {
+    DeviceArgs discover_receive(int bucket, const torch::Tensor &psum,
+                               float* weights_to_clear = nullptr) {
         TORCH_CHECK(!layout.nvlink || !nvlink_pair_pending, "NVLink receive requires the previous reply");
         nvlink_pair_pending = layout.nvlink;
         auto a = args(bucket);
@@ -154,6 +155,7 @@ class DirectionalM2NBuffer {
         a.starts = starts.data_ptr<int>();
         a.cursors = cursors.data_ptr<int>();
         a.psum = psum.data_ptr<int>();
+        a.recv_weights = weights_to_clear;
         if (!layout.nvlink) counts.zero_();
         launch(BeginWorker, a);
         if (!layout.nvlink) {
@@ -187,7 +189,8 @@ class DirectionalM2NBuffer {
 
     void pack_receive(DeviceArgs a, int rows, const torch::Tensor &recv_x,
                       const std::optional<torch::Tensor> &recv_scale,
-                      const torch::Tensor &recv_weights, const torch::Tensor &receipt) {
+                      const torch::Tensor &recv_weights, const torch::Tensor &receipt,
+                      bool weights_cleared = false) {
         worker_bucket = a.bucket;
         worker_rows = rows;
         a.recv_x = static_cast<uint8_t *>(recv_x.data_ptr());
@@ -197,7 +200,7 @@ class DirectionalM2NBuffer {
             a.recv_scales = recv_scale->data_ptr<float>();
             a.recv_scale_stride1 = recv_scale->stride(1);
         }
-        recv_weights.zero_();
+        if (!weights_cleared) recv_weights.zero_();
         if (!layout.nvlink) receipt.fill_(-1);
         const int bulk_pack = layout.hidden == kNVLinkWideHidden ? TmaPackRowsWide : TmaPackRows;
         launch(nvlink_bulk_shape(a.bucket) ? bulk_pack : PackRows, a, num_sms);
@@ -393,8 +396,9 @@ class DirectionalM2NBuffer {
                             recv_scale->stride(1) % 4 == 0,
                         "Reusable FP8 scales require padded column-major storage");
         }
-        auto a = discover_receive(bucket, psum);
-        pack_receive(a, rows, recv_x, recv_scale, recv_weights, receipt);
+        const bool fuse_weight_clear = layout.nvlink && bucket <= kNVLinkFusedMetadataTokens;
+        auto a = discover_receive(bucket, psum, fuse_weight_clear ? recv_weights.data_ptr<float>() : nullptr);
+        pack_receive(a, rows, recv_x, recv_scale, recv_weights, receipt, fuse_weight_clear);
         std::vector<int> host_counts;
         if (read_host_counts)
             host_counts = host_receive_counts(bucket);

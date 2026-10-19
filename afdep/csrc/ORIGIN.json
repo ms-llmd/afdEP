@@ -30,7 +30,7 @@
   },
   "current_file_sha256": {
     "afdep/csrc/layout.hpp": "39f3663ec109cd333a41a17155e0bf7c6357d0506cf5067bed6b21416699ac30",
-    "afdep/csrc/kernels.cuh": "56e112c3a94111fddc9a2f8e700db10e9b9f7cc26392c0a06665f94aa66a9b90",
+    "afdep/csrc/kernels.cuh": "99b6e643925b30721651a2e37437e453a87049e518367821bed0b6cec1bbef8f",
     "afdep/csrc/deepep_reduce.cuh": "e98b37b6f5625d4e6c685ca2333c6db73ccbbc819dde77eb5b84af85eef53571",
     "afdep/csrc/deepep_tma.cuh": "76cf2a78e43b8134eb2de0b112d95f28f26817bce2660e73c22d2c43866a89ec"
   },
@@ -120,6 +120,10 @@
     {
       "date": "2026-10-19",
       "description": "Compose the separately measured H4096 NVLink bulk extension, shared-memory-sized packing geometry and deferred return-staging wait on the vector-reference source. This composition excludes the rejected generic sparse/threshold changes: workers still write zero partials when a source collector may need them. Wide packing chooses up to32 warps from payload tile size and actual kernel/device shared-memory/thread limits. The wide return loads and reduces its first register tile before waiting for prior TMA reads, then waits before the first shared write; every final drain and reader credit is preserved. H2048 retains its original early wait and launch shapes. Independent component tests are not evidence for this exact combined source; it requires fresh GPU correctness and matched timing."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Experimental tiny NVLink receive preparation: for conservative buckets up to 32, pass the already validated receive-weight tensor into BeginWorker and clear its entire conservative extent there, overlapping local padding initialization with the existing remote request waits. The existing CTA barrier and following PackRows kernel boundary complete every zero write before valid weights are assigned. Omit only the redundant standalone weight-zero launch. Exact eager allocation retains its later standalone zero because receive storage does not exist at count discovery; larger buckets and GIN are unchanged. No peer payload, credit, readiness or arithmetic changes. Requires GPU validation of padding weights, changing/skipped/empty routes, eager/graph replay, maximum-capacity tiny buckets and exact-allocation fallback, then matched timing."
     }
   ]
 }
