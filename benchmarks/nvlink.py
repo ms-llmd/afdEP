@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Matched four-GPU communication-only screen; no expert compute or serving claim."""
+"""Matched communication-only screen; no expert compute or serving claim."""
 
 import argparse
 import hashlib
@@ -26,6 +26,12 @@ def main():
         "--backend", choices=["directional", "masked", "reuse"], required=True
     )
     parser.add_argument("--payload", choices=["bf16", "fp8"], required=True)
+    parser.add_argument("--transport", choices=["nvlink", "gin"], default="nvlink")
+    parser.add_argument("--ffn-ranks", type=int, default=2)
+    parser.add_argument("--attention-ranks", type=int, default=2)
+    parser.add_argument("--gin-contexts", type=int, default=8)
+    parser.add_argument("--transport-stripes", type=int, default=8)
+    parser.add_argument("--rdma-traffic-class", type=int, default=0)
     parser.add_argument("--hidden", type=int, default=2048)
     parser.add_argument("--experts", type=int, default=128)
     parser.add_argument("--top-k", type=int, default=8)
@@ -62,36 +68,71 @@ def main():
         or args.warmup < 0
     ):
         parser.error("tokens in [1,capacity]; iterations/repeats > 0; warmup >= 0")
-    if args.routing == "skew" and args.top_k > args.experts // 2:
+    if (
+        min(
+            args.ffn_ranks,
+            args.attention_ranks,
+            args.gin_contexts,
+            args.transport_stripes,
+        )
+        < 1
+    ):
+        parser.error("role ranks, GIN contexts and transport stripes must be positive")
+    if args.backend == "reuse" and args.transport == "gin":
+        parser.error(
+            "role-aware DeepEP reuse requires one NVLink domain; use masked for GIN"
+        )
+    if args.experts % args.ffn_ranks:
+        parser.error("experts must divide evenly across FFN ranks")
+    if args.routing == "skew" and args.top_k > args.experts // args.ffn_ranks:
         parser.error("skew routing needs top-k <= experts per worker")
-    rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(rank)
+    rank = int(os.environ["RANK"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(local_rank)
     dist.init_process_group("gloo")
+    world_size = dist.get_world_size()
+    if world_size != args.ffn_ranks + args.attention_ranks:
+        raise ValueError("torchrun world size must equal FFN plus Attention ranks")
     common = {
         "capacity_tokens_per_rank": args.capacity,
         "hidden_size": args.hidden,
         "num_experts": args.experts,
         "top_k": args.top_k,
-        "ffn_ranks": 2,
-        "attention_ranks": 2,
+        "ffn_ranks": args.ffn_ranks,
+        "attention_ranks": args.attention_ranks,
         "payload": args.payload,
         "allow_hybrid_mode": args.hybrid == "on",
+        "rdma_traffic_class": args.rdma_traffic_class,
     }
     directional = args.backend == "directional"
     config = (
-        Config(**common, transport="nvlink", num_sms=args.sms)
+        Config(
+            **common,
+            transport=args.transport,
+            num_sms=args.sms,
+            num_gin_contexts=args.gin_contexts,
+            transport_stripes=args.transport_stripes,
+        )
         if directional
         else DeepEPConfig(
-            **common, num_sms=args.masked_sms, role_aware=args.backend == "reuse"
+            **common,
+            num_sms=args.masked_sms,
+            num_qps=args.gin_contexts if args.transport == "gin" else 0,
+            role_aware=args.backend == "reuse",
         )
     )
     buffer = (Buffer if directional else DeepEPBuffer)(
         group=dist.group.WORLD, config=config
     )
-    worker = rank < 2
+    if not directional:
+        domains, _ = buffer.physical_domain
+        if (args.transport == "nvlink") != (domains == 1):
+            buffer.close()
+            raise ValueError("transport does not match the physical NVLink domains")
+    worker = rank < args.ffn_ranks
     rows = []
     route_records = []
-    local_experts = args.experts // 2
+    local_experts = args.experts // args.ffn_ranks
     route_experts = local_experts if args.routing == "skew" else args.experts
     route_stride = 5 if math.gcd(5, route_experts) == 1 else 1
     for n in args.tokens:
@@ -101,11 +142,11 @@ def main():
         ids = (
             torch.arange(n, device="cuda")[:, None] * 3
             + torch.arange(args.top_k, device="cuda")[None, :] * route_stride
-            + max(rank - 2, 0)
+            + max(rank - args.ffn_ranks, 0)
         ) % route_experts
         if args.routing == "random":
             generator = torch.Generator(device="cuda").manual_seed(
-                args.routing_seed + max(rank - 2, 0)
+                args.routing_seed + max(rank - args.ffn_ranks, 0)
             )
             ids = (
                 torch.rand((n, args.experts), generator=generator, device="cuda")
@@ -127,7 +168,7 @@ def main():
                         .any(axis=1)
                         .sum()
                     )
-                    for w in range(2)
+                    for w in range(args.ffn_ranks)
                 ],
             }
         )
@@ -208,7 +249,7 @@ def main():
                 "torch_peak_allocated_bytes": torch.cuda.max_memory_allocated(),
                 "torch_allocated_bytes": torch.cuda.memory_allocated(),
             }
-            gathered = [None] * 4
+            gathered = [None] * world_size
             dist.all_gather_object(gathered, local)
             if args.profile:
                 dist.barrier()
@@ -236,6 +277,8 @@ def main():
         dist.barrier()
     metadata = {
         "rank": rank,
+        "transport": args.transport,
+        "world_size": world_size,
         "config": asdict(config),
         "registered_bytes": buffer.num_buffer_bytes,
         "launch_policy": {
@@ -245,9 +288,9 @@ def main():
             else buffer.transport._resolved_num_sms,
             "deepep_local_epilogue_sms": None
             if directional
-            else torch.cuda.get_device_properties(rank).multi_processor_count,
+            else torch.cuda.get_device_properties(local_rank).multi_processor_count,
         },
-        "device": str(torch.cuda.get_device_properties(rank)),
+        "device": str(torch.cuda.get_device_properties(local_rank)),
         "torch": torch.__version__,
         "cuda": torch.version.cuda,
         "endpoint_sha256": hashlib.sha256(
@@ -255,7 +298,7 @@ def main():
         ).hexdigest(),
         "routing": route_records if not worker else None,
     }
-    meta = [None] * 4
+    meta = [None] * world_size
     dist.all_gather_object(meta, metadata)
     buffer.close()
     if rank == 0:
