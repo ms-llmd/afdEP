@@ -1,0 +1,946 @@
+{
+  "date": "2026-10-19",
+  "status": "Selection experiment; independent confirmation pending",
+  "scope": "Communication only; no expert GEMMs or serving throughput. Initialization, JIT and graph capture excluded; graph replay included. One captured graph per token extent, not one maximum-capacity graph.",
+  "hardware": {
+    "architecture": "Hopper SM90",
+    "tested_gpu": "H100 80GB",
+    "gpus": 4,
+    "topology": "one NVLink domain",
+    "attention_ranks": 2,
+    "ffn_ranks": 2
+  },
+  "toolchain": {
+    "torch": "2.13.0+cu130",
+    "cuda": "13.0",
+    "nccl": "2.30.7",
+    "driver": "580.126.20"
+  },
+  "configuration": {
+    "hidden": 4096,
+    "experts": 128,
+    "top_k": 8,
+    "capacity_tokens_per_source": 8192,
+    "routing": "random",
+    "seed": 49002,
+    "execution": "graph",
+    "independent_process_repeats": 3,
+    "warmup_exchanges": 1000,
+    "blocks_per_process": 5,
+    "exchanges_per_block": 1000,
+    "directional_base_grid": 132,
+    "masked_transport_sms": 132
+  },
+  "metric": "Each block uses the maximum Attention-rank CUDA-event latency per exchange. Each process uses the median of five blocks. Change is median of three paired process ratios minus one; positive means slower. Masked132 is a fixed control, not a claim that132 is optimal for every shape. Tuned controls and independent routes remain to be confirmed.",
+  "source": {
+    "directional_commit": "e376f89cb68234a37d5bcc7093197aff02cc1a2c",
+    "directional_native_sha256": "44993b28ddb5f8c45aec299b13278855c709b2725e5ff854f0e16a7004fd45ad",
+    "masked_native_sha256": "a250acc1a44a43b656a02a106e9e202ff2e8a99e1ed2532a1dc539d4ff30d16c",
+    "masked_mode": "role_aware=False",
+    "common_harness_commit": "8cc0a4b140b5030113159506d40ddec57230fd0d",
+    "common_harness_sha256": "296ea5485354a85b7d762666522d386497a9966984a40bfb694f595981ccfb08",
+    "directional_endpoint_sha256": "069aa0c4520b46e771420752904f8eac2e454bbc5fc0b59696be36df4b336bdb",
+    "masked_endpoint_sha256": "39031766506edb8c954fa8ea2a0a9b8db267084b62fcbc15039521e3fe5dcf5f",
+    "private_joined_summary_sha256": "71905f5eb91dfe63de2fe564465857c860985b06ebcfac4d2462a6a6db69582d"
+  },
+  "latency": [
+    {
+      "payload": "bf16",
+      "tokens_per_attention_rank": 1,
+      "directional_us": 31.40726470947266,
+      "masked_us": 33.80803298950195,
+      "paired_latency_change_percent": [
+        -7.259438088690484,
+        -7.590730997525785,
+        -6.784205933090515
+      ],
+      "median_paired_latency_change_percent": -7.259438088690484,
+      "directional_blocks_us": [
+        [
+          31.960384368896484,
+          31.34934425354004,
+          31.353759765625004,
+          31.35923194885254,
+          31.348928451538082
+        ],
+        [
+          31.922143936157227,
+          31.425920486450195,
+          31.38457679748535,
+          31.40726470947266,
+          31.392448425292972
+        ],
+        [
+          31.999103546142578,
+          31.436511993408203,
+          31.424928665161133,
+          31.476575851440433,
+          31.45542335510254
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          34.27494430541992,
+          33.80534362792969,
+          33.80803298950195,
+          33.82476806640625,
+          33.79235076904297
+        ],
+        [
+          34.22742462158203,
+          33.97430419921875,
+          33.98713684082031,
+          33.96220779418945,
+          34.000064849853516
+        ],
+        [
+          34.01123046875,
+          33.72518539428711,
+          33.71577453613281,
+          33.754337310791016,
+          33.74473571777344
+        ]
+      ],
+      "directional_result_sha256": [
+        "ade46b04177f76d77ec33ce2a93ae1efcb4b89ccf80c2f70632f29ee59baa53b",
+        "aa8f2784cbe14375a796cdba31bf344533f9f781ff0660e3a019363a38b20846",
+        "ec0cd928f9e7854d834d7c0f32d35ac9a27227fb9e9b10cf3ff21c6d12d63863"
+      ],
+      "masked_result_sha256": [
+        "ed50d3a21fb4d3e9e7622e806e64b377a983b0819df0e78458b3fbbf02ba5e39",
+        "5b600f9661fa1ef2734c4284bb8afbef68007abd60cd6cdf90e90abdc006a305",
+        "ff1945b321320e5f59470da7bce0e060142bd62317dbce9dd92095b1add87d2d"
+      ]
+    },
+    {
+      "payload": "bf16",
+      "tokens_per_attention_rank": 32,
+      "directional_us": 34.73353576660156,
+      "masked_us": 50.947967529296875,
+      "paired_latency_change_percent": [
+        -30.142173873317258,
+        -32.75675440947433,
+        -32.118920874556665
+      ],
+      "median_paired_latency_change_percent": -32.118920874556665,
+      "directional_blocks_us": [
+        [
+          34.774593353271484,
+          34.77628707885742,
+          34.8131217956543,
+          34.82707214355469,
+          34.79449462890625
+        ],
+        [
+          34.73353576660156,
+          34.7184944152832,
+          34.74476623535156,
+          34.87907028198242,
+          34.724510192871094
+        ],
+        [
+          34.58319854736328,
+          34.60768127441406,
+          34.748897552490234,
+          34.57891082763672,
+          34.58403015136719
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          49.80758285522461,
+          50.189247131347656,
+          49.35891342163086,
+          49.84035110473633,
+          49.15388870239258
+        ],
+        [
+          51.70284652709961,
+          51.653568267822266,
+          51.941951751708984,
+          51.38115310668945,
+          51.558048248291016
+        ],
+        [
+          50.90553665161133,
+          51.34025573730469,
+          50.871551513671875,
+          51.27312088012695,
+          50.947967529296875
+        ]
+      ],
+      "directional_result_sha256": [
+        "ade46b04177f76d77ec33ce2a93ae1efcb4b89ccf80c2f70632f29ee59baa53b",
+        "aa8f2784cbe14375a796cdba31bf344533f9f781ff0660e3a019363a38b20846",
+        "ec0cd928f9e7854d834d7c0f32d35ac9a27227fb9e9b10cf3ff21c6d12d63863"
+      ],
+      "masked_result_sha256": [
+        "ed50d3a21fb4d3e9e7622e806e64b377a983b0819df0e78458b3fbbf02ba5e39",
+        "5b600f9661fa1ef2734c4284bb8afbef68007abd60cd6cdf90e90abdc006a305",
+        "ff1945b321320e5f59470da7bce0e060142bd62317dbce9dd92095b1add87d2d"
+      ]
+    },
+    {
+      "payload": "bf16",
+      "tokens_per_attention_rank": 128,
+      "directional_us": 46.667232513427734,
+      "masked_us": 70.02169799804688,
+      "paired_latency_change_percent": [
+        -32.67052498639214,
+        -33.42009078592423,
+        -33.862560258987806
+      ],
+      "median_paired_latency_change_percent": -33.42009078592423,
+      "directional_blocks_us": [
+        [
+          46.97443389892578,
+          47.016353607177734,
+          47.01366424560547,
+          47.00694274902344,
+          46.99260711669922
+        ],
+        [
+          46.667232513427734,
+          46.69152069091797,
+          46.656288146972656,
+          46.65081787109375,
+          46.676513671875
+        ],
+        [
+          46.31520080566406,
+          46.3105583190918,
+          46.29625701904297,
+          46.30329513549805,
+          46.311744689941406
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          70.22217559814453,
+          69.91795349121094,
+          69.81629180908203,
+          69.58995056152344,
+          69.81462097167969
+        ],
+        [
+          70.24345397949219,
+          70.12153625488281,
+          69.9853744506836,
+          70.0920639038086,
+          69.84681701660156
+        ],
+        [
+          70.02169799804688,
+          70.15676879882812,
+          69.77494049072266,
+          70.10809326171875,
+          69.58195495605469
+        ]
+      ],
+      "directional_result_sha256": [
+        "ade46b04177f76d77ec33ce2a93ae1efcb4b89ccf80c2f70632f29ee59baa53b",
+        "aa8f2784cbe14375a796cdba31bf344533f9f781ff0660e3a019363a38b20846",
+        "ec0cd928f9e7854d834d7c0f32d35ac9a27227fb9e9b10cf3ff21c6d12d63863"
+      ],
+      "masked_result_sha256": [
+        "ed50d3a21fb4d3e9e7622e806e64b377a983b0819df0e78458b3fbbf02ba5e39",
+        "5b600f9661fa1ef2734c4284bb8afbef68007abd60cd6cdf90e90abdc006a305",
+        "ff1945b321320e5f59470da7bce0e060142bd62317dbce9dd92095b1add87d2d"
+      ]
+    },
+    {
+      "payload": "bf16",
+      "tokens_per_attention_rank": 512,
+      "directional_us": 95.04771423339844,
+      "masked_us": 108.53699493408203,
+      "paired_latency_change_percent": [
+        -12.734124105441335,
+        -12.428279140099708,
+        -12.1189394453586
+      ],
+      "median_paired_latency_change_percent": -12.428279140099708,
+      "directional_blocks_us": [
+        [
+          94.86688232421875,
+          94.8803482055664,
+          94.91577911376953,
+          94.86991882324219,
+          94.98172760009766
+        ],
+        [
+          94.99142456054688,
+          95.04771423339844,
+          95.0843505859375,
+          95.00163269042969,
+          95.14630126953125
+        ],
+        [
+          95.4931869506836,
+          95.272705078125,
+          95.3022689819336,
+          95.33837127685547,
+          95.32643127441406
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          108.60646057128906,
+          108.78768157958984,
+          108.69929504394531,
+          108.74710083007812,
+          108.72560119628906
+        ],
+        [
+          108.53699493408203,
+          108.51615905761719,
+          108.55171203613281,
+          108.49520111083984,
+          108.55836486816406
+        ],
+        [
+          108.3796157836914,
+          108.5137939453125,
+          108.47209930419922,
+          108.51142120361328,
+          108.38969421386719
+        ]
+      ],
+      "directional_result_sha256": [
+        "ade46b04177f76d77ec33ce2a93ae1efcb4b89ccf80c2f70632f29ee59baa53b",
+        "aa8f2784cbe14375a796cdba31bf344533f9f781ff0660e3a019363a38b20846",
+        "ec0cd928f9e7854d834d7c0f32d35ac9a27227fb9e9b10cf3ff21c6d12d63863"
+      ],
+      "masked_result_sha256": [
+        "ed50d3a21fb4d3e9e7622e806e64b377a983b0819df0e78458b3fbbf02ba5e39",
+        "5b600f9661fa1ef2734c4284bb8afbef68007abd60cd6cdf90e90abdc006a305",
+        "ff1945b321320e5f59470da7bce0e060142bd62317dbce9dd92095b1add87d2d"
+      ]
+    },
+    {
+      "payload": "bf16",
+      "tokens_per_attention_rank": 2048,
+      "directional_us": 280.62933349609375,
+      "masked_us": 326.420166015625,
+      "paired_latency_change_percent": [
+        -13.969502631604536,
+        -14.024385398081451,
+        -14.046480612233736
+      ],
+      "median_paired_latency_change_percent": -14.024385398081451,
+      "directional_blocks_us": [
+        [
+          281.0827941894531,
+          281.1285095214844,
+          280.8208923339844,
+          280.7068786621094,
+          280.6290588378906
+        ],
+        [
+          280.6739196777344,
+          280.62933349609375,
+          280.55908203125,
+          280.6558532714844,
+          280.58843994140625
+        ],
+        [
+          280.5665283203125,
+          280.7463684082031,
+          280.6363220214844,
+          280.6255187988281,
+          280.5858154296875
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          326.3809509277344,
+          326.4726257324219,
+          326.3329772949219,
+          326.420166015625,
+          326.43646240234375
+        ],
+        [
+          326.4057312011719,
+          326.4952392578125,
+          326.4055480957031,
+          326.307861328125,
+          326.6415100097656
+        ],
+        [
+          326.37530517578125,
+          326.4624328613281,
+          326.5967712402344,
+          326.4851989746094,
+          326.5946044921875
+        ]
+      ],
+      "directional_result_sha256": [
+        "ade46b04177f76d77ec33ce2a93ae1efcb4b89ccf80c2f70632f29ee59baa53b",
+        "aa8f2784cbe14375a796cdba31bf344533f9f781ff0660e3a019363a38b20846",
+        "ec0cd928f9e7854d834d7c0f32d35ac9a27227fb9e9b10cf3ff21c6d12d63863"
+      ],
+      "masked_result_sha256": [
+        "ed50d3a21fb4d3e9e7622e806e64b377a983b0819df0e78458b3fbbf02ba5e39",
+        "5b600f9661fa1ef2734c4284bb8afbef68007abd60cd6cdf90e90abdc006a305",
+        "ff1945b321320e5f59470da7bce0e060142bd62317dbce9dd92095b1add87d2d"
+      ]
+    },
+    {
+      "payload": "bf16",
+      "tokens_per_attention_rank": 8192,
+      "directional_us": 1223.944091796875,
+      "masked_us": 1186.1978759765625,
+      "paired_latency_change_percent": [
+        3.1812578943327896,
+        3.1705201416890816,
+        3.2109882564990144
+      ],
+      "median_paired_latency_change_percent": 3.1812578943327896,
+      "directional_blocks_us": [
+        [
+          1224.0115966796875,
+          1223.750732421875,
+          1224.0242919921875,
+          1223.7000732421875,
+          1223.944091796875
+        ],
+        [
+          1224.14306640625,
+          1223.6065673828125,
+          1223.8065185546875,
+          1224.12255859375,
+          1223.79248046875
+        ],
+        [
+          1224.073486328125,
+          1223.6947021484375,
+          1223.959228515625,
+          1224.1983642578125,
+          1223.8509521484375
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          1186.29931640625,
+          1186.120361328125,
+          1186.207763671875,
+          1186.4320068359375,
+          1186.0281982421875
+        ],
+        [
+          1186.2274169921875,
+          1185.8944091796875,
+          1186.1746826171875,
+          1186.1978759765625,
+          1186.6158447265625
+        ],
+        [
+          1186.289794921875,
+          1185.5465087890625,
+          1185.9222412109375,
+          1185.7835693359375,
+          1185.8807373046875
+        ]
+      ],
+      "directional_result_sha256": [
+        "ade46b04177f76d77ec33ce2a93ae1efcb4b89ccf80c2f70632f29ee59baa53b",
+        "aa8f2784cbe14375a796cdba31bf344533f9f781ff0660e3a019363a38b20846",
+        "ec0cd928f9e7854d834d7c0f32d35ac9a27227fb9e9b10cf3ff21c6d12d63863"
+      ],
+      "masked_result_sha256": [
+        "ed50d3a21fb4d3e9e7622e806e64b377a983b0819df0e78458b3fbbf02ba5e39",
+        "5b600f9661fa1ef2734c4284bb8afbef68007abd60cd6cdf90e90abdc006a305",
+        "ff1945b321320e5f59470da7bce0e060142bd62317dbce9dd92095b1add87d2d"
+      ]
+    },
+    {
+      "payload": "fp8",
+      "tokens_per_attention_rank": 1,
+      "directional_us": 31.847488403320316,
+      "masked_us": 33.79625701904297,
+      "paired_latency_change_percent": [
+        -6.607330900359331,
+        -5.610271651926624,
+        -5.591723944255911
+      ],
+      "median_paired_latency_change_percent": -5.610271651926624,
+      "directional_blocks_us": [
+        [
+          32.38479995727539,
+          31.75129508972168,
+          31.712991714477543,
+          31.908351898193363,
+          31.727935791015625
+        ],
+        [
+          32.700416564941406,
+          31.847488403320316,
+          31.991552352905273,
+          31.82729530334473,
+          31.823135375976566
+        ],
+        [
+          32.54912185668945,
+          31.906463623046875,
+          31.840448379516598,
+          31.871807098388675,
+          31.982080459594727
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          34.32495880126953,
+          33.99763107299805,
+          33.980960845947266,
+          34.04159927368164,
+          33.9598388671875
+        ],
+        [
+          34.05763244628906,
+          33.807777404785156,
+          33.672000885009766,
+          33.62480163574219,
+          33.74041748046875
+        ],
+        [
+          34.12144088745117,
+          33.79625701904297,
+          33.79289627075195,
+          33.9251823425293,
+          33.774688720703125
+        ]
+      ],
+      "directional_result_sha256": [
+        "e1d11cac499b59cf4ef9cdfd1ccf9f41e6959963633f510d026b7662fb69a247",
+        "e016bfd8109e1669158063be5aa56f48e427ca3906b3fbcde2a9d00591332a01",
+        "beaff8211852eebb6f925a80594d438706d696c695502fb1d1b453a9b0f20021"
+      ],
+      "masked_result_sha256": [
+        "6afbb597210300744c76bfc3bef50aaddf866b4accbc491938c090d2031d3cc1",
+        "06ad8fed902991502eeb0f121146d034ae88e013d56ef276e5f137754f174397",
+        "d45bb24e460294f99f9c901fc9cbbd26fcf7330fece3f3e1a170b406db295441"
+      ]
+    },
+    {
+      "payload": "fp8",
+      "tokens_per_attention_rank": 32,
+      "directional_us": 34.675838470458984,
+      "masked_us": 54.556766510009766,
+      "paired_latency_change_percent": [
+        -36.982406139019886,
+        -36.354995958880224,
+        -35.88499187388461
+      ],
+      "median_paired_latency_change_percent": -36.354995958880224,
+      "directional_blocks_us": [
+        [
+          34.54515075683594,
+          34.45180892944336,
+          34.460479736328125,
+          34.45820617675781,
+          34.47398376464844
+        ],
+        [
+          34.822303771972656,
+          34.698974609375,
+          34.69807815551758,
+          34.75859069824219,
+          34.72265625
+        ],
+        [
+          34.6497917175293,
+          34.675838470458984,
+          34.77881622314453,
+          34.823551177978516,
+          34.64499282836914
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          55.14339065551758,
+          55.248992919921875,
+          54.683902740478516,
+          54.06060791015625,
+          54.177886962890625
+        ],
+        [
+          54.88710403442383,
+          54.556766510009766,
+          54.57062530517578,
+          54.33689498901367,
+          53.66038513183594
+        ],
+        [
+          54.9315185546875,
+          54.310848236083984,
+          54.08380889892578,
+          53.90739059448242,
+          54.070560455322266
+        ]
+      ],
+      "directional_result_sha256": [
+        "e1d11cac499b59cf4ef9cdfd1ccf9f41e6959963633f510d026b7662fb69a247",
+        "e016bfd8109e1669158063be5aa56f48e427ca3906b3fbcde2a9d00591332a01",
+        "beaff8211852eebb6f925a80594d438706d696c695502fb1d1b453a9b0f20021"
+      ],
+      "masked_result_sha256": [
+        "6afbb597210300744c76bfc3bef50aaddf866b4accbc491938c090d2031d3cc1",
+        "06ad8fed902991502eeb0f121146d034ae88e013d56ef276e5f137754f174397",
+        "d45bb24e460294f99f9c901fc9cbbd26fcf7330fece3f3e1a170b406db295441"
+      ]
+    },
+    {
+      "payload": "fp8",
+      "tokens_per_attention_rank": 128,
+      "directional_us": 43.683616638183594,
+      "masked_us": 66.15535736083984,
+      "paired_latency_change_percent": [
+        -33.96813443253838,
+        -34.63482221831665,
+        -33.41217560150553
+      ],
+      "median_paired_latency_change_percent": -33.96813443253838,
+      "directional_blocks_us": [
+        [
+          43.683616638183594,
+          43.69647979736328,
+          43.684959411621094,
+          43.66707229614258,
+          43.65635299682617
+        ],
+        [
+          43.29084777832031,
+          43.26649475097656,
+          43.29238510131836,
+          43.27228927612305,
+          43.26758575439453
+        ],
+        [
+          43.82908630371094,
+          43.75155258178711,
+          43.84953689575195,
+          43.81052780151367,
+          43.83542251586914
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          66.17743682861328,
+          66.2923812866211,
+          65.88896179199219,
+          66.15535736083984,
+          65.79673767089844
+        ],
+        [
+          66.48127746582031,
+          66.33535766601562,
+          65.8658218383789,
+          66.2008285522461,
+          65.80738830566406
+        ],
+        [
+          65.95881652832031,
+          66.25222778320312,
+          65.65801239013672,
+          65.82147216796875,
+          65.49884796142578
+        ]
+      ],
+      "directional_result_sha256": [
+        "e1d11cac499b59cf4ef9cdfd1ccf9f41e6959963633f510d026b7662fb69a247",
+        "e016bfd8109e1669158063be5aa56f48e427ca3906b3fbcde2a9d00591332a01",
+        "beaff8211852eebb6f925a80594d438706d696c695502fb1d1b453a9b0f20021"
+      ],
+      "masked_result_sha256": [
+        "6afbb597210300744c76bfc3bef50aaddf866b4accbc491938c090d2031d3cc1",
+        "06ad8fed902991502eeb0f121146d034ae88e013d56ef276e5f137754f174397",
+        "d45bb24e460294f99f9c901fc9cbbd26fcf7330fece3f3e1a170b406db295441"
+      ]
+    },
+    {
+      "payload": "fp8",
+      "tokens_per_attention_rank": 512,
+      "directional_us": 82.65526580810547,
+      "masked_us": 93.47996520996094,
+      "paired_latency_change_percent": [
+        -11.77205077842216,
+        -11.626398619334633,
+        -11.406505687911828
+      ],
+      "median_paired_latency_change_percent": -11.626398619334633,
+      "directional_blocks_us": [
+        [
+          82.45935821533203,
+          82.5011215209961,
+          82.47545623779297,
+          82.4903335571289,
+          82.4620132446289
+        ],
+        [
+          82.58457946777344,
+          82.67436981201172,
+          82.8055648803711,
+          82.73321533203125,
+          82.6258544921875
+        ],
+        [
+          82.6357421875,
+          82.65532684326172,
+          82.6527328491211,
+          82.65526580810547,
+          82.97372436523438
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          93.45645141601562,
+          93.47996520996094,
+          93.51766204833984,
+          93.4793930053711,
+          93.48278045654297
+        ],
+        [
+          93.49507141113281,
+          93.58892822265625,
+          93.55846405029297,
+          93.51420593261719,
+          93.55097961425781
+        ],
+        [
+          93.27433776855469,
+          93.2972183227539,
+          93.28813171386719,
+          93.32579040527344,
+          93.32707214355469
+        ]
+      ],
+      "directional_result_sha256": [
+        "e1d11cac499b59cf4ef9cdfd1ccf9f41e6959963633f510d026b7662fb69a247",
+        "e016bfd8109e1669158063be5aa56f48e427ca3906b3fbcde2a9d00591332a01",
+        "beaff8211852eebb6f925a80594d438706d696c695502fb1d1b453a9b0f20021"
+      ],
+      "masked_result_sha256": [
+        "6afbb597210300744c76bfc3bef50aaddf866b4accbc491938c090d2031d3cc1",
+        "06ad8fed902991502eeb0f121146d034ae88e013d56ef276e5f137754f174397",
+        "d45bb24e460294f99f9c901fc9cbbd26fcf7330fece3f3e1a170b406db295441"
+      ]
+    },
+    {
+      "payload": "fp8",
+      "tokens_per_attention_rank": 2048,
+      "directional_us": 222.99484252929688,
+      "masked_us": 255.01916503906253,
+      "paired_latency_change_percent": [
+        -13.121364418768477,
+        -12.554047954231395,
+        -12.535377555399785
+      ],
+      "median_paired_latency_change_percent": -12.554047954231395,
+      "directional_blocks_us": [
+        [
+          221.72528076171875,
+          221.62786865234375,
+          221.4891815185547,
+          221.71449279785156,
+          221.56080627441406
+        ],
+        [
+          223.00393676757812,
+          223.09432983398438,
+          223.10134887695312,
+          222.87158203125,
+          222.86192321777344
+        ],
+        [
+          223.0069122314453,
+          223.06329345703125,
+          222.99484252929688,
+          222.8659210205078,
+          222.72329711914062
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          255.13673400878906,
+          255.15922546386722,
+          255.1005401611328,
+          255.06707763671875,
+          254.8020172119141
+        ],
+        [
+          255.09146118164062,
+          255.18150329589844,
+          254.9919738769531,
+          254.7740478515625,
+          255.01916503906253
+        ],
+        [
+          254.95433044433597,
+          254.97999572753903,
+          254.88240051269534,
+          254.8902740478516,
+          255.04045104980466
+        ]
+      ],
+      "directional_result_sha256": [
+        "e1d11cac499b59cf4ef9cdfd1ccf9f41e6959963633f510d026b7662fb69a247",
+        "e016bfd8109e1669158063be5aa56f48e427ca3906b3fbcde2a9d00591332a01",
+        "beaff8211852eebb6f925a80594d438706d696c695502fb1d1b453a9b0f20021"
+      ],
+      "masked_result_sha256": [
+        "6afbb597210300744c76bfc3bef50aaddf866b4accbc491938c090d2031d3cc1",
+        "06ad8fed902991502eeb0f121146d034ae88e013d56ef276e5f137754f174397",
+        "d45bb24e460294f99f9c901fc9cbbd26fcf7330fece3f3e1a170b406db295441"
+      ]
+    },
+    {
+      "payload": "fp8",
+      "tokens_per_attention_rank": 8192,
+      "directional_us": 879.676025390625,
+      "masked_us": 914.0455322265625,
+      "paired_latency_change_percent": [
+        -3.7849527388395643,
+        -3.808634563750102,
+        -3.695748951126121
+      ],
+      "median_paired_latency_change_percent": -3.7849527388395643,
+      "directional_blocks_us": [
+        [
+          879.7003173828125,
+          879.7586059570312,
+          879.4493408203125,
+          879.2307739257812,
+          879.2406005859375
+        ],
+        [
+          879.676025390625,
+          879.7669677734375,
+          879.1099243164062,
+          879.6756591796875,
+          879.7396850585938
+        ],
+        [
+          879.8923950195312,
+          879.386962890625,
+          880.1256713867188,
+          879.841064453125,
+          879.9613647460938
+        ]
+      ],
+      "masked_blocks_us": [
+        [
+          914.0947265625,
+          913.7446899414062,
+          914.244140625,
+          914.0455322265625,
+          913.8248901367188
+        ],
+        [
+          914.5082397460938,
+          914.2186889648438,
+          914.0076293945312,
+          914.5062255859375,
+          914.7678833007812
+        ],
+        [
+          913.8510131835938,
+          913.3231811523438,
+          913.658935546875,
+          913.714599609375,
+          913.4136352539062
+        ]
+      ],
+      "directional_result_sha256": [
+        "e1d11cac499b59cf4ef9cdfd1ccf9f41e6959963633f510d026b7662fb69a247",
+        "e016bfd8109e1669158063be5aa56f48e427ca3906b3fbcde2a9d00591332a01",
+        "beaff8211852eebb6f925a80594d438706d696c695502fb1d1b453a9b0f20021"
+      ],
+      "masked_result_sha256": [
+        "6afbb597210300744c76bfc3bef50aaddf866b4accbc491938c090d2031d3cc1",
+        "06ad8fed902991502eeb0f121146d034ae88e013d56ef276e5f137754f174397",
+        "d45bb24e460294f99f9c901fc9cbbd26fcf7330fece3f3e1a170b406db295441"
+      ]
+    }
+  ],
+  "registered_capacity": {
+    "definition": "Logical registered transport-buffer capacity summed across four ranks; excludes other allocations and is not total VRAM.",
+    "bytes": {
+      "bf16": {
+        "directional": {
+          "per_rank_bytes": [
+            128,
+            128,
+            202113792,
+            202113792
+          ],
+          "sum_bytes": 404227840
+        },
+        "masked": {
+          "per_rank_bytes": [
+            272663040,
+            272663040,
+            272663040,
+            272663040
+          ],
+          "sum_bytes": 1090652160
+        }
+      },
+      "fp8": {
+        "directional": {
+          "per_rank_bytes": [
+            128,
+            128,
+            169607936,
+            169607936
+          ],
+          "sum_bytes": 339216128
+        },
+        "masked": {
+          "per_rank_bytes": [
+            270565632,
+            270565632,
+            270565632,
+            270565632
+          ],
+          "sum_bytes": 1082262528
+        }
+      }
+    }
+  },
+  "correctness": {
+    "source_commit": "e376f89cb68234a37d5bcc7093197aff02cc1a2c",
+    "gpu_jobs": 75,
+    "expected_invalid_input_rejections": 3,
+    "scope": "NVLink H2048/H4096 BF16/FP8, eager/graphs, changing live counts and routes, empty/skewed/asymmetric storage, poisoned/reused slots, delayed peers, mixed collectors and numerical edge cases",
+    "status": "passed; no new GIN validation claim for this exact snapshot"
+  },
+  "nsight": {
+    "tool": "Nsight Systems2026.5.1",
+    "payload": "bf16",
+    "tokens_per_attention_rank": 8192,
+    "replays_captured_per_rank": 50,
+    "samples_analyzed_per_rank": 40,
+    "ranks": 4,
+    "phase_medians_us": {
+      "e376": {
+        "request_and_group_us": 760.1915,
+        "return_phase_us": 388.2235,
+        "source_completion_us": 75.0815,
+        "output_ready_us": 1223.682
+      },
+      "masked-sm132": {
+        "request_and_group_us": 663.96,
+        "return_phase_us": 452.29949999999997,
+        "source_completion_us": 68.6335,
+        "output_ready_us": 1184.014
+      }
+    },
+    "interpretation": [
+      "The e376 packet copy and count kernel completes before publication of the whole request. FFN workers wait for that publication before grouping. Its90us duration lies on the current critical chain; it is not90us of additional latency relative to Masked DeepEP.",
+      "Masked copy epilogues start around73us while dispatch kernels remain active until around415us. This is observed kernel overlap; those kernels can also contain polling.",
+      "The96us front-phase gap comprises roughly32us of later pack start and64us of longer worker packing. A64us faster directional return phase offsets much of that gap. Individual phase medians are not an exact additive causal decomposition.",
+      "BeginWorker fuses metadata counting and prefix scan with peer acquisition. Its176us duration includes waiting from before the source begin. The7.16us interval from the last source publication kernel ending to the last worker metadata kernel ending also includes coherence and acquisition; it does not isolate count or scan compute.",
+      "Nsight Systems supplies kernel intervals and launch resources. It does not establish pure network time, achieved occupancy, or a hardware cause."
+    ],
+    "figure": "Representative exchanges closest to each trace median, not a stack of independent kernel medians. Profiled diagnostics are separate from unprofiled timing."
+  }
+}

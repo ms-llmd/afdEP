@@ -17,7 +17,7 @@ slots, registered transport capacity and required synchronization remain.
 Opt in with `from afdep import DirectionalBuffer, DirectionalConfig`.
 V1 remains the default. V2 replaces dispatch/combine with directional requests
 and replies; it reuses DeepEP TMA and reduction primitives.
-[Contracts](docs/directional.md) · [Historical H100 screen](docs/directional-performance.md).
+[Contracts](docs/directional.md) · [H100 experiment](docs/directional-performance.md).
 
 ## Use
 
@@ -70,8 +70,10 @@ prequantized FP8 dispatch return BF16 combined outputs. See the
 |---|---|---|
 | Hopper (SM90) | V1 DeepEP reuse | H100: BF16/FP8; eager/CUDA graphs; 2 Attention + 2 FFN, one NVLink domain |
 | Hopper (SM90) | V2 directional | H100: BF16/FP8; eager/CUDA graphs; 2 + 2 NVLink, or earlier 4 + 4 GIN across two domains |
-| Blackwell | Both | Not validated |
-| Other architectures | Both | Not validated |
+| Blackwell | V1 DeepEP reuse | Not validated |
+| Other architectures | V1 DeepEP reuse | Not validated |
+
+The current V2 backend requires SM90; additional architecture backends are future work.
 
 V1 validation uses 2 Attention + 2 FFN ranks with partitioned experts. Other group
 layouts and multi-domain role specialization require validation. V1 rejects
