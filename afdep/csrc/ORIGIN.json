@@ -30,7 +30,7 @@
   },
   "current_file_sha256": {
     "afdep/csrc/layout.hpp": "39f3663ec109cd333a41a17155e0bf7c6357d0506cf5067bed6b21416699ac30",
-    "afdep/csrc/kernels.cuh": "fb1453fad876f2a71a3f70d72878f3e7ab816fd039c9f896c457b54afeef2dbe",
+    "afdep/csrc/kernels.cuh": "c1a2d2a7ca3f13ee9599c1b43c29bec6e40ec91fddfdabb91d42477d59c9a324",
     "afdep/csrc/deepep_reduce.cuh": "e98b37b6f5625d4e6c685ca2333c6db73ccbbc819dde77eb5b84af85eef53571",
     "afdep/csrc/deepep_tma.cuh": "76cf2a78e43b8134eb2de0b112d95f28f26817bce2660e73c22d2c43866a89ec"
   },
@@ -128,6 +128,10 @@
     {
       "date": "2026-10-19",
       "description": "Specialize only the validated H4096 NVLink TMA packing entry by payload type and hidden width. Preserve the runtime H2048 helper, shared-memory-derived launch geometry, all TMA drains and per-peer credits. Configure the selected BF16/FP8 function before capture. The isolated component passed22 GPU correctness configurations and three paired process repeats; its composition with the selected source still requires exact-source GPU correctness and performance validation."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Compose contiguous H4096 NVLink return work assignment with the selected source. Each warp covers a disjoint chunk of flattened live source counts, translated back to source receipt/reply addresses. The processing order within each token, TMA lifetime/drains, peer credits and H2048 mapping remain unchanged. This matches upstream contiguous work assignment but not its compact arrival-order metadata layout. Isolated G evidence is selection-only; this composition requires exact-source GPU correctness and paired performance."
     }
   ]
 }

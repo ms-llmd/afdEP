@@ -214,10 +214,23 @@ __device__ __forceinline__ void nvlink_warp_partials(const DeviceArgs& a) {
     const int lane = threadIdx.x % kWarp;
     auto* tile = reinterpret_cast<uint4*>(reply_staging) + (threadIdx.x / kWarp) * kHiddenVec;
     int token = (threadIdx.x / kWarp) * gridDim.x + blockIdx.x;
-    const int stride = (blockDim.x / kWarp) * gridDim.x;
+    const int warps = (blockDim.x / kWarp) * gridDim.x;
+    int range_end = 0;
+    if constexpr (kHidden == kNVLinkWideHidden) {
+        // Match DeepEP's contiguous token range per warp. Counts were acquired
+        // by BeginWorker; split the flattened sources without changing receipts.
+        int total = 0;
+        for (int source = 0; source < l.sources; ++source)
+            total += control(a.base)->received_tokens[source];
+        const int tokens_per_warp = (total + warps - 1) / warps;
+        token *= tokens_per_warp;
+        range_end = min(token + tokens_per_warp, total);
+    }
+    const int stride = kHidden == kNVLinkWideHidden ? 1 : warps;
     for (int source = 0; source < l.sources; ++source) {
         const int n = control(a.base)->received_tokens[source];
-        for (; token < n; token += stride) {
+        const int source_end = kHidden == kNVLinkWideHidden ? min(n, range_end) : n;
+        for (; token < source_end; token += stride) {
             const int row = lane < kTopK ? a.receipt[(source * a.bucket + token) * kTopK + lane] : -1;
             unsigned mask = __ballot_sync(0xffffffff, row >= 0);
             int slots[kTopK];
@@ -258,6 +271,7 @@ __device__ __forceinline__ void nvlink_warp_partials(const DeviceArgs& a) {
             __syncwarp();
         }
         token -= n;
+        if constexpr (kHidden == kNVLinkWideHidden) range_end -= n;
     }
     tma::tma_store_wait();
     __syncwarp();
