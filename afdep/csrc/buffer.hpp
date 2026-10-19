@@ -141,9 +141,7 @@ class DirectionalM2NBuffer {
     }
 
     bool nvlink_bulk_shape(int tokens) const {
-        return layout.nvlink && (layout.hidden == kNVLinkWarpHidden || layout.hidden == kNVLinkWideHidden) &&
-               layout.topk == kNVLinkWarpTopK &&
-               tokens >= kNVLinkWarpMinTokens;
+        return layout.nvlink_bulk_shape(tokens);
     }
 
     DeviceArgs discover_receive(int bucket, const torch::Tensor &psum,

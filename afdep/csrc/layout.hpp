@@ -43,17 +43,23 @@ struct Control {
     int received_tokens[4];
 };
 
+enum class NVLinkReplyMode : uint64_t { AllWorkerPartials = 0, SelectedWorkerPartials = 1 };
+
 struct NVLinkControl {
     Control state;
     // Each worker's reply acknowledges its request reads. Each source's
     // next request acknowledges its previous reply reads. Ordered full pairs
     // retain one logical credit per reader without separate credit stores.
     uint64_t reply_ready;
+    // Current-epoch source capabilities, read after RequestReady acquisition.
+    uint32_t sparse_collectors;
 };
+static_assert(sizeof(NVLinkControl) <= 128, "NVLink control must fit the registered prefix");
 
 struct Packet {
     uint64_t tokens;
-    // Direct packets carry the original source extent; hybrid leaves this zero.
+    // GIN direct: original source extent; GIN hybrid: zero.
+    // NVLink: current source collector mode, owned until request-read acknowledgement.
     uint64_t reserved;
 };
 
@@ -65,6 +71,11 @@ struct Layout {
     size_t request_stride, reply_stride, token_map;
 
     AFDEP_HD static size_t aligned(size_t n) { return (n + 127) / 128 * 128; }
+    AFDEP_HD bool nvlink_bulk_shape(int tokens) const {
+        return nvlink && (hidden == kNVLinkWarpHidden || hidden == kNVLinkWideHidden) &&
+               topk == kNVLinkWarpTopK &&
+               tokens >= kNVLinkWarpMinTokens;
+    }
     AFDEP_HD int local_experts() const { return experts / workers; }
     AFDEP_HD int element_bytes() const { return fp8 ? 1 : 2; }
     AFDEP_HD int scale_groups() const { return fp8 ? hidden / 128 : 0; }

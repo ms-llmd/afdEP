@@ -233,6 +233,32 @@ __device__ __forceinline__ void nvlink_warp_partials(const DeviceArgs& a) {
         for (; token < source_end; token += stride) {
             const int row = lane < kTopK ? a.receipt[(source * a.bucket + token) * kTopK + lane] : -1;
             unsigned mask = __ballot_sync(0xffffffff, row >= 0);
+            if constexpr (kHidden == kNVLinkWarpHidden) {
+                // The measured 2048 path benefits from omitting empty replies.
+                // Keep wide scheduling unchanged, including conservative zeros.
+                if (!mask) {
+                    // Generic collectors require every slot; selective collectors
+                    // promise not to read an unselected partial from this epoch.
+                    const bool selective =
+                        reinterpret_cast<const NVLinkControl*>(a.base)->sparse_collectors & (1u << source);
+                    if (!selective) {
+                        tma::tma_store_wait();
+                        __syncwarp();
+                        for (int h = lane; h < kHiddenVec; h += kWarp)
+                            tile[h] = make_uint4(0, 0, 0, 0);
+                        tma::tma_store_fence();
+                        __syncwarp();
+                        if (lane == 0) {
+                            tma::tma_store_1d(a.peers[source] + l.reply_slot(a.rank) +
+                                                size_t(token) * kHidden * sizeof(nv_bfloat16),
+                                            tile, kHidden * sizeof(nv_bfloat16));
+                            tma::tma_store_commit();
+                        }
+                        __syncwarp();
+                    }
+                    continue;
+                }
+            }
             int slots[kTopK];
 #pragma unroll
             for (int k = 0; k < kTopK; ++k) {
@@ -429,13 +455,23 @@ __device__ __forceinline__ void nvlink_operation(const DeviceArgs& a) {
         if (tid == 0) {
             if (local->reply_ready != state->epoch) fail("NVLink requires complete worker pairs", a);
             ++state->epoch;
+            local->sparse_collectors = 0;
             for (int source = 0; source < l.sources; ++source) {
                 // Request N from EVERY source follows its entire collect N-1
                 // on an ordered stream, acknowledging all previous reply reads.
                 wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
-                const int n = packet_tokens(a.peers[source], l);
+                // One aligned volatile read obtains the immutable current
+                // packet header after its RequestReady publication.
+                static_assert(sizeof(Packet) == sizeof(uint4));
+                const uint4 header = load_remote_vector(a.peers[source] + l.request);
+                const int n = static_cast<int>(uint64_t(header.x) | (uint64_t(header.y) << 32));
                 if (n < 0 || n > a.bucket) fail("NVLink source tokens exceed bucket", a);
                 state->received_tokens[source] = n;
+                const uint64_t mode = uint64_t(header.z) | (uint64_t(header.w) << 32);
+                if (mode > static_cast<uint64_t>(NVLinkReplyMode::SelectedWorkerPartials))
+                    fail("invalid NVLink collector mode", a);
+                if (mode == static_cast<uint64_t>(NVLinkReplyMode::SelectedWorkerPartials))
+                    local->sparse_collectors |= 1u << source;
             }
         }
         __syncthreads();
@@ -705,7 +741,11 @@ __device__ __forceinline__ void pack_source_packet(const DeviceArgs& a) {
     uint8_t* packet = a.base + l.request;
     if (tid == 0) {
         reinterpret_cast<Packet*>(packet)->tokens = tokens;
-        reinterpret_cast<Packet*>(packet)->reserved = 0;
+        // Captured storage extent chooses the collector, independently of
+        // device live counts and graphs captured later on this same buffer.
+        reinterpret_cast<Packet*>(packet)->reserved = l.nvlink ?
+            static_cast<uint64_t>(l.nvlink_bulk_shape(a.tokens) ?
+                NVLinkReplyMode::SelectedWorkerPartials : NVLinkReplyMode::AllWorkerPartials) : 0;
     }
     const size_t xbytes = size_t(tokens) * l.hidden * l.element_bytes();
     for (size_t i = tid; i < xbytes / 16; i += stride)

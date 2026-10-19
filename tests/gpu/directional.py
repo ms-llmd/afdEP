@@ -40,6 +40,8 @@ DEFAULT_GRAPH_EPOCHS = 26
 DELAYED_WORKER = 1
 DELAYED_EPOCH = 8
 DELAY_SECONDS = 0.02
+DELAYED_READER = FFN_RANKS + 1
+READER_DELAY_CYCLES = 20_000_000
 
 
 def check_received(exchange: Exchange, epoch: int, *, exact_rows: bool = False) -> None:
@@ -460,6 +462,10 @@ def live_token_checks(buffer: Buffer, config: Config, rank: int, epochs: int) ->
                 live_tokens=live_tokens,
                 bucket=capacity,
             )
+            if rank == DELAYED_READER:
+                # Delay after publication: workers may finish and advance while
+                # this source still owns its previous reply-read credit.
+                torch.cuda._sleep(READER_DELAY_CYCLES)
             buffer.source_collect(exchange.output)
 
     if rank >= FFN_RANKS:
@@ -548,6 +554,8 @@ def live_token_checks(buffer: Buffer, config: Config, rank: int, epochs: int) ->
         "stable_gpu_count_pointer": True,
         "per_epoch_cpu_barrier": False,
         "delayed_worker_seconds": DELAY_SECONDS,
+        "delayed_reader_rank": DELAYED_READER,
+        "delay_after_dispatch_cycles": READER_DELAY_CYCLES,
     }
 
 
