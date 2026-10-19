@@ -135,6 +135,9 @@ class DirectionalM2NBuffer {
                 work = (size_t(layout.sources) * arguments.bucket * layout.topk + kThreadsPerBlock - 1) / kThreadsPerBlock;
             }
             blocks = std::min<size_t>(blocks, std::max<size_t>(work, 1));
+        } else if (!layout.nvlink && !layout.hybrid && operation == CollectReply) {
+            // One token per CTA; keep a completion waiter for empty replays.
+            blocks = std::min(blocks, std::max(arguments.bucket, 1));
         }
         const auto stream = at::cuda::getCurrentCUDAStream();
         AFDEP_CUDA_CHECK(launch_kernel(operation, arguments, blocks, stream.stream(), wide_tma_threads));

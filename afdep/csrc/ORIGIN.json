@@ -21,7 +21,8 @@
     "Add validated caller-owned receive tensors with per-exchange weight/receipt resets; preserve native device protocol and reader credits.",
     "Add opt-in eager exact receive allocation: discover GPU counts and read aligned counts on the CPU before allocating receive payload tensors, then retain the same packing and credit protocol.",
     "Add explicit transport selection and topology validation for 2F2A single-domain NVLink alongside the original two-domain 4F4A GIN path. Preserve real FFN-only expert ownership and source-count receive bounds.",
-    "Configure the TMA copy function shared-memory ceiling to the common BF16 maximum before capture; constructing an FP8 buffer cannot lower the limit for an existing BF16 graph. Per-launch bytes and device kernels unchanged."
+    "Configure the TMA copy function shared-memory ceiling to the common BF16 maximum before capture; constructing an FP8 buffer cannot lower the limit for an existing BF16 graph. Per-launch bytes and device kernels unchanged.",
+    "Experimental direct-GIN CollectReply launch bound: cap the existing grid by the captured source storage extent, retaining at least one completion waiter for empty replays. Preserve all kernel bodies, hybrid/NVLink grids, transfer stripes, operation ordering and reader credits. This unmeasured launch-policy hypothesis requires exact-source GPU correctness and matched confirmation; it does not explain the mixed-sign direct-GIN results."
   ],
   "verification": "The original implementation was validated on eight H100 GPUs. This extracted build requires its own GPU validation before claiming equivalence or performance.",
   "extracted_file_sha256": {
@@ -33,7 +34,7 @@
     "afdep/csrc/kernels.cuh": "adccceb864ac845e35b9d597d8770369399c311f9cfb0b963df8c74595a6bc79",
     "afdep/csrc/deepep_reduce.cuh": "e98b37b6f5625d4e6c685ca2333c6db73ccbbc819dde77eb5b84af85eef53571",
     "afdep/csrc/deepep_tma.cuh": "76cf2a78e43b8134eb2de0b112d95f28f26817bce2660e73c22d2c43866a89ec",
-    "afdep/csrc/buffer.hpp": "dc9e5c91e0ab613b6d5710c6eccb7853f13f54e8e7fcb567ea93005a055ba175"
+    "afdep/csrc/buffer.hpp": "0e83716639864773bfdea1db8c70227bdff59ec0f70d84a043c2c9de84e6eb37"
   },
   "protocol_changes": [
     {
