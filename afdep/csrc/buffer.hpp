@@ -23,6 +23,7 @@ namespace afdep {
 class DirectionalM2NBuffer {
     Layout layout;
     int rank, device, stripes, num_sms;
+    int wide_tma_threads = kNVLinkTmaWideThreads;
     uint64_t timeout_cycles;
     bool destroyed = false;
     bool nvlink_pair_pending = false;
@@ -106,12 +107,15 @@ class DirectionalM2NBuffer {
             // Bound every grid by its fixed shape, including empty exchanges;
             // live counts remain entirely device-side during graph replay.
             size_t work = blocks;
-            if (operation == TmaPackRows) {
-                constexpr int warps_per_block = kNVLinkTmaThreads / kWarpSize;
+            if (operation == TmaPackRows || operation == TmaPackRowsWide) {
+                const int warps_per_block =
+                    (operation == TmaPackRowsWide ? wide_tma_threads : kNVLinkTmaThreads) / kWarpSize;
                 work = (size_t(layout.sources) * arguments.bucket + warps_per_block - 1) / warps_per_block;
-            } else if (operation == WarpPartials || operation == WarpCollect) {
+            } else if (operation == WarpPartials || operation == WarpCollect ||
+                       operation == WarpPartialsWide || operation == WarpCollectWide) {
                 constexpr int warps_per_block = kThreadsPerBlock / kWarpSize;
-                const size_t tokens = size_t(arguments.bucket) * (operation == WarpPartials ? layout.sources : 1);
+                const bool partials = operation == WarpPartials || operation == WarpPartialsWide;
+                const size_t tokens = size_t(arguments.bucket) * (partials ? layout.sources : 1);
                 work = (tokens + warps_per_block - 1) / warps_per_block;
                 blocks *= kNVLinkWarpGridMultiplier;
             } else if (operation == PackRows || operation == MakePartials) {
@@ -128,7 +132,7 @@ class DirectionalM2NBuffer {
             blocks = std::min<size_t>(blocks, std::max<size_t>(work, 1));
         }
         const auto stream = at::cuda::getCurrentCUDAStream();
-        AFDEP_CUDA_CHECK(launch_kernel(operation, arguments, blocks, stream.stream()));
+        AFDEP_CUDA_CHECK(launch_kernel(operation, arguments, blocks, stream.stream(), wide_tma_threads));
     }
 
     int receive_row_capacity(int bucket) const {
@@ -137,7 +141,8 @@ class DirectionalM2NBuffer {
     }
 
     bool nvlink_bulk_shape(int tokens) const {
-        return layout.nvlink && layout.hidden == kNVLinkWarpHidden && layout.topk == kNVLinkWarpTopK &&
+        return layout.nvlink && (layout.hidden == kNVLinkWarpHidden || layout.hidden == kNVLinkWideHidden) &&
+               layout.topk == kNVLinkWarpTopK &&
                tokens >= kNVLinkWarpMinTokens;
     }
 
@@ -194,7 +199,8 @@ class DirectionalM2NBuffer {
         }
         recv_weights.zero_();
         if (!layout.nvlink) receipt.fill_(-1);
-        launch(nvlink_bulk_shape(a.bucket) ? TmaPackRows : PackRows, a, num_sms);
+        const int bulk_pack = layout.hidden == kNVLinkWideHidden ? TmaPackRowsWide : TmaPackRows;
+        launch(nvlink_bulk_shape(a.bucket) ? bulk_pack : PackRows, a, num_sms);
         if (!layout.nvlink) launch(PublishPackAndCredit, a);
     }
 
@@ -220,8 +226,28 @@ class DirectionalM2NBuffer {
         AFDEP_CUDA_CHECK(cudaGetDeviceProperties(&properties, device));
         TORCH_CHECK(num_sms > 0 && num_sms <= properties.multiProcessorCount,
                     "Directional num_sms exceeds the device SM count");
-        if (nvlink_bulk_shape(layout.capacity))
-            AFDEP_CUDA_CHECK(configure_tma_kernel());
+        if (nvlink_bulk_shape(layout.capacity)) {
+            int wide_max_shared = 0;
+            if (layout.hidden == kNVLinkWideHidden) {
+                cudaFuncAttributes attributes{};
+                AFDEP_CUDA_CHECK(get_wide_tma_attributes(&attributes));
+                TORCH_CHECK(properties.sharedMemPerBlockOptin > attributes.sharedSizeBytes,
+                            "Wide TMA static storage exceeds device shared memory");
+                const size_t shared_budget = properties.sharedMemPerBlockOptin - attributes.sharedSizeBytes;
+                const int max_threads = std::min(properties.maxThreadsPerBlock, attributes.maxThreadsPerBlock);
+                const int max_warps = std::min(max_threads / kWarpSize, kNVLinkTmaMaxWarps);
+                const auto staging_bytes = [&](int element_bytes) {
+                    return layout.hidden * element_bytes + int(sizeof(uint64_t));
+                };
+                const int bf16_warps = std::min<int>(shared_budget / staging_bytes(2), max_warps);
+                const int fp8_warps = std::min<int>(shared_budget / staging_bytes(1), max_warps);
+                TORCH_CHECK(bf16_warps > 0 && fp8_warps > 0, "Wide TMA staging exceeds device shared memory");
+                wide_tma_threads = (layout.fp8 ? fp8_warps : bf16_warps) * kWarpSize;
+                // Both payload constructors retain the same per-function limit.
+                wide_max_shared = std::max(bf16_warps * staging_bytes(2), fp8_warps * staging_bytes(1));
+            }
+            AFDEP_CUDA_CHECK(configure_tma_kernel(layout.hidden, wide_max_shared));
+        }
         const auto physical = get_physical_domain_size(nccl_comm);
         TORCH_CHECK(nvlink_only ? (std::get<0>(physical) == 1 && std::get<1>(physical) == world) :
                         (std::get<0>(physical) == 2 && std::get<1>(physical) == 4),
@@ -387,7 +413,8 @@ class DirectionalM2NBuffer {
         auto a = args(worker_bucket);
         a.rows = static_cast<const uint16_t *>(rows.data_ptr());
         a.receipt = receipt.data_ptr<int>();
-        launch(nvlink_bulk_shape(worker_bucket) ? WarpPartials : MakePartials, a, num_sms);
+        const int bulk_partials = layout.hidden == kNVLinkWideHidden ? WarpPartialsWide : WarpPartials;
+        launch(nvlink_bulk_shape(worker_bucket) ? bulk_partials : MakePartials, a, num_sms);
         if (layout.hybrid && !layout.nvlink) {
             launch(PublishPartialAndWait, a);
             launch(ReduceReply, a, num_sms);
@@ -407,7 +434,8 @@ class DirectionalM2NBuffer {
         auto a = args(std::max(source_rows, 1));
         a.out = static_cast<uint16_t *>(out.data_ptr());
         if (nvlink_bulk_shape(source_rows)) launch(WaitReply, a);
-        launch(nvlink_bulk_shape(source_rows) ? WarpCollect : CollectReply, a, num_sms);
+        const int bulk_collect = layout.hidden == kNVLinkWideHidden ? WarpCollectWide : WarpCollect;
+        launch(nvlink_bulk_shape(source_rows) ? bulk_collect : CollectReply, a, num_sms);
         if (!layout.nvlink) launch(ReplyConsumedCredit, a);
         nvlink_pair_pending = false;
     }

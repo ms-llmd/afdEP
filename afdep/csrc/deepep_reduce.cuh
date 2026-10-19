@@ -9,6 +9,10 @@
 
 namespace afdep {
 
+struct NoStagingWait {
+    __device__ __forceinline__ void operator()() const {}
+};
+
 // Reuse the upstream two-input BF16 bypass for CTA-per-token collectors too.
 __device__ __forceinline__ uint4 deepep_add_bf16_vectors(uint4 first, const uint4 second) {
     auto* a = reinterpret_cast<nv_bfloat162*>(&first);
@@ -21,9 +25,10 @@ __device__ __forceinline__ uint4 deepep_add_bf16_vectors(uint4 first, const uint
 
 // DeepEP's four-vector unroll and two-input BF16 bypass, without bias or TMA
 // output staging. The caller supplies coherent loads from directional buffers.
-template <int kHiddenVec, int kSlots, class Load>
+template <int kHiddenVec, int kSlots, class Load, class Wait = NoStagingWait>
 __device__ __forceinline__ void deepep_warp_combine(
-    int lane, const int (&slots)[kSlots], uint4* destination, const Load& load) {
+    int lane, const int (&slots)[kSlots], uint4* destination, const Load& load,
+    const Wait& wait = Wait{}) {
     constexpr int kWarp = 32;
     constexpr int kUnroll = 4;
     constexpr int kPairs = sizeof(uint4) / sizeof(nv_bfloat162);
@@ -39,6 +44,7 @@ __device__ __forceinline__ void deepep_warp_combine(
                 if (slots[0] >= 0) first[j] = load(slots[0], h);
                 if (slots[1] >= 0) second[j] = load(slots[1], h);
             }
+            if (tile == 0) wait();
 #pragma unroll
             for (int j = 0; j < kUnroll; ++j)
                 destination[tile + j * kWarp + lane] = deepep_add_bf16_vectors(first[j], second[j]);
@@ -59,6 +65,7 @@ __device__ __forceinline__ void deepep_warp_combine(
                     reduced[j].y += value.y;
                 }
             }
+            if (tile == 0) wait();
 #pragma unroll
             for (int j = 0; j < kUnroll; ++j) {
                 uint4 value;

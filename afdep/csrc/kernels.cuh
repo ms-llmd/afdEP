@@ -205,10 +205,11 @@ __device__ __forceinline__ void prefix_nvlink(const DeviceArgs& a) {
 
 // DeepEP's warp-per-token mapping, adapted to FFN-only receipts and source
 // reply slots. Warp shuffles retain the original top-k reduction order.
+template <int kHidden>
 __device__ __forceinline__ void nvlink_warp_partials(const DeviceArgs& a) {
     extern __shared__ __align__(32) uint8_t reply_staging[];
     constexpr int kWarp = kWarpSize, kTopK = kNVLinkWarpTopK;
-    constexpr int kHiddenVec = kNVLinkWarpHidden * sizeof(nv_bfloat16) / sizeof(uint4);
+    constexpr int kHiddenVec = kHidden * sizeof(nv_bfloat16) / sizeof(uint4);
     const Layout l = a.layout;
     const int lane = threadIdx.x % kWarp;
     auto* tile = reinterpret_cast<uint4*>(reply_staging) + (threadIdx.x / kWarp) * kHiddenVec;
@@ -229,19 +230,29 @@ __device__ __forceinline__ void nvlink_warp_partials(const DeviceArgs& a) {
             }
             // Match DeepEP's reduce -> shared tile -> peer TMA store sequence.
             // The previous store must stop reading before this tile is reused.
-            tma::tma_store_wait();
-            __syncwarp();
+            if constexpr (kHidden != kNVLinkWideHidden) {
+                tma::tma_store_wait();
+                __syncwarp();
+            }
             deepep_warp_combine<kHiddenVec>(lane, slots, tile,
                 [&](int selected, int h) {
                     return load_remote_vector(reinterpret_cast<const uint4*>(a.rows) +
                                               size_t(selected) * kHiddenVec + h);
+                },
+                []() {
+                    // Register loads/reduction may overlap the prior tile store.
+                    // The first shared write still waits for every issuer.
+                    if constexpr (kHidden == kNVLinkWideHidden) {
+                        tma::tma_store_wait();
+                        __syncwarp();
+                    }
                 });
             tma::tma_store_fence();
             __syncwarp();
             if (lane == 0) {
                 tma::tma_store_1d(a.peers[source] + l.reply_slot(a.rank) +
-                                    size_t(token) * kNVLinkWarpHidden * sizeof(nv_bfloat16),
-                                  tile, kNVLinkWarpHidden * sizeof(nv_bfloat16));
+                                    size_t(token) * kHidden * sizeof(nv_bfloat16),
+                                  tile, kHidden * sizeof(nv_bfloat16));
                 tma::tma_store_commit();
             }
             __syncwarp();
@@ -252,9 +263,10 @@ __device__ __forceinline__ void nvlink_warp_partials(const DeviceArgs& a) {
     __syncwarp();
 }
 
+template <int kHidden>
 __device__ __forceinline__ void nvlink_warp_collect(const DeviceArgs& a) {
     constexpr int kWarp = kWarpSize, kTopK = kNVLinkWarpTopK, kWorkers = 2;
-    constexpr int kHiddenVec = kNVLinkWarpHidden * sizeof(nv_bfloat16) / sizeof(uint4);
+    constexpr int kHiddenVec = kHidden * sizeof(nv_bfloat16) / sizeof(uint4);
     const Layout l = a.layout;
     Control* state = control(a.base);
     if (blockIdx.x == 0 && threadIdx.x == 0) state->lifecycle = state->epoch;
@@ -700,11 +712,23 @@ __global__ void directional_kernel(DeviceArgs a) {
         return;
     }
     if constexpr (kOperation == WarpPartials) {
-        nvlink_warp_partials(a);
+        nvlink_warp_partials<kNVLinkWarpHidden>(a);
         return;
     }
     if constexpr (kOperation == WarpCollect) {
-        nvlink_warp_collect(a);
+        nvlink_warp_collect<kNVLinkWarpHidden>(a);
+        return;
+    }
+    if constexpr (kOperation == TmaPackRowsWide) {
+        nvlink_tma_pack(a);
+        return;
+    }
+    if constexpr (kOperation == WarpPartialsWide) {
+        nvlink_warp_partials<kNVLinkWideHidden>(a);
+        return;
+    }
+    if constexpr (kOperation == WarpCollectWide) {
+        nvlink_warp_collect<kNVLinkWideHidden>(a);
         return;
     }
     if constexpr (kOperation == Drain) {

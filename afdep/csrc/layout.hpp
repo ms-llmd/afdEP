@@ -22,9 +22,12 @@ constexpr int kNVLinkBulkGridMultiplier = 8;
 constexpr int kNVLinkFusedMetadataTokens = 32;
 constexpr int kNVLinkWarpMinTokens = 2048;
 constexpr int kNVLinkWarpHidden = 2048;
+constexpr int kNVLinkWideHidden = 4096;
 constexpr int kNVLinkWarpTopK = 8;
 constexpr int kWarpSize = 32;
 constexpr int kNVLinkTmaThreads = 1024;
+constexpr int kNVLinkTmaWideThreads = 512;
+constexpr int kNVLinkTmaMaxWarps = 32;
 constexpr int kNVLinkWarpGridMultiplier = 4;
 
 // This protocol is deliberately independent of DeepEP expert/world layouts.
@@ -133,7 +136,8 @@ enum Operation {
     BeginSource, PlanDirectRequests, PackSource, SendRequest, BeginWorker, Histogram, Prefix,
     PackRows, PublishPackAndCredit, MakePartials, PublishPartialAndWait,
     ReduceReply, PublishConsumedAndWaitCredit, SendReply, CollectReply,
-    ReplyConsumedCredit, Drain, WaitReply, WarpPartials, WarpCollect, TmaPackRows, PackSourceCounts, NumOperations
+    ReplyConsumedCredit, Drain, WaitReply, WarpPartials, WarpCollect, TmaPackRows, PackSourceCounts,
+    WarpPartialsWide, WarpCollectWide, TmaPackRowsWide, NumOperations
 };
 
 enum Signal { RequestReady, ReplyReady, RequestCredit, ReplyCredit };

@@ -5,19 +5,37 @@
 
 namespace afdep {
 
-cudaError_t configure_tma_kernel() {
+cudaError_t get_wide_tma_attributes(cudaFuncAttributes* attributes) {
+    return cudaFuncGetAttributes(attributes, directional_kernel<TmaPackRowsWide>);
+}
+
+cudaError_t configure_tma_kernel(int hidden, int wide_max_shared) {
     // A later FP8 buffer must not lower the per-device function limit needed
     // by a previously captured BF16 graph. Per-launch storage stays exact.
+    if (hidden == kNVLinkWideHidden) {
+        static_assert(sizeof(tma::mbarrier) == sizeof(uint64_t));
+        const auto status = cudaFuncSetAttribute(directional_kernel<TmaPackRowsWide>,
+                                                 cudaFuncAttributeMaxDynamicSharedMemorySize, wide_max_shared);
+        if (status != cudaSuccess) return status;
+        return cudaFuncSetAttribute(directional_kernel<WarpPartialsWide>,
+                                     cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                     (kThreadsPerBlock / kWarpSize) * kNVLinkWideHidden * sizeof(nv_bfloat16));
+    }
+    if (hidden != kNVLinkWarpHidden) return cudaErrorInvalidValue;
     const int bytes = (kNVLinkTmaThreads / kWarpSize) *
                       (kNVLinkWarpHidden * sizeof(nv_bfloat16) + sizeof(tma::mbarrier));
     return cudaFuncSetAttribute(directional_kernel<TmaPackRows>,
                                 cudaFuncAttributeMaxDynamicSharedMemorySize, bytes);
 }
 
-cudaError_t launch_kernel(int operation, DeviceArgs args, int blocks, cudaStream_t stream) {
-    const size_t shared_bytes = operation == TmaPackRows ?
-        (kNVLinkTmaThreads / kWarpSize) * (args.layout.hidden * args.layout.element_bytes() + sizeof(tma::mbarrier)) :
-        operation == WarpPartials ? (kThreadsPerBlock / kWarpSize) * args.layout.hidden * sizeof(nv_bfloat16) : 0;
+cudaError_t launch_kernel(int operation, DeviceArgs args, int blocks, cudaStream_t stream,
+                         int wide_tma_threads) {
+    const bool tma_pack = operation == TmaPackRows || operation == TmaPackRowsWide;
+    const bool partials = operation == WarpPartials || operation == WarpPartialsWide;
+    const int tma_threads = operation == TmaPackRowsWide ? wide_tma_threads : kNVLinkTmaThreads;
+    const size_t shared_bytes = tma_pack ?
+        (tma_threads / kWarpSize) * (args.layout.hidden * args.layout.element_bytes() + sizeof(tma::mbarrier)) :
+        partials ? (kThreadsPerBlock / kWarpSize) * args.layout.hidden * sizeof(nv_bfloat16) : 0;
 #define AFDEP_LAUNCH(operation_name)                                                                         \
     case operation_name:                                                                                     \
         directional_kernel<operation_name><<<blocks, kThreadsPerBlock, shared_bytes, stream>>>(args);        \
@@ -44,8 +62,13 @@ cudaError_t launch_kernel(int operation, DeviceArgs args, int blocks, cudaStream
         AFDEP_LAUNCH(WaitReply);
         AFDEP_LAUNCH(WarpPartials);
         AFDEP_LAUNCH(WarpCollect);
+        AFDEP_LAUNCH(WarpPartialsWide);
+        AFDEP_LAUNCH(WarpCollectWide);
     case TmaPackRows:
         directional_kernel<TmaPackRows><<<blocks, kNVLinkTmaThreads, shared_bytes, stream>>>(args);
+        break;
+    case TmaPackRowsWide:
+        directional_kernel<TmaPackRowsWide><<<blocks, wide_tma_threads, shared_bytes, stream>>>(args);
         break;
     default:
         return cudaErrorInvalidValue;
