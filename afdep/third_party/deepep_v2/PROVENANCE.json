@@ -1,0 +1,98 @@
+{
+  "component": "DeepEP V2 elastic expert dispatch/combine transport and runtime JIT",
+  "upstream_repository": "https://github.com/deepseek-ai/DeepEP",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2025 DeepSeek",
+  "source_repository": "https://github.com/ms-llmd/afd-plugin",
+  "source_commit": "1198c52f8bed0c20a2b51ff550db5ccf2fda0906",
+  "source_directory": "afd_plugin/connectors/gpu/deepep_m2n/csrc/deepep",
+  "intermediary_repository": "https://github.com/hao-ai-lab/FastAFD",
+  "intermediary_commit": "3c7161949310b6d59d6b4cf9bf997a4935c8113b",
+  "pin_limit": "The original DeepEP revision is not recorded in the FastAFD snapshot; the immutable plugin revision and complete file hashes identify this vendored input.",
+  "local_changes": [
+    "Opt-in afdEP role specialization: receive allocation, fused direct-dispatch route checks and empty-side completion through normal stream events; exact added and modified hashes in LOCAL_CHANGES.json. Frozen file_sha256 identifies the unchanged origin snapshot."
+  ],
+  "inherited_changes": [
+    "AFD_DEEPEP_PER_BUFFER_COMM_STREAM environment variable naming.",
+    "Optional GIN initialization with a single-NVLink-domain check when GIN is disabled or unavailable.",
+    "Module-local ElasticBuffer and EventHandle pybind classes to coexist with other DeepEP extensions.",
+    "Other FastAFD changes retained exactly as pinned; see the source revision VENDORING.md."
+  ],
+  "not_included": [
+    "DeepGEMM",
+    "CUTLASS",
+    "fmt",
+    "vLLM",
+    "afd-plugin model and serving code"
+  ],
+  "file_sha256": {
+    "LICENSE": "6c73a30c14a2938abaa6afe98ebb19e6d81dac5bd4ace0cb05c61c20afa37b85",
+    "csrc/CMakeLists.txt": "87fb47d709e1f567977e76acf689860ee54ce0d1027ebf464d80272b162a2bef",
+    "csrc/elastic/buffer.hpp": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
+    "csrc/elastic/utils.hpp": "ab6371d4a7f54613cd0721a01faa6f916c31e40c702fec8d869a42fca5d53bbc",
+    "csrc/indexing/main.cu": "3ddfd6c4fb31445ba34836101aae6159afda19a8298d17ecb5eee6f1ad609a8e",
+    "csrc/jit/api.hpp": "a926d4ae12cca0610e1a242a8a8a1bc9ba59d8058c224876744351196223d891",
+    "csrc/jit/cache.hpp": "1d11deecb8f99ea07c315d3a765dd14cdc8ae4aff014e2b50c242595d5407d5e",
+    "csrc/jit/compiler.hpp": "57323696ff1fc0a00962762a56493facb37f32f315282bbc76915c5bb6f3a6e8",
+    "csrc/jit/device_runtime.hpp": "832b41bb32341fdeb0e7e7937c4197b548bf9a2d4518f158011d2d6ec13ee86e",
+    "csrc/jit/handle.hpp": "82a788a3c30cb98438a79911efecbe323b0c75e4cc01a3aa1a3b83f3e8281181",
+    "csrc/jit/include_parser.hpp": "6e55bba340779fbb1a8d7f260dd05a9e00b9fa1f0efb1d67c7da35128b38790f",
+    "csrc/jit/kernel_runtime.hpp": "ca02fab701457e45e146df97c35e7efd6a6907702e807bf1c084907e245f531d",
+    "csrc/jit/launch_runtime.hpp": "ebc7c27e22ec4792119c07daacaf34f9533ee6c8b295bc4f00a4b724bcab8276",
+    "csrc/kernels/CMakeLists.txt": "33f5e05f98ddc9d0eb147a47e0fb123259ba33b3d8852177528c4bbacb61d98d",
+    "csrc/kernels/backend/CMakeLists.txt": "2595604c26cb2090862d137eff595923424b8b6bf08e84e01f0d28795ef46c59",
+    "csrc/kernels/backend/api.cuh": "5b03e8f35a8803b4e67a6e68296f078c48e24a2c413c3655505752931297ba1e",
+    "csrc/kernels/backend/cuda_driver.cu": "caf1db381828d6f3787dbe0e22c275867683f4709a6799ffa9522726a76de66d",
+    "csrc/kernels/backend/nccl.cu": "26e9bb4234599984815423e3df67691190059ae35d779148604fed3e7647d507",
+    "csrc/kernels/elastic/api.hpp": "fe0ed0c91ca7fc3548c716cdfbbc32972df94c5818fb44a61acb13ddf2b86488",
+    "csrc/kernels/elastic/barrier.hpp": "424f5af391978cbacacfd9114fdd427944cdeb69ebf9575bb5c2d0b4a94a0556",
+    "csrc/kernels/elastic/combine.hpp": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
+    "csrc/kernels/elastic/dispatch.hpp": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
+    "csrc/kernels/elastic/engram.hpp": "d31b84e57fad8dcaf87c3752f9bf5fd3926d103d92279ba3b3d5c42d6e321c9b",
+    "csrc/kernels/elastic/pp_send_recv.hpp": "ad6033844d3e2f7890151da4d51235565cdebb17aa9f79cffff9295720596e7b",
+    "csrc/python_api.cpp": "64b6041b75c1027c9f7f16b236e1fb037f0838f5338020804035e8e39d5710ba",
+    "csrc/utils/event.hpp": "7cc840e5fd9e8bb67f19f70e19fe162f2a184a08ce2993c929ed6645b81d3292",
+    "csrc/utils/format.hpp": "86390933c7541b8ccf63cf48e4f9701f40a92a19adbfa2f2e6119069f9beefb8",
+    "csrc/utils/hash.hpp": "19ed0c24dfc6b48db0b06ca43e7bc585b112bf965eaf78bcaf7afd0c91c3f23a",
+    "csrc/utils/lazy_driver.hpp": "f157704c5674056dcb019278ee9554ccae6b67cddee944a9e62eda7fa83abd39",
+    "csrc/utils/lazy_init.hpp": "df1fbf0251d79f4a952b1ab8e80ae97152ad75671dfe85a21a96ef00961278ab",
+    "csrc/utils/shared_memory.hpp": "4ce9543415339e58f243ec7b5dbf652575ed4b7e782568933178368052521dd5",
+    "csrc/utils/system.hpp": "01c914be7f36c5ddfa1b37fb81cf46405c5a5e56595d63b66b9a473369d1cf44",
+    "deep_ep/include/deep_ep/common/comm.cuh": "a2c7337c5c6dcaed0e57ba7776c0788202b0814142ed92b0ba5060bb4f45ae32",
+    "deep_ep/include/deep_ep/common/compiled.cuh": "282764f12cf9d4831de593fd78ca303277314aa326777aeef895e12a32943817",
+    "deep_ep/include/deep_ep/common/exception.cuh": "489616d28c7eaf2d7a6619841fd722da5570ec91d709cb386d2a1d6f086b0e7a",
+    "deep_ep/include/deep_ep/common/handle.cuh": "7cb44fe9decb294090f7d23ea02373e167ddc1d16ee414a3d78e1b6444ad1064",
+    "deep_ep/include/deep_ep/common/layout.cuh": "a5c2b6a7de5d9deb6e56257b22e82cf10321f1d405d6b4f4bf097b1fd2b20041",
+    "deep_ep/include/deep_ep/common/math.cuh": "e4597f9997face4af569a6736786085a41a601851801814a25d41623f0e5d335",
+    "deep_ep/include/deep_ep/common/ptx.cuh": "ededf87dc3260882fc33d92112541ce2030203a29e937351c9909ae8ef72e3f0",
+    "deep_ep/include/deep_ep/impls/barrier.cuh": "53ffe400a26c5ec0ed8ae95b579bc04cf2749b5a249c566829728940fda2fa09",
+    "deep_ep/include/deep_ep/impls/combine.cuh": "6a0f1f3f978978a35f9616178825f8c29881aafc3a04d8c2ba68b50a4a283c9a",
+    "deep_ep/include/deep_ep/impls/combine_reduce_epilogue.cuh": "32417d8e07f480202f51b0bcc3f28c480e7384fc2f087089f759790e84a108c6",
+    "deep_ep/include/deep_ep/impls/combine_utils.cuh": "35f9dbed0cb937231e1edc389038c0d00f0890bbdb55a997e716605a3ab8e935",
+    "deep_ep/include/deep_ep/impls/dispatch.cuh": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
+    "deep_ep/include/deep_ep/impls/dispatch_copy_epilogue.cuh": "77eb7a54c2d645e5137255e399f465af550f56bcb2d8fd000d6de9a7f3d7c033",
+    "deep_ep/include/deep_ep/impls/dispatch_deterministic_prologue.cuh": "fba444e21b2f9197f9449c3c6082c92dbec892e78677e936c22255ecf704a496",
+    "deep_ep/include/deep_ep/impls/engram_fetch.cuh": "49ef06fefdcce1e0b8c05fb638a6d8ac305db5f983a85f3fdc106ec2f1464687",
+    "deep_ep/include/deep_ep/impls/hybrid_combine.cuh": "c9c628569eb49edbaabf1364a0ae8f0436b76cd6f9be4ab02daf5e4a8c2ae3b3",
+    "deep_ep/include/deep_ep/impls/hybrid_dispatch.cuh": "87ff341af541de4b11f88237b688705a35762229ae2f37ae488c7e3bfda949ac",
+    "deep_ep/include/deep_ep/impls/pp_send_recv.cuh": "4c0d2f3a546a2bbe17ee24bbe415430cfa8a465bcd554fe5d0c71a200ebe63a5"
+  },
+  "build_adapter_inputs": {
+    "buffer.py": "b93a97398b5d16b230c8cc8cb5d7b7787e6164d02e0005dbd581a06df6268ad9",
+    "jit_build.py": "b76e04e0b476d4675b835f20f26f262c46e9bb6341accc73609e7a35e67198b4"
+  },
+  "build_adapter_changes": [
+    "Standalone lazy loader; AFDEP compiler/NCCL/cache conventions.",
+    "Content-addressed source/toolchain signature and atomic build publication.",
+    "Unique extension name prefix _afdep_deepep_v2; unchanged native constructor, transport kernels and synchronization."
+  ],
+  "host_adapter_inputs": {
+    "buffer.py": "b93a97398b5d16b230c8cc8cb5d7b7787e6164d02e0005dbd581a06df6268ad9",
+    "layout.py": "a55b8883f0b3829a4ac57b9a606b86936319baa81d2fdc5642151dc7ce78ece2"
+  },
+  "host_adapter_changes": [
+    "afdep/deepep.py retains the original ElasticBuffer constructor, dispatch/combine arguments, stream joins and native handles; it owns one bootstrap communicator per instance instead of a process-global registry.",
+    "Add explicit AFD real-expert topology and role endpoints over that single shared facade; preserve native receive allocations and return native combine outputs directly.",
+    "Add collective configuration/source checks, physical-domain visibility, handle ownership/order checks and capture guards; do not change the process environment, native kernels, barriers or credits."
+  ]
+}

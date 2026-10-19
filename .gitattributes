@@ -1,0 +1,2 @@
+# Preserve the exact vendored input, including upstream whitespace.
+afdep/third_party/deepep_v2/** -whitespace linguist-vendored

@@ -8,7 +8,7 @@ import json
 import platform
 
 from . import __version__
-from ._build import load_native, nccl_paths, resolve_nvcc, source_digest
+from ._build import load_deepep, nccl_paths, resolve_nvcc, source_digest
 
 
 def main() -> None:
@@ -53,7 +53,7 @@ def main() -> None:
             report["errors"].append(str(exc))
     if args.build:
         try:
-            module = load_native()
+            module = load_deepep()
             report["native_library"] = module.__file__
             report["nccl_version"] = module.get_nccl_version()
             report["compiled_nccl_version"] = module.compiled_nccl_version

@@ -1,0 +1,49 @@
+{
+  "base_library_commit": "b979b8d157283f7e9021eaeb4b2ece6800e68b46",
+  "origin_hashes": "PROVENANCE.json file_sha256 remains the immutable vendored input",
+  "modified_files": {
+    "csrc/elastic/buffer.hpp": {
+      "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
+      "sha256": "80b9e1d073787d2d62d008ace8e85e4d79c4015bd5a9b6b4d5a7631f135897a6"
+    },
+    "csrc/kernels/elastic/dispatch.hpp": {
+      "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
+      "sha256": "33a04fb2dd96d31622aee9dff8bf8e4d8b1fad348ce06854c52652c21e0bae47"
+    },
+    "deep_ep/include/deep_ep/impls/dispatch_copy_epilogue.cuh": {
+      "upstream_sha256": "77eb7a54c2d645e5137255e399f465af550f56bcb2d8fd000d6de9a7f3d7c033",
+      "sha256": "ca6373e5694886f259ad9ce2ad1366ca060e62d0bb285930731d1daa27b4dd6f"
+    },
+    "deep_ep/include/deep_ep/impls/dispatch.cuh": {
+      "upstream_sha256": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
+      "sha256": "4fd27e4ae09fc87351bb9ace2e9a49b0e071d7dec22f4daed80da77a3110ffea"
+    },
+    "csrc/python_api.cpp": {
+      "upstream_sha256": "64b6041b75c1027c9f7f16b236e1fb037f0838f5338020804035e8e39d5710ba",
+      "sha256": "fd3f14ee9316ea7d05615738ed2ac18e3687b9c27a44dc773c510c3fe2dfe0bf"
+    }
+  },
+  "added_files": {
+    "csrc/kernels/elastic/afdep_roles.hpp": {
+      "sha256": "40faf4c6463e05550f0e3c04b4bc0d8a80e1b17b441e718287b8a8813f866c4c"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
+      "sha256": "bbf6eb2781fabe323093c183932c7f7678211c94ba7af8a99c325c059e3e246a"
+    }
+  },
+  "scope": [
+    "Keep registered transport capacity, main barriers/credits, hybrid dispatch and all main combine kernels unchanged.",
+    "Validate full-width real expert IDs and duplicate experts before route-derived indexing in both direct-dispatch routing loops; preserve -1 padding and destination-rank deduplication.",
+    "Fuse only noncached, nondeterministic role dispatch in one logical NVLink domain; deterministic and other logical paths retain the separate route guard and completion helpers.",
+    "Assert every incoming source count is zero in the main notify phase; use existing normal stream events and tensor lifetimes instead of empty-side completion kernels on the fused path.",
+    "Allocate no source receive rows; bound worker receive rows by explicit source count.",
+    "Read actual device counts after reducing allocation bounds; preserve hybrid forwarding metadata.",
+    "Known-empty sources return zero host counts without CPU polling or per-dispatch host counter clears; device counter resets and launch flags remain unchanged.",
+    "Expose compiled and loaded NCCL versions for startup compatibility checks."
+  ],
+  "seed": {
+    "version": "v2-source-host-count-skip",
+    "source_manifest_sha256": "4211c4b4f72cf2c06d1e2177eb024438382968cbcb84414baa73c80b79304a4d"
+  },
+  "scope_version": "afdEP v1 role specialization"
+}

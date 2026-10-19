@@ -29,5 +29,5 @@ jobs:
       - name: Inspect installed wheel without CUDA
         run: >-
           python -I -c "import afdep; from pathlib import Path;
-          assert afdep.Config(8, 128, 4, 1).world_size == 8;
-          assert (Path(afdep.__file__).parent / 'csrc/kernels.cu').is_file()"
+          assert afdep.Config(8, 256, 8, 2, 2, 2).role_aware;
+          assert (Path(afdep.__file__).parent / 'third_party/deepep_v2/deep_ep/include/deep_ep/impls/dispatch.cuh').is_file()"
