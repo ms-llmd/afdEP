@@ -18,6 +18,8 @@ from afdep import Buffer as DeepEPBuffer
 from afdep import Config as DeepEPConfig
 from afdep import DirectionalBuffer as Buffer
 from afdep import DirectionalConfig as Config
+from afdep._build import source_digest as deepep_source_digest
+from afdep._directional_build import source_digest as directional_source_digest
 
 
 def main():
@@ -293,6 +295,9 @@ def main():
         "device": str(torch.cuda.get_device_properties(local_rank)),
         "torch": torch.__version__,
         "cuda": torch.version.cuda,
+        "native_source_sha256": (
+            directional_source_digest() if directional else deepep_source_digest()
+        ),
         "endpoint_sha256": hashlib.sha256(
             Path(sys.modules[type(buffer).__module__].__file__).read_bytes()
         ).hexdigest(),
