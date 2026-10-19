@@ -35,8 +35,15 @@ def main():
     parser.add_argument(
         "--tokens", type=int, nargs="+", default=[1, 8, 32, 128, 512, 2048]
     )
-    parser.add_argument("--sms", type=int, default=132)
-    parser.add_argument("--masked-sms", type=int, default=0)
+    parser.add_argument(
+        "--sms", type=int, default=132, help="Directional local-kernel base grid"
+    )
+    parser.add_argument(
+        "--masked-sms",
+        type=int,
+        default=0,
+        help="DeepEP transport grid; local epilogues use the full device",
+    )
     parser.add_argument("--iterations", type=int, default=100)
     parser.add_argument("--warmup", type=int, default=1000)
     parser.add_argument("--repeats", type=int, default=3)
@@ -230,9 +237,15 @@ def main():
         "rank": rank,
         "config": asdict(config),
         "registered_bytes": buffer.num_buffer_bytes,
-        "resolved_comm_sms": config.num_sms
-        if directional
-        else buffer.transport._resolved_num_sms,
+        "launch_policy": {
+            "directional_local_base_grid": config.num_sms if directional else None,
+            "deepep_transport_sms": None
+            if directional
+            else buffer.transport._resolved_num_sms,
+            "deepep_local_epilogue_sms": None
+            if directional
+            else torch.cuda.get_device_properties(rank).multi_processor_count,
+        },
         "device": str(torch.cuda.get_device_properties(rank)),
         "torch": torch.__version__,
         "cuda": torch.version.cuda,
