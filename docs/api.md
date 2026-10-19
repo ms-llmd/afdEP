@@ -76,3 +76,5 @@ Native compilation is lazy and process-locked. `AFDEP_CACHE_DIR` controls the
 extension cache; `EP_JIT_CACHE_DIR` controls DeepEP kernel JIT cache. Both must be
 writable. Use matching NCCL headers/runtime before starting Python; already
 loaded libraries cannot be replaced by changing environment variables later.
+
+The opt-in v2 backend has a separate [directional contract](directional.md).

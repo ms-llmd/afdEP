@@ -10,6 +10,15 @@ Attention receive payloads and empty-side epilogues; FFN receive tensors are
 bounded by Attention source count. The collective protocol, logical expert
 slots, registered transport capacity and required synchronization remain.
 
+## Directional v2 · experimental
+
+![Directional architecture and GIN call order](docs/assets/directional-communication.svg)
+
+Opt in with `from afdep import DirectionalBuffer, DirectionalConfig`.
+V1 remains the default. V2 replaces dispatch/combine with directional requests
+and replies; it reuses DeepEP TMA and reduction primitives.
+[Contracts](docs/directional.md) · [Historical H100 screen](docs/directional-performance.md).
+
 ## Use
 
 Linux, PyTorch ≥2.6, CUDA toolkit with `nvcc`, and NCCL ≥2.30.7 with device
@@ -57,13 +66,14 @@ prequantized FP8 dispatch return BF16 combined outputs. See the
 
 ## Support
 
-| Architecture | Evidence | Current v1 scope |
+| Architecture | Backend | Validated scope |
 |---|---|---|
-| Hopper (SM90) | H100 GPU suite | BF16/FP8; eager/CUDA graphs; one NVLink domain |
-| Blackwell | Not validated | No support claim yet |
-| Other architectures | Not validated | No support claim yet |
+| Hopper (SM90) | V1 DeepEP reuse | H100: BF16/FP8; eager/CUDA graphs; 2 Attention + 2 FFN, one NVLink domain |
+| Hopper (SM90) | V2 directional | H100: BF16/FP8; eager/CUDA graphs; 2 + 2 NVLink, or earlier 4 + 4 GIN across two domains |
+| Blackwell | Both | Not validated |
+| Other architectures | Both | Not validated |
 
-Validation uses 2 Attention + 2 FFN ranks with partitioned experts. Other group
+V1 validation uses 2 Attention + 2 FFN ranks with partitioned experts. Other group
 layouts and multi-domain role specialization require validation. V1 rejects
 multiple physical NVLink domains when role specialization is enabled.
 `allow_hybrid_mode` retains DeepEP's meaning; it does not enable an unvalidated

@@ -23,3 +23,9 @@ Large configurations use hidden size 2,048 and top-k 8, exceeding local expert c
 These are correctness checks with synthetic expert outputs, **not performance or
 serving measurements**. Other architectures, layouts and multi-domain role
 specialization remain unvalidated.
+
+The experimental v2 [directional record](validation-nvlink-2026-10-19.json)
+predates integration onto v1. Its device sources are unchanged; Python imports,
+build packaging and benchmark controls changed. Integration CPU checks do not
+establish new GPU correctness or performance. See the
+[directional experiment](directional-performance.md).
