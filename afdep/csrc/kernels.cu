@@ -5,17 +5,26 @@
 
 namespace afdep {
 
-cudaError_t get_wide_tma_attributes(cudaFuncAttributes* attributes) {
-    return cudaFuncGetAttributes(attributes, directional_kernel<TmaPackRowsWide>);
+template <bool kFP8>
+__global__ void directional_wide_pack(DeviceArgs args) {
+    nvlink_tma_pack<kNVLinkWideHidden, kFP8>(args);
 }
 
-cudaError_t configure_tma_kernel(int hidden, int wide_max_shared) {
+cudaError_t get_wide_tma_attributes(cudaFuncAttributes* attributes, bool fp8) {
+    return fp8 ? cudaFuncGetAttributes(attributes, directional_wide_pack<true>) :
+                 cudaFuncGetAttributes(attributes, directional_wide_pack<false>);
+}
+
+cudaError_t configure_tma_kernel(int hidden, int wide_max_shared, bool fp8) {
     // A later FP8 buffer must not lower the per-device function limit needed
     // by a previously captured BF16 graph. Per-launch storage stays exact.
     if (hidden == kNVLinkWideHidden) {
         static_assert(sizeof(tma::mbarrier) == sizeof(uint64_t));
-        const auto status = cudaFuncSetAttribute(directional_kernel<TmaPackRowsWide>,
-                                                 cudaFuncAttributeMaxDynamicSharedMemorySize, wide_max_shared);
+        const auto status = fp8 ?
+            cudaFuncSetAttribute(directional_wide_pack<true>,
+                                 cudaFuncAttributeMaxDynamicSharedMemorySize, wide_max_shared) :
+            cudaFuncSetAttribute(directional_wide_pack<false>,
+                                 cudaFuncAttributeMaxDynamicSharedMemorySize, wide_max_shared);
         if (status != cudaSuccess) return status;
         return cudaFuncSetAttribute(directional_kernel<WarpPartialsWide>,
                                      cudaFuncAttributeMaxDynamicSharedMemorySize,
@@ -68,7 +77,10 @@ cudaError_t launch_kernel(int operation, DeviceArgs args, int blocks, cudaStream
         directional_kernel<TmaPackRows><<<blocks, kNVLinkTmaThreads, shared_bytes, stream>>>(args);
         break;
     case TmaPackRowsWide:
-        directional_kernel<TmaPackRowsWide><<<blocks, wide_tma_threads, shared_bytes, stream>>>(args);
+        if (args.layout.fp8)
+            directional_wide_pack<true><<<blocks, wide_tma_threads, shared_bytes, stream>>>(args);
+        else
+            directional_wide_pack<false><<<blocks, wide_tma_threads, shared_bytes, stream>>>(args);
         break;
     default:
         return cudaErrorInvalidValue;

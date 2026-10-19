@@ -30,7 +30,7 @@
   },
   "current_file_sha256": {
     "afdep/csrc/layout.hpp": "39f3663ec109cd333a41a17155e0bf7c6357d0506cf5067bed6b21416699ac30",
-    "afdep/csrc/kernels.cuh": "99b6e643925b30721651a2e37437e453a87049e518367821bed0b6cec1bbef8f",
+    "afdep/csrc/kernels.cuh": "fb1453fad876f2a71a3f70d72878f3e7ab816fd039c9f896c457b54afeef2dbe",
     "afdep/csrc/deepep_reduce.cuh": "e98b37b6f5625d4e6c685ca2333c6db73ccbbc819dde77eb5b84af85eef53571",
     "afdep/csrc/deepep_tma.cuh": "76cf2a78e43b8134eb2de0b112d95f28f26817bce2660e73c22d2c43866a89ec"
   },
@@ -124,6 +124,10 @@
     {
       "date": "2026-10-19",
       "description": "Experimental tiny NVLink receive preparation: for conservative buckets up to 32, pass the already validated receive-weight tensor into BeginWorker and clear its entire conservative extent there, overlapping local padding initialization with the existing remote request waits. The existing CTA barrier and following PackRows kernel boundary complete every zero write before valid weights are assigned. Omit only the redundant standalone weight-zero launch. Exact eager allocation retains its later standalone zero because receive storage does not exist at count discovery; larger buckets and GIN are unchanged. No peer payload, credit, readiness or arithmetic changes. Requires GPU validation of padding weights, changing/skipped/empty routes, eager/graph replay, maximum-capacity tiny buckets and exact-allocation fallback, then matched timing."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Specialize only the validated H4096 NVLink TMA packing entry by payload type and hidden width. Preserve the runtime H2048 helper, shared-memory-derived launch geometry, all TMA drains and per-peer credits. Configure the selected BF16/FP8 function before capture. The isolated component passed22 GPU correctness configurations and three paired process repeats; its composition with the selected source still requires exact-source GPU correctness and performance validation."
     }
   ]
 }

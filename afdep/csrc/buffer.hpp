@@ -233,7 +233,7 @@ class DirectionalM2NBuffer {
             int wide_max_shared = 0;
             if (layout.hidden == kNVLinkWideHidden) {
                 cudaFuncAttributes attributes{};
-                AFDEP_CUDA_CHECK(get_wide_tma_attributes(&attributes));
+                AFDEP_CUDA_CHECK(get_wide_tma_attributes(&attributes, layout.fp8));
                 TORCH_CHECK(properties.sharedMemPerBlockOptin > attributes.sharedSizeBytes,
                             "Wide TMA static storage exceeds device shared memory");
                 const size_t shared_budget = properties.sharedMemPerBlockOptin - attributes.sharedSizeBytes;
@@ -246,10 +246,10 @@ class DirectionalM2NBuffer {
                 const int fp8_warps = std::min<int>(shared_budget / staging_bytes(1), max_warps);
                 TORCH_CHECK(bf16_warps > 0 && fp8_warps > 0, "Wide TMA staging exceeds device shared memory");
                 wide_tma_threads = (layout.fp8 ? fp8_warps : bf16_warps) * kWarpSize;
-                // Both payload constructors retain the same per-function limit.
+                // Retain the geometry experiment's conservative ceiling for each entry.
                 wide_max_shared = std::max(bf16_warps * staging_bytes(2), fp8_warps * staging_bytes(1));
             }
-            AFDEP_CUDA_CHECK(configure_tma_kernel(layout.hidden, wide_max_shared));
+            AFDEP_CUDA_CHECK(configure_tma_kernel(layout.hidden, wide_max_shared, layout.fp8));
         }
         const auto physical = get_physical_domain_size(nccl_comm);
         TORCH_CHECK(nvlink_only ? (std::get<0>(physical) == 1 && std::get<1>(physical) == world) :

@@ -293,10 +293,18 @@ __device__ __forceinline__ void nvlink_warp_collect(const DeviceArgs& a) {
 
 // Adapted from DeepEP's dispatch_copy_epilogue_impl: one warp owns one
 // staging buffer; selected expert lanes issue asynchronous fan-out stores.
+template <int kHidden = 0, bool kFP8 = false>
 __device__ __forceinline__ void nvlink_tma_pack(const DeviceArgs& a) {
     extern __shared__ __align__(32) uint8_t staging[];
     const int kWarps = blockDim.x / kWarpSize;
-    const Layout l = a.layout;
+    Layout l = a.layout;
+    if constexpr (kHidden != 0) {
+        // The host selects this specialization only for a validated bulk shape.
+        // Preserve the runtime helper for the existing H2048/generic entries.
+        l.hidden = kHidden;
+        l.topk = kNVLinkWarpTopK;
+        l.fp8 = kFP8;
+    }
     const int lane = threadIdx.x % kWarpSize, warp = threadIdx.x / kWarpSize;
     const int bytes = l.hidden * l.element_bytes();
     uint8_t* tile = staging + warp * bytes;
