@@ -51,6 +51,7 @@ def main():
     parser.add_argument(
         "--routing", choices=["strided", "random", "skew"], default="strided"
     )
+    parser.add_argument("--routing-seed", type=int, default=1234)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if (
@@ -104,7 +105,7 @@ def main():
         ) % route_experts
         if args.routing == "random":
             generator = torch.Generator(device="cuda").manual_seed(
-                1234 + max(rank - 2, 0)
+                args.routing_seed + max(rank - 2, 0)
             )
             ids = (
                 torch.rand((n, args.experts), generator=generator, device="cuda")
