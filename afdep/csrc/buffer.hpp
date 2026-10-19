@@ -21,6 +21,8 @@ namespace afdep {
 // Directional request/reply protocol with adapted DeepEP copy/reduction
 // primitives and minimal NCCL host runtime. See ORIGIN.json and MIT notices.
 class DirectionalM2NBuffer {
+    static constexpr int kNVLinkWideSourceGridMultiplier = 4;
+
     Layout layout;
     int rank, device, stripes, num_sms;
     int wide_tma_threads = kNVLinkTmaWideThreads;
@@ -126,6 +128,9 @@ class DirectionalM2NBuffer {
             } else if (operation == PackSource || operation == PackSourceCounts) {
                 constexpr int bytes_per_block = kThreadsPerBlock * kPayloadVectorBytes;
                 work = (layout.packet_bytes(arguments.tokens) + bytes_per_block - 1) / bytes_per_block;
+                if (operation == PackSourceCounts && layout.hidden == kNVLinkWideHidden &&
+                    nvlink_bulk_shape(arguments.tokens))
+                    blocks *= kNVLinkWideSourceGridMultiplier;
             } else if (operation == Histogram) {
                 work = (size_t(layout.sources) * arguments.bucket * layout.topk + kThreadsPerBlock - 1) / kThreadsPerBlock;
             }
