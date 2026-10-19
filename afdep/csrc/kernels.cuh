@@ -233,9 +233,16 @@ __device__ __forceinline__ void nvlink_warp_partials(const DeviceArgs& a) {
         for (; token < source_end; token += stride) {
             const int row = lane < kTopK ? a.receipt[(source * a.bucket + token) * kTopK + lane] : -1;
             unsigned mask = __ballot_sync(0xffffffff, row >= 0);
+            if constexpr (kHidden == kNVLinkWideHidden) {
+                // Only selective sources promise not to read this worker's
+                // unselected slot. Keep conservative wide replies unchanged.
+                if (!mask && (reinterpret_cast<const NVLinkControl*>(a.base)->sparse_collectors &
+                              (1u << source)))
+                    continue;
+            }
             if constexpr (kHidden == kNVLinkWarpHidden) {
                 // The measured 2048 path benefits from omitting empty replies.
-                // Keep wide scheduling unchanged, including conservative zeros.
+                // Conservative collectors still require explicit zero replies.
                 if (!mask) {
                     // Generic collectors require every slot; selective collectors
                     // promise not to read an unselected partial from this epoch.
