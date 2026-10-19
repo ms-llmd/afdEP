@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Alternate generic and bulk collectors on one buffer, eagerly or with graphs."""
+"""Alternate source extents and collector paths on one buffer."""
 
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ def main():
     parser.add_argument("--payload", choices=("bf16", "fp8"), required=True)
     parser.add_argument("--graph", action="store_true")
     parser.add_argument("--hidden", type=int, default=2048)
+    parser.add_argument("--capacity", type=int, default=2048)
+    parser.add_argument("--short-storage", type=int, default=1536)
     parser.add_argument("--short-source", type=int, choices=(0, 1), default=0)
     parser.add_argument(
         "--stress",
@@ -35,14 +37,18 @@ def main():
     parser.add_argument(
         "--asymmetric",
         action="store_true",
-        help="keep worker bucket 2048; alternate short-source storage 1536/2048",
+        help="keep worker bucket at capacity; alternate short-source storage",
     )
     args = parser.parse_args()
+    if args.capacity <= 32:
+        parser.error("capacity must exceed the 32-token small extent")
+    if args.asymmetric and not 1 <= args.short_storage < args.capacity:
+        parser.error("short-storage must be within [1,capacity)")
     rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(rank)
     dist.init_process_group("gloo")
     config = DirectionalConfig(
-        2048,
+        args.capacity,
         args.hidden,
         128,
         8,
@@ -99,7 +105,9 @@ def main():
                 step()
         return shape, input_shape, x, scales, ids, weights, live, out, step, graph
 
-    extents = (1536, 2048) if args.asymmetric else (32, 2048)
+    extents = (
+        (args.short_storage, args.capacity) if args.asymmetric else (32, args.capacity)
+    )
     for extent in extents:
         paths[extent] = prepare(extent)
     dist.barrier()
@@ -177,7 +185,7 @@ def main():
                     "stress": args.stress,
                     "poison_epochs": 2 * len(COUNTS) if args.stress else 0,
                     "epochs": 2 * len(COUNTS),
-                    "buckets": [2048] if args.asymmetric else list(extents),
+                    "buckets": [args.capacity] if args.asymmetric else list(extents),
                     "short_source": args.short_source if args.asymmetric else None,
                     "short_source_storage_tokens": list(extents)
                     if args.asymmetric
