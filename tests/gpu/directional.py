@@ -132,9 +132,10 @@ def check_received(exchange: Exchange, epoch: int, *, exact_rows: bool = False) 
 
 def cases(capacity: int) -> list[Case]:
     uniform = min(16, capacity)
+    uneven = (capacity, 0, 1, min(7, capacity))
     return [
         Case("uniform", (uniform,) * ATTENTION_RANKS),
-        Case("uneven", (capacity, 0, 1, min(7, capacity))),
+        Case("uneven", uneven),
         Case("empty", (0,) * ATTENTION_RANKS),
         Case("decode", (1,) * ATTENTION_RANKS),
         *(
@@ -156,6 +157,10 @@ def cases(capacity: int) -> list[Case]:
             "strided_source_fp8_scales",
             (uniform,) * ATTENTION_RANKS,
             strided_scales=True,
+        ),
+        *(
+            Case(f"uneven_rotated_{shift}", uneven[-shift:] + uneven[:-shift])
+            for shift in range(1, ATTENTION_RANKS)
         ),
     ]
 
