@@ -4,7 +4,9 @@
 import argparse
 import hashlib
 import json
+import math
 import os
+import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -24,6 +26,12 @@ def main():
         "--backend", choices=["directional", "masked", "reuse"], required=True
     )
     parser.add_argument("--payload", choices=["bf16", "fp8"], required=True)
+    parser.add_argument("--hidden", type=int, default=2048)
+    parser.add_argument("--experts", type=int, default=128)
+    parser.add_argument("--top-k", type=int, default=8)
+    parser.add_argument("--capacity", type=int, default=2048)
+    parser.add_argument("--execution", choices=["eager", "graph"], default="graph")
+    parser.add_argument("--hybrid", choices=["on", "off"], default="on")
     parser.add_argument(
         "--tokens", type=int, nargs="+", default=[1, 8, 32, 128, 512, 2048]
     )
@@ -33,28 +41,33 @@ def main():
     parser.add_argument("--warmup", type=int, default=1000)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--profile", action="store_true")
-    parser.add_argument("--routing", choices=["strided", "random"], default="strided")
+    parser.add_argument(
+        "--routing", choices=["strided", "random", "skew"], default="strided"
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if (
         min(args.tokens) < 1
-        or max(args.tokens) > 2048
+        or max(args.tokens) > args.capacity
         or args.iterations < 1
         or args.repeats < 1
         or args.warmup < 0
     ):
-        parser.error("tokens in [1,2048]; iterations/repeats > 0; warmup >= 0")
+        parser.error("tokens in [1,capacity]; iterations/repeats > 0; warmup >= 0")
+    if args.routing == "skew" and args.top_k > args.experts // 2:
+        parser.error("skew routing needs top-k <= experts per worker")
     rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(rank)
     dist.init_process_group("gloo")
     common = {
-        "capacity_tokens_per_rank": 2048,
-        "hidden_size": 2048,
-        "num_experts": 128,
-        "top_k": 8,
+        "capacity_tokens_per_rank": args.capacity,
+        "hidden_size": args.hidden,
+        "num_experts": args.experts,
+        "top_k": args.top_k,
         "ffn_ranks": 2,
         "attention_ranks": 2,
         "payload": args.payload,
+        "allow_hybrid_mode": args.hybrid == "on",
     }
     directional = args.backend == "directional"
     config = (
@@ -70,21 +83,25 @@ def main():
     worker = rank < 2
     rows = []
     route_records = []
+    local_experts = args.experts // 2
+    route_experts = local_experts if args.routing == "skew" else args.experts
+    route_stride = 5 if math.gcd(5, route_experts) == 1 else 1
     for n in args.tokens:
+        torch.cuda.reset_peak_memory_stats()
         dtype = torch.bfloat16 if args.payload == "bf16" else torch.float8_e4m3fn
-        x = torch.ones((n, 2048), dtype=dtype, device="cuda")
+        x = torch.ones((n, args.hidden), dtype=dtype, device="cuda")
         ids = (
             torch.arange(n, device="cuda")[:, None] * 3
-            + torch.arange(8, device="cuda")[None, :] * 5
+            + torch.arange(args.top_k, device="cuda")[None, :] * route_stride
             + max(rank - 2, 0)
-        ) % 128
+        ) % route_experts
         if args.routing == "random":
             generator = torch.Generator(device="cuda").manual_seed(
                 1234 + max(rank - 2, 0)
             )
             ids = (
-                torch.rand((n, 128), generator=generator, device="cuda")
-                .topk(8, dim=1)
+                torch.rand((n, args.experts), generator=generator, device="cuda")
+                .topk(args.top_k, dim=1)
                 .indices
             )
         ids = ids.to(torch.int64 if directional else buffer.topk_idx_dtype)
@@ -95,7 +112,10 @@ def main():
                 "sha256_int64": hashlib.sha256(canonical.tobytes()).hexdigest(),
                 "tokens_per_worker": [
                     int(
-                        ((canonical >= w * 64) & (canonical < (w + 1) * 64))
+                        (
+                            (canonical >= w * local_experts)
+                            & (canonical < (w + 1) * local_experts)
+                        )
                         .any(axis=1)
                         .sum()
                     )
@@ -103,13 +123,19 @@ def main():
                 ],
             }
         )
-        weights = torch.full((n, 8), 1 / 8, device="cuda", dtype=torch.float32)
-        scale = torch.ones((n, 16), device="cuda") if args.payload == "fp8" else None
+        weights = torch.full(
+            (n, args.top_k), 1 / args.top_k, device="cuda", dtype=torch.float32
+        )
+        scale = (
+            torch.ones((n, args.hidden // 128), device="cuda")
+            if args.payload == "fp8"
+            else None
+        )
         received = (
             buffer.reserve_worker_receive(bucket=n) if worker and directional else None
         )
         expert = None
-        result = torch.empty((n, 2048), dtype=torch.bfloat16, device="cuda")
+        result = torch.empty((n, args.hidden), dtype=torch.bfloat16, device="cuda")
 
         def step(n=n, received=received, x=x, ids=ids, weights=weights, scale=scale):
             nonlocal expert, result
@@ -137,15 +163,18 @@ def main():
             step()
         torch.cuda.synchronize()
         dist.barrier()
-        graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(graph):
-            step()
+        graph = None
+        if args.execution == "graph":
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph):
+                step()
+        exchange = graph.replay if graph is not None else step
         for _ in range(args.warmup):
-            graph.replay()
+            exchange()
         torch.cuda.synchronize()
         if not worker:
             torch.testing.assert_close(
-                result, torch.full_like(result, 8), rtol=0, atol=0
+                result, torch.full_like(result, args.top_k), rtol=0, atol=0
             )
         dist.barrier()
         for repeat in range(args.repeats):
@@ -159,7 +188,7 @@ def main():
             wall = time.perf_counter()
             start.record()
             for _ in range(args.iterations):
-                graph.replay()
+                exchange()
             end.record()
             end.synchronize()
             wall_ms = (time.perf_counter() - wall) * 1000 / args.iterations
@@ -168,6 +197,8 @@ def main():
                 "gpu_ms": start.elapsed_time(end) / args.iterations,
                 "wall_ms": wall_ms,
                 "worker": worker,
+                "torch_peak_allocated_bytes": torch.cuda.max_memory_allocated(),
+                "torch_allocated_bytes": torch.cuda.memory_allocated(),
             }
             gathered = [None] * 4
             dist.all_gather_object(gathered, local)
@@ -176,7 +207,7 @@ def main():
                 torch.cuda.cudart().cudaProfilerStop()
             if not worker:
                 torch.testing.assert_close(
-                    result, torch.full_like(result, 8), rtol=0, atol=0
+                    result, torch.full_like(result, args.top_k), rtol=0, atol=0
                 )
             rows.append({"tokens": n, "repeat": repeat, "ranks": gathered})
             if rank == 0:
@@ -192,7 +223,7 @@ def main():
                     ),
                     flush=True,
                 )
-        del graph, expert, received, result
+        del exchange, graph, step, expert, received, result, x, ids, weights, scale
         torch.cuda.synchronize()
         dist.barrier()
     metadata = {
@@ -204,6 +235,10 @@ def main():
         else buffer.transport._resolved_num_sms,
         "device": str(torch.cuda.get_device_properties(rank)),
         "torch": torch.__version__,
+        "cuda": torch.version.cuda,
+        "endpoint_sha256": hashlib.sha256(
+            Path(sys.modules[type(buffer).__module__].__file__).read_bytes()
+        ).hexdigest(),
         "routing": route_records if not worker else None,
     }
     meta = [None] * 4
@@ -218,7 +253,8 @@ def main():
                     "metadata": meta,
                     "measurements": rows,
                     "scope": (
-                        "communication only; graph startup excluded, replay included; "
+                        "communication only; initialization/capture excluded; "
+                        "eager enqueue or graph replay included; "
                         "expert output prepared outside timed path"
                     ),
                 },
