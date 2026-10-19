@@ -26,6 +26,7 @@ cudaError_t launch_kernel(int operation, DeviceArgs args, int blocks, cudaStream
         AFDEP_LAUNCH(BeginSource);
         AFDEP_LAUNCH(PlanDirectRequests);
         AFDEP_LAUNCH(PackSource);
+        AFDEP_LAUNCH(PackSourceCounts);
         AFDEP_LAUNCH(SendRequest);
         AFDEP_LAUNCH(BeginWorker);
         AFDEP_LAUNCH(Histogram);

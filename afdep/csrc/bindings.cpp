@@ -15,6 +15,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
     module.def("get_physical_domain_size", &afdep::get_physical_domain_size);
     module.def("get_nccl_version", &afdep::get_nccl_version);
     module.attr("compiled_nccl_version") = NCCL_VERSION_CODE;
-    module.attr("protocol_version") = 1;
+    module.attr("protocol_version") = 2;
     afdep::register_apis(module);
 }

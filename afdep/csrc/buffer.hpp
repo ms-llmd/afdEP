@@ -119,7 +119,7 @@ class DirectionalM2NBuffer {
                 blocks *= kNVLinkBulkGridMultiplier;
             } else if (operation == CollectReply) {
                 work = arguments.bucket;
-            } else if (operation == PackSource) {
+            } else if (operation == PackSource || operation == PackSourceCounts) {
                 constexpr int bytes_per_block = kThreadsPerBlock * kPayloadVectorBytes;
                 work = (layout.packet_bytes(arguments.tokens) + bytes_per_block - 1) / bytes_per_block;
             } else if (operation == Histogram) {
@@ -151,7 +151,7 @@ class DirectionalM2NBuffer {
         a.psum = psum.data_ptr<int>();
         if (!layout.nvlink) counts.zero_();
         launch(BeginWorker, a);
-        if (!layout.nvlink || bucket > kNVLinkFusedMetadataTokens) {
+        if (!layout.nvlink) {
             launch(Histogram, a, num_sms);
             launch(Prefix, a);
         }
@@ -294,7 +294,7 @@ class DirectionalM2NBuffer {
         launch(BeginSource, a);
         if (!layout.nvlink && !layout.hybrid)
             launch(PlanDirectRequests, a, num_sms);
-        launch(PackSource, a, num_sms);
+        launch(layout.nvlink && bucket > kNVLinkFusedMetadataTokens ? PackSourceCounts : PackSource, a, num_sms);
         launch(SendRequest, a, layout.nvlink ? 1 : stripes * (layout.hybrid ? 1 : 4));
     }
 

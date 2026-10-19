@@ -374,6 +374,12 @@ __device__ __forceinline__ void nvlink_operation(const DeviceArgs& a) {
             state->epoch = next;
             state->source_tokens = live_source_tokens(a);
         }
+        if (a.bucket > kNVLinkFusedMetadataTokens) {
+            __syncthreads();
+            auto* histogram = reinterpret_cast<int*>(a.base + l.request +
+                                                     l.packet_histogram(state->source_tokens));
+            for (int e = threadIdx.x; e < l.experts; e += blockDim.x) histogram[e] = 0;
+        }
     } else if constexpr (kOperation == SendRequest) {
         if (tid == 0) release(&state->request_ready, state->epoch);
     } else if constexpr (kOperation == BeginWorker) {
@@ -391,12 +397,22 @@ __device__ __forceinline__ void nvlink_operation(const DeviceArgs& a) {
                 state->received_tokens[source] = n;
             }
         }
+        __syncthreads();
         if (a.bucket <= kNVLinkFusedMetadataTokens) {
-            __syncthreads();
             histogram_routes(a);
-            __syncthreads();
-            prefix_nvlink(a);
+        } else {
+            for (int e = threadIdx.x; e < l.local_experts(); e += blockDim.x) {
+                int count = 0;
+                for (int source = 0; source < l.sources; ++source) {
+                    const auto* histogram = reinterpret_cast<const volatile int*>(
+                        a.peers[source] + l.request + l.packet_histogram(state->received_tokens[source]));
+                    count += histogram[a.rank * l.local_experts() + e];
+                }
+                a.counts[e] = count;
+            }
         }
+        __syncthreads();
+        prefix_nvlink(a);
     } else if constexpr (kOperation == MakePartials) {
         make_partial_vectors<false>(a);
     } else if constexpr (kOperation == SendReply) {
@@ -414,11 +430,13 @@ __device__ __forceinline__ void nvlink_operation(const DeviceArgs& a) {
         const int vectors = l.hidden / BF16VectorSum::kValues;
         for (int token = blockIdx.x; token < state->source_tokens; token += gridDim.x)
             for (int h = threadIdx.x; h < vectors; h += blockDim.x) {
-                BF16VectorSum sum;
-                for (int worker = 0; worker < l.workers; ++worker)
-                    sum.add(load_remote_vector(a.base + l.reply_slot(worker) +
-                                               (size_t(token) * vectors + h) * sizeof(uint4)));
-                reinterpret_cast<uint4*>(a.out)[size_t(token) * vectors + h] = sum.pack();
+                // This backend has exactly two FFN workers. Both always
+                // publish partials, including zeros for unselected routes.
+                const size_t offset = (size_t(token) * vectors + h) * sizeof(uint4);
+                const uint4 first = load_remote_vector(a.base + l.reply_slot(0) + offset);
+                const uint4 second = load_remote_vector(a.base + l.reply_slot(1) + offset);
+                reinterpret_cast<uint4*>(a.out)[size_t(token) * vectors + h] =
+                    deepep_add_bf16_vectors(first, second);
             }
     }
 }
@@ -636,8 +654,47 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
     }
 }
 
+template <bool kPublishCounts>
+__device__ __forceinline__ void pack_source_packet(const DeviceArgs& a) {
+    const Layout l = a.layout;
+    Control* state = control(a.base);
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    const int stride = gridDim.x * blockDim.x;
+    const int tokens = state->source_tokens;
+    uint8_t* packet = a.base + l.request;
+    if (tid == 0) {
+        reinterpret_cast<Packet*>(packet)->tokens = tokens;
+        reinterpret_cast<Packet*>(packet)->reserved = 0;
+    }
+    const size_t xbytes = size_t(tokens) * l.hidden * l.element_bytes();
+    for (size_t i = tid; i < xbytes / 16; i += stride)
+        reinterpret_cast<uint4*>(packet + l.packet_x())[i] =
+            reinterpret_cast<const uint4*>(a.x)[i];
+    for (int i = tid; i < tokens * l.topk; i += stride) {
+        const int64_t expert = a.ids[i];
+        if (expert < -1 || expert >= l.experts) fail("invalid real expert", a);
+        for (int previous = 0; expert >= 0 && previous < i % l.topk; ++previous)
+            if (a.ids[i - i % l.topk + previous] == expert)
+                fail("duplicate expert for one token", a);
+        reinterpret_cast<int64_t*>(packet + l.packet_ids(tokens))[i] = a.ids[i];
+        reinterpret_cast<float*>(packet + l.packet_weights(tokens))[i] = a.weights[i];
+        if constexpr (kPublishCounts)
+            if (expert >= 0)
+                atomicAdd(reinterpret_cast<int*>(packet + l.packet_histogram(tokens)) + expert, 1);
+    }
+    for (int i = tid; i < tokens * l.scale_groups(); i += stride) {
+        const int token = i / l.scale_groups(), group = i % l.scale_groups();
+        reinterpret_cast<float*>(packet + l.packet_scales(tokens))[i] =
+            a.scales[token * a.scale_stride0 + group * a.scale_stride1];
+    }
+}
+
 template <int kOperation>
 __global__ void directional_kernel(DeviceArgs a) {
+    if constexpr (kOperation == PackSourceCounts) {
+        pack_source_packet<true>(a);
+        return;
+    }
     if constexpr (kOperation == TmaPackRows) {
         nvlink_tma_pack(a);
         return;
@@ -685,30 +742,7 @@ __global__ void directional_kernel(DeviceArgs a) {
             state->source_tokens = live_source_tokens(a);
         }
     } else if constexpr (kOperation == PackSource) {
-        const int tokens = state->source_tokens;
-        uint8_t* packet = a.base + l.request;
-        if (tid == 0) {
-            reinterpret_cast<Packet*>(packet)->tokens = tokens;
-            reinterpret_cast<Packet*>(packet)->reserved = 0;
-        }
-        const size_t xbytes = size_t(tokens) * l.hidden * l.element_bytes();
-        for (size_t i = tid; i < xbytes / 16; i += stride)
-            reinterpret_cast<uint4*>(packet + l.packet_x())[i] =
-                reinterpret_cast<const uint4*>(a.x)[i];
-        for (int i = tid; i < tokens * l.topk; i += stride) {
-            const int64_t expert = a.ids[i];
-            if (expert < -1 || expert >= l.experts) fail("invalid real expert", a);
-            for (int previous = 0; expert >= 0 && previous < i % l.topk; ++previous)
-                if (a.ids[i - i % l.topk + previous] == expert)
-                    fail("duplicate expert for one token", a);
-            reinterpret_cast<int64_t*>(packet + l.packet_ids(tokens))[i] = a.ids[i];
-            reinterpret_cast<float*>(packet + l.packet_weights(tokens))[i] = a.weights[i];
-        }
-        for (int i = tid; i < tokens * l.scale_groups(); i += stride) {
-            const int token = i / l.scale_groups(), group = i % l.scale_groups();
-            reinterpret_cast<float*>(packet + l.packet_scales(tokens))[i] =
-                a.scales[token * a.scale_stride0 + group * a.scale_stride1];
-        }
+        pack_source_packet<false>(a);
     } else if constexpr (kOperation == SendRequest) {
         transfer(a, l.request, l.request, l.packet_bytes(state->source_tokens), 0, RequestReady);
     } else if constexpr (kOperation == BeginWorker) {

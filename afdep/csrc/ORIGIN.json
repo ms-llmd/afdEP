@@ -29,9 +29,9 @@
     "afdep/csrc/kernels.cuh": "05b50095f694231db3012821aed1fdf48e86b7a06d9c81eaeb8aee3e4db08bc0"
   },
   "current_file_sha256": {
-    "afdep/csrc/layout.hpp": "c43f7e9c49c523c2b1e60dc7792340f4f5012af2ce574899bc7deb8bb9492b66",
-    "afdep/csrc/kernels.cuh": "4fa154b2494890983b7d53eb10a44066ddb485140d45908fa0886676911ea632",
-    "afdep/csrc/deepep_reduce.cuh": "86521588910598de1d71a9619730ffe307b2d052269da860d96eb48e03e235d6",
+    "afdep/csrc/layout.hpp": "db7fc66c93114911cf666051f15606f4d44c2449b5046ceb6fbb6c479f2a39c0",
+    "afdep/csrc/kernels.cuh": "417aa51812e0afd861020d2b5c9e032297344fc68c9a2141c38cd40efa999b6d",
+    "afdep/csrc/deepep_reduce.cuh": "0acaa406718b58ba8c0bbefb537037051d5a5984c813a416082e8e80dc401878",
     "afdep/csrc/deepep_tma.cuh": "76cf2a78e43b8134eb2de0b112d95f28f26817bce2660e73c22d2c43866a89ec"
   },
   "protocol_changes": [
@@ -108,6 +108,14 @@
       "description": "NVLink return-path experiment: allocate one incoming partial slot per FFN on each source, keeping only control windows on workers. Generic workers push vector partials; bulk workers adapt DeepEP combine.cuh reduction to shared memory followed by TMA peer stores, draining every issuing warp before tile reuse and before reply readiness. Sources reduce local slots. Preserve ordered full-pair per-reader credits, all shape fallbacks and GIN behavior. Requires new GPU correctness and timing before selection.",
       "upstream_file": "afdep/third_party/deepep_v2/deep_ep/include/deep_ep/impls/combine.cuh",
       "upstream_sha256": "6a0f1f3f978978a35f9616178825f8c29881aafc3a04d8c2ba68b50a4a283c9a"
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Experimental NVLink source-owned expert histograms. Append real-expert counts after each source packet payload; clear them only after every previous request reader credits reuse, and accumulate them during existing source packing. After acquiring all request readiness, workers sum source counts and compute aligned expert offsets in BeginWorker, removing the separate large-bucket Histogram and Prefix launches. Small buckets retain the existing fused route histogram. Preserve IDs, row assignment, reply reductions, every reader epoch and all GIN packet layouts. Native protocol version 2. Requires GPU validation and matched timing before selection."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Experimental NVLink generic source collect: reuse the MIT DeepEP two-input BF16 vector-add bypass already selected by its warp collector. The validated two-worker backend still reads both reply slots, including required zero partials, and preserves readiness, source lifecycle and all epoch credits. Factor the same pair addition for the existing warp path. Requires exact weighted eager/graph tests across payloads/shapes and matched timing before selection."
     }
   ]
 }

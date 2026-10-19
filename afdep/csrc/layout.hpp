@@ -75,8 +75,11 @@ struct Layout {
     AFDEP_HD size_t packet_weights(int n) const {
         return aligned(packet_ids(n) + size_t(n) * topk * sizeof(int64_t));
     }
-    AFDEP_HD size_t packet_bytes(int n) const {
+    AFDEP_HD size_t packet_histogram(int n) const {
         return aligned(packet_weights(n) + size_t(n) * topk * sizeof(float));
+    }
+    AFDEP_HD size_t packet_bytes(int n) const {
+        return packet_histogram(n) + (nvlink ? aligned(size_t(experts) * sizeof(int)) : 0);
     }
     AFDEP_HD size_t direct_packet_bytes(int n) const {
         return aligned(packet_bytes(n) + size_t(n) * sizeof(int));
@@ -130,7 +133,7 @@ enum Operation {
     BeginSource, PlanDirectRequests, PackSource, SendRequest, BeginWorker, Histogram, Prefix,
     PackRows, PublishPackAndCredit, MakePartials, PublishPartialAndWait,
     ReduceReply, PublishConsumedAndWaitCredit, SendReply, CollectReply,
-    ReplyConsumedCredit, Drain, WaitReply, WarpPartials, WarpCollect, TmaPackRows, NumOperations
+    ReplyConsumedCredit, Drain, WaitReply, WarpPartials, WarpCollect, TmaPackRows, PackSourceCounts, NumOperations
 };
 
 enum Signal { RequestReady, ReplyReady, RequestCredit, ReplyCredit };
