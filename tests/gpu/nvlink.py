@@ -119,14 +119,22 @@ def check_worker(received, worker, case, config, source0_tokens=None):
     start *= config.expert_alignment
     torch.testing.assert_close(end - start, expected, rtol=0, atol=0)
     assert int((received.receipt >= 0).sum()) == int(expected.sum())
+    row = torch.arange(received.recv_topk_weights.numel(), device="cuda")
+    expert = torch.searchsorted(end, row, right=True)
+    padding = expert >= config.experts_per_rank
+    padding |= row < start[expert.clamp_max(config.experts_per_rank - 1)]
+    weights = received.recv_topk_weights[padding]
+    torch.testing.assert_close(weights, torch.zeros_like(weights), rtol=0, atol=0)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--payload", choices=("bf16", "fp8"), required=True)
     parser.add_argument("--graph", action="store_true")
+    parser.add_argument("--exact", action="store_true")
     parser.add_argument("--mixed-buffer", action="store_true")
     parser.add_argument("--capacity", type=int, default=CAPACITY)
+    parser.add_argument("--bucket", type=int)
     parser.add_argument("--source0-tokens", type=int)
     parser.add_argument("--hidden", type=int, default=2048)
     parser.add_argument("--experts", type=int, default=128)
@@ -134,11 +142,13 @@ def main():
     parser.add_argument("--invalid", choices=("expert", "duplicate", "count"))
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    if (
-        args.source0_tokens is not None
-        and not 1 <= args.source0_tokens <= args.capacity
-    ):
-        parser.error("source0-tokens must be within [1,capacity]")
+    if args.exact and args.graph:
+        parser.error("exact allocation requires eager execution")
+    bucket = args.bucket if args.bucket is not None else args.capacity
+    if not 1 <= bucket <= args.capacity:
+        parser.error("bucket must be within [1,capacity]")
+    if args.source0_tokens is not None and not 1 <= args.source0_tokens <= bucket:
+        parser.error("source0-tokens must be within [1,bucket]")
     rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(rank)
     dist.init_process_group("gloo")
@@ -152,10 +162,16 @@ def main():
         payload=args.payload,
         transport="nvlink",
     )
-    capacity = config.capacity_tokens_per_rank
     buffer = Buffer(group=dist.group.WORLD, config=config)
+    allocation_config = config
+    config = replace(config, capacity_tokens_per_rank=bucket)
+    capacity = bucket
     worker = rank < config.ffn_ranks
-    received = buffer.reserve_worker_receive(bucket=capacity) if worker else None
+    received = (
+        buffer.reserve_worker_receive(bucket=capacity)
+        if worker and not args.exact
+        else None
+    )
     source = rank - config.ffn_ranks
     prepared = inputs(max(source, 0), 0, config, args.source0_tokens)
     x, scale, ids, weights, n = prepared
@@ -173,11 +189,24 @@ def main():
             raise AssertionError("Overlapping/duplicate pair was accepted")
 
     def step(check_pairs=False):
+        nonlocal received
         if worker:
-            buffer.worker_receive(bucket=capacity, out=received)
+            received = (
+                buffer.worker_receive(
+                    bucket=capacity, exact_rows=True, read_host_counts=True
+                )
+                if args.exact
+                else buffer.worker_receive(bucket=capacity, out=received)
+            )
             if check_pairs:
                 rejects_pair(
-                    lambda: buffer.worker_receive(bucket=capacity, out=received)
+                    lambda: (
+                        buffer.worker_receive(
+                            bucket=capacity, exact_rows=True, read_host_counts=True
+                        )
+                        if args.exact
+                        else buffer.worker_receive(bucket=capacity, out=received)
+                    )
                 )
             result = expert_output(received, config, rank)
             if rank == 0:
@@ -297,7 +326,9 @@ def main():
         "rank": rank,
         "ok": True,
         "config": asdict(config),
+        "allocation_config": asdict(allocation_config),
         "graph": args.graph,
+        "exact_allocation": args.exact,
         "mixed_payload_constructor_after_capture": args.mixed_buffer,
         "cases": records,
         "torch": torch.__version__,
