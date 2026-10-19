@@ -1,8 +1,7 @@
-AFDEP
-Copyright AFDEP contributors.
+afdEP
+Copyright afdEP contributors.
 
-AFDEP's directional transport originated in the AFD plugin project
-(https://github.com/ms-llmd/afd-plugin).
-
-The NCCL runtime contains MIT-licensed code adapted from DeepEP through
-FastAFD. See THIRD_PARTY_NOTICES.md and afdep/third_party/deepep/.
+The DeepEP V2 elastic transport contains MIT-licensed code from DeepSeek,
+retained through FastAFD and the AFD plugin. Python/build adapters retain
+Apache-2.0 AFD plugin attribution. See THIRD_PARTY_NOTICES.md and the
+vendored LICENSE, PROVENANCE.json and LOCAL_CHANGES.json.

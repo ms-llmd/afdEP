@@ -1,6 +1,4 @@
 include LICENSE NOTICE THIRD_PARTY_NOTICES.md CONTRIBUTING.md
 recursive-include afdep *.py *.typed *.cpp *.cu *.cuh *.hpp *.json LICENSE
 recursive-include docs *.md *.json *.svg
-recursive-include examples *.py
-recursive-include benchmarks *.py
 recursive-include tests *.py

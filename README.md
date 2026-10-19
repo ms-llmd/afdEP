@@ -1,73 +1,73 @@
 # afdEP
 
-**Expert-parallel communication for Attention–FFN Disaggregation (AFD).**
+Expert-parallel communication for **Attention–FFN Disaggregation**:
+N Attention token sources exchange work with M FFN expert workers.
 
-afdEP connects Attention token sources to FFN expert workers: dispatch routed
-tokens, receive expert inputs, and return combined results. Routing, quantization,
-expert compute, and serving scheduling stay with the caller.
+![Masked DeepEP and afdEP v1](docs/assets/communication.svg)
 
-![afdEP round trip in the default hybrid mode: Attention GPUs dispatch tokens to FFN expert GPUs and collect replies, compared with Masked DeepEP](docs/assets/communication.svg)
+**V1 reuses DeepEP V2 dispatch/combine.** Explicit AFD roles eliminate unused
+Attention receive payloads and empty-side epilogues; FFN receive tensors are
+bounded by Attention source count. The collective protocol, logical expert
+slots, registered transport capacity and required synchronization remain.
 
-The current backend uses NCCL GPU-Initiated Networking (GIN) and NVLink, with
-afdEP's own request/reply kernels. No DeepEP or vLLM runtime package is required.
-`Config.allow_hybrid_mode` selects ingress/NVLink forwarding (`True`, default)
-or direct worker delivery (`False`); see [modes](docs/api.md#communication-modes).
-The diagram shows hybrid mode; direct mode sends to each selected worker over
-GIN and sums the replies in `source_collect`.
+## Use
 
-## Support
-
-| Architecture | Backend | Validated hardware and modes |
-|---|---|---|
-| Hopper (SM90) | **Implemented** | Eight H100 80GB GPUs; hybrid/direct; BF16/FP8; eager and CUDA graphs |
-| Blackwell | Not implemented | — |
-
-The current backend implements **four Attention + four FFN ranks**, each role in
-its own four-GPU NVLink domain, with one in-flight lane. Other N/M layouts and
-concurrent lanes require further implementation and validation.
-
-## Quick start
-
-In a provisioned PyTorch/CUDA environment, from the checkout:
+Linux, PyTorch ≥2.6, CUDA toolkit with `nvcc`, and NCCL ≥2.30.7 with device
+headers are required. The validated toolchain is in [validation](docs/validation.md).
 
 ```bash
-python -m pip install --no-build-isolation --no-deps -e .
+pip install .
+# Set these before starting Python; select the same NCCL headers and runtime.
+export AFDEP_NCCL_ROOT=/path/to/nccl
+export LD_LIBRARY_PATH="$AFDEP_NCCL_ROOT/lib:$LD_LIBRARY_PATH"
+# For a single NVLink domain, without network communication:
+export EP_DISABLE_GIN=1
 python -m afdep doctor --build
 ```
 
-After constructing a buffer on each rank, the roles use separate operations:
-
 ```python
-# Attention ranks:
-buffer.source_dispatch(x, expert_ids, weights, bucket=bucket)
-buffer.source_collect(out)
+from afdep import Buffer, Config
 
-# FFN ranks:
-received = buffer.worker_receive(bucket=bucket)
-buffer.worker_reply(weighted_expert_outputs, received.receipt)
+# Set the CUDA device and initialize a CPU Gloo group first.
+# Group ranks [0, 2) own experts; [2, 4) originate tokens.
+comm = Buffer(
+    group=group,
+    config=Config(
+        capacity_tokens_per_rank=2048,
+        hidden_size=4096,
+        num_experts=128,
+        top_k=8,
+        ffn_ranks=2,
+        attention_ranks=2,
+    ),
+)
+if comm.role == "attention":
+    comm.source_dispatch(x, expert_ids, weights, bucket=2048)
+    output = comm.source_collect()
+else:
+    received = comm.worker_receive(bucket=2048)
+    weighted_rows = run_experts(received)  # Caller applies each routing weight once.
+    comm.worker_reply(weighted_rows, received.receipt)
+comm.close()  # Collective, after all exchanges and graph replays finish.
 ```
 
-Apply routing weights **once** before `worker_reply`.
-[Installation and API](docs/api.md) · [Runnable example](examples/round_trip.py)
+Routing, quantization and expert computation belong to the caller. BF16 and
+prequantized FP8 dispatch return BF16 combined outputs. See the
+[tensor, graph and lifecycle contract](docs/api.md).
 
-## H100 experiment
+## Support
 
-Eight H100s, four Attention + four FFN ranks, CUDA graphs, communication only,
-hybrid mode:
+| Architecture | Evidence | Current v1 scope |
+|---|---|---|
+| Hopper (SM90) | H100 GPU suite | BF16/FP8; eager/CUDA graphs; one NVLink domain |
+| Blackwell | Not validated | No support claim yet |
+| Other architectures | Not validated | No support claim yet |
 
-![H100 communication latency and registered buffer comparison](docs/assets/h100-performance.svg)
+Validation uses 2 Attention + 2 FFN ranks with partitioned experts. Other group
+layouts and multi-domain role specialization require validation. V1 rejects
+multiple physical NVLink domains when role specialization is enabled.
+`allow_hybrid_mode` retains DeepEP's meaning; it does not enable an unvalidated
+topology.
 
-- At 512 tokens/source, BF16 and FP8 round-trip latencies were about **30% lower**.
-- At 2048, BF16 was approximately tied; FP8 latency was **12% lower**.
-- Registered transport buffers were **68–72% smaller**. Direct mode reserves
-  1.7–2× hybrid's windows ([details](docs/performance.md#hybriddirect-extension)).
-
-October 15: directional prototype vs **Masked DeepEP**,
-with different tuned execution budgets. The standalone wheel passed separate
-eight-H100 checks on October 18. [H100 experiment details](docs/performance.md).
-
-## Development
-
-[Contributing](CONTRIBUTING.md) · [CI](https://github.com/ms-llmd/afdEP/actions/workflows/ci.yml)
-
-Apache-2.0; upstream-derived components retain their [original notices](THIRD_PARTY_NOTICES.md).
+[Validation](docs/validation.md) · [Contributing](CONTRIBUTING.md) ·
+[Licenses and provenance](THIRD_PARTY_NOTICES.md)

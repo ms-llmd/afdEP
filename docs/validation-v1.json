@@ -1,0 +1,91 @@
+{
+  "date": "2026-10-19",
+  "scope": "Correctness, not performance; one physical NVLink domain; two Attention plus two FFN ranks",
+  "toolchain": {
+    "gpu": "4 x NVIDIA H100 80GB HBM3",
+    "architecture": "Hopper SM90",
+    "python": "3.12",
+    "torch": "2.13.0+cu130",
+    "cuda": "13.0",
+    "nccl": 23007,
+    "gin_disabled": true
+  },
+  "vendor_sha256": "a250acc1a44a43b656a02a106e9e202ff2e8a99e1ed2532a1dc539d4ff30d16c",
+  "runtime_files_sha256": {
+    "afdep/__init__.py": "522b8d1875320e30a76b4163529327f995d1093593d225a82dc107bec6efae23",
+    "afdep/__main__.py": "db5ee00bc9b0276c476b247e0dafe11437135531874fdad17442a9892afd64e2",
+    "afdep/_build.py": "d6c787e0cbaf51dfbbd98f387d7e0de32fb71fa37663e06ca6ad284aff538edb",
+    "afdep/deepep.py": "39031766506edb8c954fa8ea2a0a9b8db267084b62fcbc15039521e3fe5dcf5f",
+    "afdep/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "test_sources": {
+    "initial_sha256": "117bc938122e7f3bb7ec65b152b48e2babdc2840237f91fdde860388482175b3",
+    "final_sha256": "40a7251e8ee92f68800c715423eaa2aa6e8f05a4a424b9cfad1d45525b31c864",
+    "change": "Final script adds nonuniform FP8 scales and NaN holes; runtime files are identical for all runs."
+  },
+  "wheel_sha256": "453553f975535fac83f906e4649eab20d5caea322e30ce74f687dfb0afc5d4f6",
+  "cpu_checks": {
+    "unit_tests": 27,
+    "ruff": "passed",
+    "wheel_sdist_sources_licenses": "passed",
+    "installed_wheel_without_torch": "passed"
+  },
+  "gpu_matrix_columns": [
+    "case",
+    "role_aware",
+    "payload",
+    "hybrid",
+    "capacity",
+    "hidden",
+    "top_k",
+    "sms",
+    "graph_exchanges_per_rank",
+    "test_source",
+    "log_sha256"
+  ],
+  "gpu_matrix": [
+    ["bf16-direct-small-cwd", true, "bf16", false, 32, 256, 2, 8, 728, "initial", "60079b65c85c33b59c06743565d8fe8933edd546e5519ae7699f6b105ce75ca5"],
+    ["bf16-generic-control", false, "bf16", false, 32, 256, 2, 8, 112, "initial", "d809ca00bef3b674b7398dfbb30259830b1616161f8caa00a8825a3d42509e13"],
+    ["bf16-hybrid-small", true, "bf16", true, 32, 256, 2, 8, 728, "initial", "f20807cf9aad6c6d90216f64d06580c486173b61644259ad5a93af5bf273ae20"],
+    ["bf16-off-large", true, "bf16", false, 2048, 2048, 8, 24, 112, "initial", "5e592ab70259f0d56341b4c9a04835f5c46aca6352e2be521b62cbce77e8827d"],
+    ["bf16-on-large", true, "bf16", true, 2048, 2048, 8, 24, 112, "initial", "f3193d3e9374922efac7d0b16d500b4e4435a00feee6ba2401a71e405c240ba5"],
+    ["fp8-direct-small", true, "fp8", false, 32, 256, 2, 8, 728, "initial", "75a188e0b3bc23e33c136c2b61bcfa5d0108b0602aa568fcbea91adebfd81062"],
+    ["fp8-generic-control", false, "fp8", false, 32, 256, 2, 8, 112, "initial", "f532419d5569f78fdf7b8fbaa0976099bcc09b457c047470b042c26a49bc858b"],
+    ["fp8-hybrid-small", true, "fp8", true, 32, 256, 2, 8, 728, "initial", "a0735f950d393aea0485f26905d206d5805f8062d7adc4f07d0f8ddd2c196d20"],
+    ["fp8-off-large", true, "fp8", false, 2048, 2048, 8, 24, 112, "initial", "98c3110af74acc82f2ff2752c52fd6a448413ccbeabd7a2a6e9b75d272bbbd18"],
+    ["fp8-on-large", true, "fp8", true, 2048, 2048, 8, 24, 112, "initial", "563721719a2cd24ef30381a6cd54dca6811c6377f5afe435a2cce28d4b1b2406"],
+    ["fp8-strides-off", true, "fp8", false, 2048, 2048, 8, 24, 112, "final", "98c3110af74acc82f2ff2752c52fd6a448413ccbeabd7a2a6e9b75d272bbbd18"],
+    ["fp8-strides-on", true, "fp8", true, 2048, 2048, 8, 24, 112, "final", "563721719a2cd24ef30381a6cd54dca6811c6377f5afe435a2cce28d4b1b2406"],
+    ["installed-wheel-fp8", true, "fp8", false, 2048, 2048, 8, 24, 112, "final", "f0bc3088eb026592717d5da85fcf100afa4915bb90e844554d2147af5481452f"]
+  ],
+  "per_valid_run": {
+    "eager_cases_per_rank": 14,
+    "queued_host_count_cases_per_rank": 7,
+    "graph_replays_per_rank": 28,
+    "route_cases": [
+      "mixed",
+      "changed_routes",
+      "skew",
+      "inactive_source",
+      "all_skipped",
+      "all_empty",
+      "partial_prefix"
+    ],
+    "delayed_ffn_peer": true,
+    "reference": "exact expert-weighted identity, no GEMMs"
+  },
+  "invalid_route_checks": [
+    {"execution": "eager", "route": "dummy", "returncode": 1, "assertion_verified": true, "log_sha256": "88e744a68216bc2263ad52d01cf698595136a8ec788e6cd3002ae414778af28c"},
+    {"execution": "eager", "route": "duplicate", "returncode": 1, "assertion_verified": true, "log_sha256": "fdd7a1b9564918bcbe1c5f23ce564c04693d8562ae78f2d88cdd23e1a076403b"},
+    {"execution": "eager", "route": "negative", "returncode": 1, "assertion_verified": true, "log_sha256": "85ae502ff9b90b969389e809fa2bc48f7bcca2b328c966adf0c2745df0feb8e8"},
+    {"execution": "eager", "route": "wide", "returncode": 1, "assertion_verified": true, "log_sha256": "bc07413414786845cb3db85ca8d178af1a36a378b9907b5ce1607be2841fe492"},
+    {"execution": "graph", "route": "dummy", "returncode": 1, "assertion_verified": true, "log_sha256": "2cca766119c22b631430b8702526776b91cd8e726e49c3f1a71d951d293e4351"},
+    {"execution": "graph", "route": "duplicate", "returncode": 1, "assertion_verified": true, "log_sha256": "dbfefe7bae4329f494c4afce5ca8e8d08f3fd98d1092d277827db4ba6b1f0225"},
+    {"execution": "graph", "route": "negative", "returncode": 1, "assertion_verified": true, "log_sha256": "3644d1675fdcb86ff6215f1bdb81a9a7937e0e21df197985df63e92165f4dd3b"},
+    {"execution": "graph", "route": "wide", "returncode": 1, "assertion_verified": true, "log_sha256": "486a6e1001ba948632b8c69c67d568a242ed565844e54074eec3bf4323614d30"}
+  ],
+  "initial_harness_failure": {
+    "cause": "Image working directory shadowed tests package; corrected cwd before library loaded.",
+    "automatic_retries": 0
+  }
+}

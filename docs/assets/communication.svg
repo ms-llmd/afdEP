@@ -1,93 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="572" viewBox="0 0 1280 572" role="img" aria-labelledby="title desc">
-<title id="title">afdEP round trip (hybrid mode)</title>
-<desc id="desc">One MoE-layer round trip in afdEP's default hybrid mode: four Attention GPUs (group ranks 4-7) and four FFN GPUs (group ranks 0-3), each role in its own four-GPU NVLink domain, joined by NCCL GIN GPU-initiated RDMA with one rail per Attention j / FFN j pair. 1: source_dispatch(x, expert_ids, weights) on each Attention GPU sends each token once as a request on its rail. 2: worker_receive() on every FFN GPU gathers, over NVLink, the rows routed to its own quarter of the experts (experts 0-31, 32-63, 64-95, 96-127 for E = 128) from all four requests. 3: the caller runs expert compute and multiplies by the routing weights exactly once. 4: worker_reply(weighted_rows, receipt) sums partial results over NVLink and sends one row per token back over the rail. 5: source_collect(out) receives the combined result. A strip shows the Masked DeepEP baseline: all eight GPUs join one symmetric EP group, every GPU has token and expert slots, and the unused one is masked; useful payload already flows Attention to FFN to Attention, but the protocol, bookkeeping and registered buffers stay general all-to-all. Only the implemented 4 + 4 layout with one in-flight lane is shown; other N/M layouts are not implemented.</desc>
-<defs>
-<marker id="req" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 12 6 L 0 12 z" fill="#2563eb"/></marker>
-<marker id="rep" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 12 6 L 0 12 z" fill="#047857"/></marker>
-<marker id="flow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 12 6 L 0 12 z" fill="#64748b"/></marker>
-<pattern id="hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f4f6f9"/><rect width="3" height="8" fill="#e1e5eb"/></pattern>
-</defs>
-<g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
-<rect x="0" y="0" width="1280" height="572" rx="0" fill="white" stroke="none" stroke-width="1.5"/>
-<text x="32" y="46" font-size="30" fill="#15243b" font-weight="700">afdEP round trip <tspan font-size="20" font-weight="400" fill="#526278">· hybrid mode (default)</tspan></text>
-<rect x="32" y="72" width="300" height="380" rx="16" fill="#f1f6ff" stroke="#cfdcf3" stroke-width="1.5"/>
-<text x="52" y="106" font-size="21" fill="#1d4ed8" font-weight="700">Attention GPUs</text>
-<circle cx="66" cy="146" r="15" fill="#2563eb"/>
-<text x="66" y="152" font-size="17" fill="white" font-weight="700" text-anchor="middle">1</text>
-<text x="90" y="152" font-size="18" fill="#2563eb" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">source_dispatch</text>
-<rect x="50" y="184" width="264" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
-<text x="66" y="211" font-size="18" fill="#15243b" font-weight="600">Attention 0</text>
-<rect x="50" y="238" width="264" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
-<text x="66" y="265" font-size="18" fill="#15243b" font-weight="600">Attention 1</text>
-<rect x="50" y="292" width="264" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
-<text x="66" y="319" font-size="18" fill="#15243b" font-weight="600">Attention 2</text>
-<rect x="50" y="346" width="264" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
-<text x="66" y="373" font-size="18" fill="#15243b" font-weight="600">Attention 3</text>
-<circle cx="66" cy="424" r="15" fill="#2563eb"/>
-<text x="66" y="430" font-size="17" fill="white" font-weight="700" text-anchor="middle">5</text>
-<text x="90" y="430" font-size="18" fill="#2563eb" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">source_collect</text>
-<rect x="632" y="72" width="326" height="380" rx="16" fill="#eff8f3" stroke="#c6e3d3" stroke-width="1.5"/>
-<text x="652" y="106" font-size="21" fill="#047857" font-weight="700">FFN GPUs</text>
-<circle cx="666" cy="146" r="15" fill="#047857"/>
-<text x="666" y="152" font-size="17" fill="white" font-weight="700" text-anchor="middle">2</text>
-<text x="690" y="152" font-size="18" fill="#047857" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">worker_receive</text>
-<rect x="650" y="184" width="234" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
-<text x="666" y="211" font-size="18" fill="#15243b" font-weight="600">FFN 0</text>
-<rect x="750" y="192" width="124" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
-<text x="812" y="211" font-size="16" fill="#047857" text-anchor="middle">experts 0–31</text>
-<line x1="884" y1="205" x2="904" y2="205" stroke="#7fbf9d" stroke-width="3"/>
-<rect x="650" y="238" width="234" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
-<text x="666" y="265" font-size="18" fill="#15243b" font-weight="600">FFN 1</text>
-<rect x="750" y="246" width="124" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
-<text x="812" y="265" font-size="16" fill="#047857" text-anchor="middle">experts 32–63</text>
-<line x1="884" y1="259" x2="904" y2="259" stroke="#7fbf9d" stroke-width="3"/>
-<rect x="650" y="292" width="234" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
-<text x="666" y="319" font-size="18" fill="#15243b" font-weight="600">FFN 2</text>
-<rect x="750" y="300" width="124" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
-<text x="812" y="319" font-size="16" fill="#047857" text-anchor="middle">experts 64–95</text>
-<line x1="884" y1="313" x2="904" y2="313" stroke="#7fbf9d" stroke-width="3"/>
-<rect x="650" y="346" width="234" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
-<text x="666" y="373" font-size="18" fill="#15243b" font-weight="600">FFN 3</text>
-<rect x="750" y="354" width="124" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
-<text x="812" y="373" font-size="16" fill="#047857" text-anchor="middle">experts 96–127</text>
-<line x1="884" y1="367" x2="904" y2="367" stroke="#7fbf9d" stroke-width="3"/>
-<rect x="904" y="180" width="30" height="212" rx="8" fill="#cde9da" stroke="#7fbf9d" stroke-width="1.5"/>
-<text x="919" y="286" font-size="16" fill="#065f46" font-weight="700" text-anchor="middle" transform="rotate(-90 919 286)" dy="6">NVLink</text>
-<circle cx="666" cy="424" r="15" fill="#047857"/>
-<text x="666" y="430" font-size="17" fill="white" font-weight="700" text-anchor="middle">4</text>
-<text x="690" y="430" font-size="18" fill="#047857" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">worker_reply</text>
-<text x="482" y="106" font-size="19" fill="#15243b" font-weight="700" text-anchor="middle">RDMA (NCCL GIN)</text>
-<path d="M 315 197 L 648 197" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
-<path d="M 649 213 L 316 213" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
-<path d="M 315 251 L 648 251" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
-<path d="M 649 267 L 316 267" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
-<path d="M 315 305 L 648 305" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
-<path d="M 649 321 L 316 321" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
-<path d="M 315 359 L 648 359" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
-<path d="M 649 375 L 316 375" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
-<text x="482" y="175" font-size="17" fill="#2563eb" font-weight="600" text-anchor="middle">tokens</text>
-<text x="482" y="411" font-size="17" fill="#047857" font-weight="600" text-anchor="middle">results</text>
-<rect x="996" y="256" width="240" height="60" rx="14" fill="white" stroke="#64748b" stroke-width="2" stroke-dasharray="7 6"/>
-<circle cx="1026" cy="286" r="15" fill="#15243b"/>
-<text x="1026" y="292" font-size="17" fill="white" font-weight="700" text-anchor="middle">3</text>
-<text x="1050" y="292" font-size="18" fill="#15243b" font-weight="700">Your experts</text>
-<path d="M 854 146 L 1116 146 L 1116 254" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#flow)"/>
-<path d="M 1116 317 L 1116 424 L 834 424" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#flow)"/>
-<rect x="32" y="472" width="1216" height="76" rx="14" fill="#f6f7f9" stroke="#e1e6ee" stroke-width="1.5"/>
-<text x="56" y="517" font-size="19" fill="#15243b" font-weight="700">Masked DeepEP</text>
-<rect x="236" y="489" width="274" height="42" rx="10" fill="white" stroke="#bcd0f2" stroke-width="1.5"/>
-<text x="250" y="516" font-size="16" fill="#1d4ed8" font-weight="700">Attention</text>
-<rect x="336" y="497" width="74" height="26" rx="13" fill="#dbe7fd" stroke="none" stroke-width="1.5"/>
-<text x="373" y="516" font-size="16" fill="#1d4ed8" text-anchor="middle">tokens</text>
-<rect x="418" y="497" width="82" height="26" rx="13" fill="url(#hatch)" stroke="#c3cbd6" stroke-width="1.2"/>
-<text x="459" y="516" font-size="16" fill="#5f6b7e" text-anchor="middle">experts</text>
-<rect x="594" y="489" width="232" height="42" rx="10" fill="white" stroke="#b5d9c5" stroke-width="1.5"/>
-<text x="608" y="516" font-size="16" fill="#047857" font-weight="700">FFN</text>
-<rect x="652" y="497" width="74" height="26" rx="13" fill="url(#hatch)" stroke="#c3cbd6" stroke-width="1.2"/>
-<text x="689" y="516" font-size="16" fill="#5f6b7e" text-anchor="middle">tokens</text>
-<rect x="734" y="497" width="82" height="26" rx="13" fill="#d3efe1" stroke="none" stroke-width="1.5"/>
-<text x="775" y="516" font-size="16" fill="#047857" text-anchor="middle">experts</text>
-<path d="M 511 503 L 592 503" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#req)"/>
-<path d="M 593 517 L 512 517" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rep)"/>
-<text x="866" y="516" font-size="17" fill="#526278">Same traffic over a general all-to-all EP group</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="510" viewBox="0 0 1120 510" role="img" aria-labelledby="title desc">
+<title id="title">Masked DeepEP and afdEP v1 reuse</title><desc id="desc">Both use the same DeepEP dispatch and combine collective transport. Masked DeepEP allocates generic receive capacity on Attention and FFN ranks. afdEP v1 removes Attention receive payload tensors and unused copy epilogues and bounds FFN receive tensors by Attention sources. Logical dummy expert slots, registered transport capacity, synchronization and Attention output reduction remain.</desc>
+<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#52657b" stroke-width="1.5"/></marker></defs>
+<rect width="1120" height="510" fill="#fff"/><g font-family="Arial, sans-serif" fill="#15243b">
+<text x="28" y="38" font-size="26" font-weight="700">Same transport. AFD roles remove unused local work.</text>
+<rect x="28" y="62" width="518" height="346" rx="14" fill="#f7f8fa" stroke="#ccd5e0"/><text x="50" y="98" font-size="23" font-weight="700">Masked DeepEP</text>
+<rect x="50" y="134" width="208" height="142" rx="12" fill="white" stroke="#a5b9d0"/><text x="154" y="164" text-anchor="middle" font-size="18" font-weight="700">Attention sources</text>
+<text x="154" y="191" text-anchor="middle" font-size="15" fill="#52657b">Send routed tokens</text>
+<text x="154" y="220" text-anchor="middle" font-size="15" fill="#52657b">Receive combined output</text>
+<text x="154" y="249" text-anchor="middle" font-size="13" fill="#52657b">Unused receive payload arena</text>
+<rect x="316" y="134" width="208" height="142" rx="12" fill="white" stroke="#a5b9d0"/><text x="420" y="164" text-anchor="middle" font-size="18" font-weight="700">FFN expert workers</text>
+<text x="420" y="191" text-anchor="middle" font-size="15" fill="#52657b">Own real experts</text>
+<text x="420" y="220" text-anchor="middle" font-size="15" fill="#52657b">Originate zero tokens</text>
+<text x="420" y="249" text-anchor="middle" font-size="13" fill="#52657b">All-rank receive bounds</text>
+<path d="M261 192 H312" stroke="#52657b" stroke-width="2" marker-end="url(#arrow)"/><path d="M312 239 H261" stroke="#52657b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="287" y="185" text-anchor="middle" font-size="11">dispatch</text><text x="287" y="260" text-anchor="middle" font-size="11">combine</text>
+<text x="50" y="317" font-size="17" fill="#52657b">Generic dispatch copy on Attention</text>
+<text x="50" y="345" font-size="17" fill="#52657b">Generic combine epilogue on FFN</text>
+<text x="50" y="384" font-size="14" fill="#52657b">Useful payload: Attention → FFN → Attention</text>
+<rect x="574" y="62" width="518" height="346" rx="14" fill="#f2f7ff" stroke="#ccd5e0"/><text x="596" y="98" font-size="23" font-weight="700">afdEP v1 · DeepEP reuse</text>
+<rect x="596" y="134" width="208" height="142" rx="12" fill="white" stroke="#a5b9d0"/><text x="700" y="164" text-anchor="middle" font-size="18" font-weight="700">Attention sources</text>
+<text x="700" y="191" text-anchor="middle" font-size="15" fill="#52657b">Send routed tokens</text>
+<text x="700" y="220" text-anchor="middle" font-size="15" fill="#52657b">Receive combined output</text>
+<text x="700" y="249" text-anchor="middle" font-size="13" fill="#147849">No receive payload arena</text>
+<rect x="862" y="134" width="208" height="142" rx="12" fill="white" stroke="#a5b9d0"/><text x="966" y="164" text-anchor="middle" font-size="18" font-weight="700">FFN expert workers</text>
+<text x="966" y="191" text-anchor="middle" font-size="15" fill="#52657b">Own real experts</text>
+<text x="966" y="220" text-anchor="middle" font-size="15" fill="#52657b">Receive only from sources</text>
+<text x="966" y="249" text-anchor="middle" font-size="13" fill="#147849">Source-count receive bounds</text>
+<path d="M807 192 H858" stroke="#52657b" stroke-width="2" marker-end="url(#arrow)"/><path d="M858 239 H807" stroke="#52657b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="833" y="185" text-anchor="middle" font-size="11">dispatch</text><text x="833" y="260" text-anchor="middle" font-size="11">combine</text>
+<text x="596" y="317" font-size="17" fill="#147849">Skip unused Attention dispatch-copy epilogue</text>
+<text x="596" y="345" font-size="17" fill="#147849">Skip unused FFN combine-output epilogue</text>
+<text x="596" y="384" font-size="14" fill="#52657b">Useful payload: Attention → FFN → Attention</text>
+<text x="28" y="443" font-size="17" font-weight="700">Both retain DeepEP collective participation, logical expert slots, transport buffers and credits.</text>
+<text x="28" y="474" font-size="15" fill="#52657b">V1 optimizes local buffers and epilogues. Attention output reduction remains. Validated within one NVLink domain.</text>
 </g></svg>

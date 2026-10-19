@@ -1,170 +1,78 @@
-# Installation and API
+# API contract
 
-afdEP separates Attention token sources from expert workers. This reference
-covers the current NCCL GIN/NVLink backend; see [support](../README.md#support)
-for hardware and topology status.
+`Buffer(group=..., config=Config(...))` owns one NCCL communicator and one
+vendored DeepEP V2 ElasticBuffer. Initialization and `close()` are collective,
+outside CUDA capture. The caller owns a CPU **Gloo** process group, sets the
+current CUDA device first, and keeps the group alive until close.
 
-## Install
+## Roles and tensors
 
-GPU execution needs Linux, CUDA 13 PyTorch and a compatible `nvcc`, NCCL ≥2.30.7
-with GIN device headers/RDMA, plus `setuptools` and `ninja`. The native extension
-compiles on first use. Package import and configuration tests need no GPU.
+FFN ranks come first; each owns `num_experts / ffn_ranks` consecutive real experts.
+Attention ranks follow. Every rank uses identical configuration, exchange order,
+`bucket`, and `read_host_counts` policy. Only one unmatched dispatch per Buffer
+is allowed. IDs must be unique per token, in `[0, num_experts)`, or `-1` to skip.
+Use `buffer.topk_idx_dtype`; invalid real-role routes assert on the GPU, including
+on graph replay. All payload tensors are on the selected CUDA device.
 
-```bash
-# Preserve an existing CUDA/PyTorch environment:
-python -m pip install --no-build-isolation --no-deps -e .
-python -m afdep doctor
-python -m afdep doctor --build  # Compile/load on the GPU host.
-```
-
-If the environment's NCCL is older, the tested isolated CUDA 13 setup is:
-
-```bash
-python -m pip install --no-deps --target "$HOME/.cache/afdep/dependencies" \
-  nvidia-nccl-cu13==2.30.7
-export AFDEP_NCCL_ROOT="$HOME/.cache/afdep/dependencies/nvidia/nccl"
-export LD_LIBRARY_PATH="$AFDEP_NCCL_ROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-python -m afdep doctor --build
-```
-
-Set library paths **before Python starts**, including every `torchrun` process.
-Loaded NCCL and compile-time headers must match; changing NCCL rebuilds kernels.
-`CUDA_HOME` or `CUDA_NVCC_EXECUTABLE` selects the compiler; `AFDEP_NCCL_ROOT`
-selects NCCL; `AFDEP_CACHE_DIR` overrides the extension cache.
-
-## Validate and run
-
-From the checkout on each four-GPU host, set `NODE_RANK=0` for FFN and `1` for
-Attention, and configure rendezvous and RDMA/NIC affinity:
-
-```bash
-torchrun --nnodes=2 --nproc-per-node=4 --node-rank="$NODE_RANK" \
-  --master-addr="$MASTER_ADDR" --master-port=29500 \
-  --module tests.gpu.correctness --payload bf16
-```
-
-Run all four combinations of `--payload bf16|fp8` and `--mode hybrid|direct`
-(defaults `bf16` and `hybrid`). Use `--module examples.round_trip` for a weighted
-expert example, or `--module benchmarks.round_trip --graph --iterations 100`
-for communication timing. Add `--nvtx` only in a separate profiling run.
-
-## API
-
-Select the CUDA device and initialize an eight-rank CPU Gloo group first.
-Every rank constructs the same configuration and closes buffers in the same order.
-
-```python
-import afdep
-
-config = afdep.Config(
-    capacity_tokens_per_rank=8192,
-    hidden_size=2048,
-    num_experts=128,
-    top_k=8,
-    payload="bf16",
-    allow_hybrid_mode=True,  # False selects direct delivery.
-)
-buffer = afdep.Buffer(group=group, config=config)
-# Attention role:
-buffer.source_dispatch(x, ids, weights, x_scale=None, bucket=bucket)
-buffer.source_collect(out)
-# FFN role, instead of the two source calls:
-r = buffer.worker_receive(bucket=bucket, read_host_counts=False)
-buffer.worker_reply(weighted_expert_rows, r.receipt)
-# Collectively, after the last completed exchange:
-buffer.close()
-```
-
-The current backend orders FFN ranks 0–3 before Attention ranks 4–7. Each FFN
-owns a contiguous quarter of the real experts. All ranks participate even when empty.
-
-| Configuration | Current contract/default |
+| Operation | Contract |
 |---|---|
-| Capacity / bucket | Positive; `0 ≤ actual tokens ≤ bucket ≤ capacity`; shared bucket |
-| Hidden size / experts / top-k | H positive multiple of 128; E positive divisible by four; `1 ≤ K ≤ min(32,E)` |
-| Roles / lanes | Four per role; one in-flight lane |
-| `expert_alignment`, `payload` | 128; `"bf16"` or `"fp8"` |
-| `num_gin_contexts`, `transport_stripes` | Eight each; positive stripes ≤ contexts |
-| `num_sms` | 132 local CTAs; must not exceed device SM count; tune for compute overlap |
-| `gpu_timeout_s`, `rdma_traffic_class` | 60 seconds; zero (the H100 experiment used traffic class 3) |
+| `source_dispatch(x, ids, weights, x_scale=None, *, bucket, read_host_counts=False)` | Attention: contiguous `x [T,H]`, IDs/FP32 weights `[T,K]`, `T ≤ bucket ≤ capacity` |
+| `worker_receive(*, bucket, read_host_counts=False)` | FFN: expert-major rows, weights, device expert prefix sums and opaque receipt |
+| `worker_reply(rows, receipt)` | FFN: contiguous BF16 `[receive_rows,H]`, routing weight applied exactly once |
+| `source_collect()` | Attention: BF16 `[T,H]` summed over selected experts, in original token order |
 
-Gloo lifecycle timeouts are configured on the process group, independently.
+BF16 dispatch uses BF16 activations. FP8 uses `float8_e4m3fn` activations and
+FP32 block-128 scales `[T,H/128]`; strided scale views are supported. The library
+does not quantize or run GEMMs. `H` is a multiple of 256, `K ≤ min(32,E)`, and
+real experts divide evenly over FFN ranks.
 
-| Source tensor | Shape / dtype |
-|---|---|
-| `x` | Contiguous CUDA `[T,H]`, BF16 or `float8_e4m3fn` |
-| `ids`, `weights` | Contiguous `[T,K]`, INT64 and FP32 |
-| `x_scale` | FP8 only: FP32 `[T,H/128]`; strides accepted |
-| `out` | Contiguous BF16 `[T,H]`, including for FP8 dispatch |
+Receive prefix sum `ends[e]` is a device tensor: expert e occupies
+`[align_up(ends[e-1], expert_alignment), ends[e])`, with `ends[-1]=0` for e=0.
+Padding rows are unspecified and must not be treated as live tokens. Return the
+entire receive shape to `worker_reply`, with valid expert rows in place.
+`recv_counts_host`, when requested, reports **aligned** per-expert counts, not
+raw live counts. Keep the receipt unchanged through the matching reply.
 
-All tensors use the buffer's CUDA device. `x`/`out` need 16-byte-aligned pointers;
-contiguous views with offset storage can fail this check. IDs are real experts
-`[0,E)` or `-1` for a disabled slot; nonnegative IDs must be unique per token.
-FP8 is caller-prequantized block-128 data with FP32 dequantization scales;
-afdEP transports it without choosing a quantizer.
+## Graphs, streams and lifetime
 
-## Communication modes
+Capture **complete** dispatch/reply pairs with `read_host_counts=False` after
+warming up the kernels on all ranks. Keep captured tensors, Buffer and graph
+storage alive through every replay. Source tensor shapes and bucket specialize
+the capture. Change payloads and IDs in place; encode inactive choices as `-1`.
+This is capacity-bounded graph execution, not arbitrary-shape graph replay.
+Graph capture/instantiation and replay are different operations; replay still
+has a launch cost.
 
-`allow_hybrid_mode` follows DeepEP's flag of the same name. It selects one
-protocol and never falls back to the other.
+`read_host_counts=True` performs host synchronization for exact eager receive
+allocation on FFN. Otherwise receive capacity is conservative and device counts
+identify live rows. Attention has zero receive payload rows. FFN bounds count
+Attention sources only. Registered transport buffers remain conservatively
+sized by DeepEP and are distinct from receive tensors.
 
-| `allow_hybrid_mode` | Dispatch / reply organization |
-|---|---|
-| `True` (default) | Rail-aligned GIN to an ingress worker; NVLink distribution and reduction on the FFN side |
-| `False` | Full-connectivity GIN directly to selected workers; each worker returns its partial, and the source reduces replies |
+Operations order their internal communication stream with the current CUDA
+stream using DeepEP events. Use caller stream dependencies before passing data
+produced on another stream. Outputs/receipts and user inputs must remain alive
+until dependent GPU work completes. A completed Python pair allows the next
+pair to be enqueued; device-side protocol and stream ordering protect reuse.
+Independent Buffers do not share ordering. `close()` synchronizes outstanding
+work and frees registered storage; destroy graphs before closing the Buffer.
 
-Mode is fixed at construction and must agree on every rank. Direct mode requires
-full GIN connectivity; a rail-only fabric can support hybrid but reject direct.
-Both modes currently require the same two pure-role four-GPU NVLink domains.
+## Transport and tuning
 
-Direct mode reserves a request and a reply slot per peer. At equal capacity its
-registered windows total about 1.7× (FP8) to 2× (BF16) hybrid's, and each
-Attention rank's window is 4× larger. `Buffer.num_buffer_bytes` reports the
-registered size of each rank.
+V1 preserves DeepEP's uniform logical expert slots and collective participation.
+Attention dummy slots are never legal routing targets. `role_aware=True` is the
+public default. `role_aware=False` is an unspecialized control using the same
+backend; `afdep.deepep.ElasticBuffer` retains the low-level connector interface.
+Low-level callers must explicitly pass `role_aware=True, ffn_ranks=M` to enable
+the specializations; the high-level `Buffer` does this from `Config`.
 
-## Receive rows and replies
+`allow_hybrid_mode`, `num_sms`, `num_qps`, timeouts and RDMA traffic class pass
+through to the pinned transport. `num_sms=0` selects approximately 24/132 of the
+smallest device's SM count; choose/tune explicitly for a workload. Both hybrid
+settings are checked on one physical NVLink domain. Role specialization rejects
+multiple physical domains; no inter-node v1 claim is made.
 
-`ReceiveResult` provides `recv_x`, optional `recv_scale`, `recv_topk_weights`,
-`recv_count_psum`, optional `recv_counts_host`, and an opaque `receipt`.
-Rows are expert-major; weights/scales are FP32, device ends/receipt INT32.
-FP8 receive scales use padded column-major strides.
-For local expert e and alignment A:
-
-```text
-start[e] = 0 if e == 0 else round_up(recv_count_psum[e-1], A)
-end[e] = recv_count_psum[e]
-allocated_rows = 4 * bucket * min(K, E/4) + (E/4) * (A-1)
-```
-
-Only `[start[e], end[e])` contains valid activations; gaps/tails are unspecified.
-Padding weights are zero. Host counts, when requested, are aligned per-expert
-counts; reading them synchronizes and is forbidden during graph capture.
-Supply contiguous BF16 `[allocated_rows,H]` expert outputs, **already multiplied
-by the received routing weights exactly once**. afdEP sums rows without applying
-weights again, using the matching unchanged receipt. Padding outputs are ignored.
-Each FFN worker rounds its local FP32 sum to a BF16 partial. Partials are then
-summed in FP32 and rounded to the BF16 reply, on the FFN side in hybrid mode or
-in `source_collect` in direct mode. This need not match one-rounding FP32
-summation bit for bit.
-
-## Ordering and lifetime
-
-Use one ordered current PyTorch CUDA stream per buffer. Keep inputs, receive
-rows, receipts, and expert outputs alive until their enqueued users finish;
-manage events/lifetimes explicitly for other streams. No background stream or
-implicit cross-stream dependency is supplied.
-Keep the buffer's CUDA device current for every operation, including `close()`.
-
-Complete dispatch→collect or receive→reply before the next exchange. Device
-epochs and credits protect request, partial, and reply storage until all readers
-finish; readiness is awaited on every active GIN context, including empty stripes.
-
-Initialize/warm up outside CUDA capture. Capture a complete role-specific
-exchange, use device counts, and retain fixed addresses/shapes/bucket. Values and
-routes may change in place; different buckets use separate graphs replayed in
-the same logical order on every rank. Concurrent use of one buffer is unsupported.
-
-`close()` is collective, outside capture, after final GPU work; it drains peers
-before releasing windows. Do not use collective close as rank-local exception
-cleanup. A timeout/device error is fatal to the job: terminate and reconstruct
-its participants rather than reuse partially advanced communication state.
+Native compilation is lazy and process-locked. `AFDEP_CACHE_DIR` controls the
+extension cache; `EP_JIT_CACHE_DIR` controls DeepEP kernel JIT cache. Both must be
+writable. Use matching NCCL headers/runtime before starting Python; already
+loaded libraries cannot be replaced by changing environment variables later.
