@@ -52,10 +52,12 @@ def test_role_template_parameters_default_to_upstream_kernels():
     assert "int kMaxUnrollFactor = 4," in combine
     assert "bool kAfdSkipEntryBarrier = false," in combine
     assert "bool kAfdSplitTokens = false," in combine
+    assert "int kAfdDirectedFfnRanks = 0," in combine
     dispatch = (impls / "dispatch.cuh").read_text()
     assert "int kAfdFfnRanks = 0," in dispatch
     assert "bool kAfdSkipEntryBarrier = false," in dispatch
     assert "bool kAfdDirectionalNotify = false," in dispatch
+    assert "bool kAfdDirectedExit = false," in dispatch
 
 
 def test_runtime_header_contents_invalidate_build(tmp_path):

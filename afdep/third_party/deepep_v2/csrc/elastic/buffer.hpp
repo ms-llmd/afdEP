@@ -970,7 +970,8 @@ public:
                         cached_mode, deterministic, do_cpu_sync,
                         comm_stream, afd_direct_nvlink ? afd_ffn_ranks : 0,
                         afd_direct_nvlink and afdep_skip_entry_barriers(),
-                        afd_direct_nvlink and afdep_directional_notify());
+                        afd_direct_nvlink and afdep_directional_notify(),
+                        afd_direct_nvlink and afdep_directed_exit());
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
@@ -1302,7 +1303,8 @@ public:
             afd_direct ? afdep_combine_expected_topk(num_topk, afd_ffn_ranks) : 0,
             afd_direct ? afdep_combine_max_unroll() : 0,
             afd_direct and afdep_skip_entry_barriers(),
-            afd_direct and afdep_split_combine_tokens());
+            afd_direct and afdep_split_combine_tokens(),
+            afd_direct and afdep_directed_exit() ? afd_ffn_ranks : 0);
 
         // Allocate output tensors
         auto combined_x = torch::empty({num_combined_tokens, hidden}, x.options());

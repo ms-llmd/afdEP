@@ -7,6 +7,7 @@
 #include <deep_ep/common/math.cuh>
 #include <deep_ep/common/ptx.cuh>
 
+#include <deep_ep/impls/afdep_roles.cuh>
 #include <deep_ep/impls/combine_utils.cuh>
 
 
@@ -27,6 +28,8 @@ template <bool kIsScaleupNVLink,
           bool kAfdSkipEntryBarrier = false,
           // afdEP: split each token's hidden chunks across idle warps when tokens are few.
           bool kAfdSplitTokens = false,
+          // afdEP: FFN ranks [0, kAfdDirectedFfnRanks) signal Attention receivers; 0 keeps the all-rank exit.
+          int kAfdDirectedFfnRanks = 0,
           int kNumThreads = kNumWarps * 32,
           int kNumHiddenBytes = kHidden * sizeof(nv_bfloat16),
           bool kUseRankLayout = use_rank_layout<kAllowMultipleReduction, kNumRanks, kNumTopk>(),
@@ -327,9 +330,22 @@ combine_impl(nv_bfloat16* x,
     }
 
     // Final barrier to ensure data arrival
-    comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
-                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kCombineTag1, true, true, false>(
-        gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    if constexpr (kAfdDirectedFfnRanks > 0) {
+        EP_STATIC_ASSERT(kIsScaleupNVLink, "Directed exit requires one NVLink domain");
+        // FFN ranks publish reply arrival to Attention ranks, which send nothing.
+        if (rank_idx < kAfdDirectedFfnRanks) {
+            afdep_signal_receivers<kNumRanks, team_t>(gin, workspace_layout, kAfdepCombinePhase, rank_idx,
+                                                      kAfdDirectedFfnRanks, kNumRanks - kAfdDirectedFfnRanks,
+                                                      sm_idx, thread_idx);
+        } else {
+            afdep_wait_senders<kNumRanks, kNumTimeoutCycles>(workspace_layout, kAfdepCombinePhase, rank_idx,
+                                                              0, kAfdDirectedFfnRanks, sm_idx, thread_idx);
+        }
+    } else {
+        comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
+                          kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kCombineTag1, true, true, false>(
+            gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    }
 }
 
 }  // deep_ep::elastic

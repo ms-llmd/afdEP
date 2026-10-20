@@ -48,6 +48,13 @@ static bool afdep_split_combine_tokens() {
     return deep_ep::get_env<int>("AFDEP_NO_SPLIT_COMBINE", 0) == 0;
 }
 
+// Directed exit: dispatch sources and combine FFN ranks release per-peer arrival
+// counters; only receivers wait (ordering argument in afdep_skip_entry_barriers).
+// AFDEP_ALL_RANK_EXIT=1 restores the all-rank exit barriers as a measurement control.
+static bool afdep_directed_exit() {
+    return deep_ep::get_env<int>("AFDEP_ALL_RANK_EXIT", 0) == 0;
+}
+
 static int afdep_combine_max_unroll() {
     const int value = deep_ep::get_env<int>("AFDEP_COMBINE_MAX_UNROLL", 0);
     return value > 0 ? std::min(value, 4) : kAfdCombineMaxUnroll;

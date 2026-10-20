@@ -28,6 +28,7 @@ public:
         int num_expected_topk, max_unroll_factor;
         bool afd_skip_entry_barrier;
         bool afd_split_tokens;
+        int afd_directed_ffn_ranks;
 
         // Parameters
         nv_bfloat16* x;
@@ -51,8 +52,9 @@ public:
         if (args.num_scaleout_ranks == 1) {
             header_name = "combine";
             const auto afdep_args = args.num_expected_topk > 0 ?
-                fmt::format(", {}, {}, {}, {}", args.num_expected_topk, args.max_unroll_factor,
-                            args.afd_skip_entry_barrier, args.afd_split_tokens) : std::string();
+                fmt::format(", {}, {}, {}, {}, {}", args.num_expected_topk, args.max_unroll_factor,
+                            args.afd_skip_entry_barrier, args.afd_split_tokens,
+                            args.afd_directed_ffn_ranks) : std::string();
             func_name = fmt::format("combine_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>",
                                     args.is_scaleup_nvlink,
                                     args.use_expanded_layout, args.allow_multiple_reduction,
@@ -140,12 +142,14 @@ static void* launch_combine(void* x,
                             const at::cuda::CUDAStream& stream,
                             const int& num_expected_topk = 0, const int& max_unroll_factor = 0,
                             const bool& afd_skip_entry_barrier = false,
-                            const bool& afd_split_tokens = false) {
+                            const bool& afd_split_tokens = false,
+                            const int& afd_directed_ffn_ranks = 0) {
     // Maximize shared memory utilization
     const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
     EP_HOST_ASSERT(num_expected_topk >= 0 and num_expected_topk <= num_topk and
                    (num_expected_topk == 0) == (max_unroll_factor == 0) and max_unroll_factor <= 4 and
-                   (num_expected_topk > 0 or not (afd_skip_entry_barrier or afd_split_tokens)));
+                   (num_expected_topk > 0 or not (afd_skip_entry_barrier or afd_split_tokens or
+                                                  afd_directed_ffn_ranks > 0)));
     auto num_warps = std::min(num_smem_bytes / token_layout.get_num_bytes<true>(), 32);
 
     // Decide warps
@@ -179,6 +183,7 @@ static void* launch_combine(void* x,
         .afd_skip_entry_barrier = num_scaleout_ranks == 1 and afd_skip_entry_barrier,
         .afd_split_tokens = num_scaleout_ranks == 1 and is_scaleup_nvlink and use_expanded_layout and
                             allow_multiple_reduction and afd_split_tokens,
+        .afd_directed_ffn_ranks = num_scaleout_ranks == 1 and is_scaleup_nvlink ? afd_directed_ffn_ranks : 0,
         .x = static_cast<nv_bfloat16*>(x),
         .topk_weights = static_cast<float*>(topk_weights),
         .src_metadata = src_metadata,

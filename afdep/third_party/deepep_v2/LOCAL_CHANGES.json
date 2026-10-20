@@ -4,15 +4,15 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "b386ce1e61cadbf06f12d89e2f198918c1ddfa8ff62087c0498a3fae458073a5"
+      "sha256": "e28436aecfcb7e0127240e5ccb6625620f3483284a594f5f06cf179c1451cd1e"
     },
     "csrc/kernels/elastic/combine.hpp": {
       "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
-      "sha256": "5cce2a245cd315ae4e39c9b6f1ae331ae4248c1f75a94799cdff73e1167ac32f"
+      "sha256": "05f2ff7d532089eae35e39a7bab777f875842463c7ad59c592aa178eb1e44d18"
     },
     "csrc/kernels/elastic/dispatch.hpp": {
       "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
-      "sha256": "3a47958b552849786ded44e26fa2eb70bd814939ba03ef49a397961bc637672e"
+      "sha256": "1f623235070a04252217cd8d8ae480293c1c8b30fd4e72aa107cdd9842e61bb4"
     },
     "csrc/python_api.cpp": {
       "upstream_sha256": "64b6041b75c1027c9f7f16b236e1fb037f0838f5338020804035e8e39d5710ba",
@@ -20,7 +20,7 @@
     },
     "deep_ep/include/deep_ep/impls/combine.cuh": {
       "upstream_sha256": "6a0f1f3f978978a35f9616178825f8c29881aafc3a04d8c2ba68b50a4a283c9a",
-      "sha256": "2874aac522a7bf6c5871745f719c6af6cbded0f568b27945eed9a02af6a940aa"
+      "sha256": "0a5328e240953f2dd03fb76002d3f1bc741503d4f2aaa6fcc142e5775095a82e"
     },
     "deep_ep/include/deep_ep/impls/combine_utils.cuh": {
       "upstream_sha256": "35f9dbed0cb937231e1edc389038c0d00f0890bbdb55a997e716605a3ab8e935",
@@ -28,7 +28,7 @@
     },
     "deep_ep/include/deep_ep/impls/dispatch.cuh": {
       "upstream_sha256": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
-      "sha256": "08d46db7079dfbc50e3c06e56ff92c250eab0788ead46dfca13b71a655b29fec"
+      "sha256": "3b92c33ca5eb3b7232fb5738ea24b1bef982bc800c67378c55142f3211d3c204"
     },
     "deep_ep/include/deep_ep/impls/dispatch_copy_epilogue.cuh": {
       "upstream_sha256": "77eb7a54c2d645e5137255e399f465af550f56bcb2d8fd000d6de9a7f3d7c033",
@@ -37,10 +37,10 @@
   },
   "added_files": {
     "csrc/kernels/elastic/afdep_roles.hpp": {
-      "sha256": "9d45c3f9762c0fdea9eae6d1287216ad014df745b9332e32d5ef1819f6515d0c"
+      "sha256": "d1141223ea44cc780696d9c132630da781b2a4efc8c3e9a6877654f55b12c16b"
     },
     "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
-      "sha256": "bbf6eb2781fabe323093c183932c7f7678211c94ba7af8a99c325c059e3e246a"
+      "sha256": "8c0b2fd74780eb2db72deec7132a50fb321ba43242eaa72b4bdf65487b3bb055"
     }
   },
   "scope": [
@@ -56,11 +56,12 @@
     "v2.1: role-aware direct-NVLink dispatch and combine skip their entry barriers on every rank; ordered complete pairs, non-PDL main kernels and the unchanged exit barriers imply buffer, counter and count-inbox availability (proof in afdep_roles.hpp). AFDEP_KEEP_ENTRY_BARRIERS=1 restores them as a measurement control.",
     "v2.1: role-aware direct-NVLink dispatch exchanges counts Attention->FFN only: sources reduce and send FFN rank/expert counts and wait for none; FFNs skip their zero-count reduction and wait only for source counts; prefix sums keep canonical positions. AFDEP_UNION_NOTIFY=1 restores the union exchange as a measurement control.",
     "v2.1: with few received tokens, the role-path FFN combine spreads each token's hidden chunks over idle warps (each reduces and TMA-stores its slice) instead of one warp per token; one warp per token otherwise. AFDEP_NO_SPLIT_COMBINE=1 restores it as a measurement control.",
+    "v2.1: role-aware direct-NVLink dispatch and combine replace their all-rank exit barriers with directed arrival: senders flush, grid-sync and release per-peer monotonic counters (unused scale-out channel-tail workspace in direct mode); only receivers wait. AFDEP_ALL_RANK_EXIT=1 restores the exit barriers as a measurement control.",
     "v2.1 screening aids: AFDEP_COMBINE_EXPECTED_TOPK/AFDEP_COMBINE_MAX_UNROLL override the role-path combine defaults."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",
     "source_manifest_sha256": "4211c4b4f72cf2c06d1e2177eb024438382968cbcb84414baa73c80b79304a4d"
   },
-  "scope_version": "afdEP v1 role specialization + v2.1 combine reduction, entry barriers, directional counts and split combine"
+  "scope_version": "afdEP v1 role specialization + v2.1 combine reduction, entry barriers, directional counts, split combine and directed exit"
 }

@@ -30,6 +30,8 @@ template <bool kIsScaleupNVLink,
           bool kAfdSkipEntryBarrier = false,
           // afdEP: Attention sources publish counts only to FFN ranks; FFNs only receive.
           bool kAfdDirectionalNotify = false,
+          // afdEP: sources signal FFN receivers; only receivers wait (no all-rank exit).
+          bool kAfdDirectedExit = false,
           int kNumNotifyThreads = kNumNotifyWarps * 32,
           int kNumDispatchThreads = kNumDispatchWarps * 32,
           int kNumThreads = kNumNotifyThreads + kNumDispatchThreads,
@@ -53,6 +55,8 @@ dispatch_impl(
     EP_STATIC_ASSERT(kNumNotifyWarps % 4 == 0, "Invalid warpgroup size");
     EP_STATIC_ASSERT(not kAfdDirectionalNotify or (kAfdFfnRanks > 0 and kIsScaleupNVLink),
                      "Directional notify requires the direct-NVLink role path");
+    EP_STATIC_ASSERT(not kAfdDirectedExit or (kAfdFfnRanks > 0 and kIsScaleupNVLink),
+                     "Directed exit requires the direct-NVLink role path");
     // FFN ranks own the first kAfdFfnRanks * kNumExpertsPerRank logical experts.
     constexpr int kNumSourceRanks = kNumRanks - kAfdFfnRanks;
     constexpr int kNumReducedCountElems = kAfdDirectionalNotify ?
@@ -474,9 +478,21 @@ dispatch_impl(
     }
 
     // Barrier to ensure data arrival
-    comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
-                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kDispatchTag1, true, true, false>(
-        gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    if constexpr (kAfdDirectedExit) {
+        // Sources publish payload arrival to FFN ranks; FFN ranks (no payload
+        // to send) wait on SM0 for every source before triggering the epilogue.
+        if (afd_source) {
+            afdep_signal_receivers<kNumRanks, team_t>(gin, workspace_layout, kAfdepDispatchPhase, rank_idx,
+                                                      0, kAfdFfnRanks, sm_idx, thread_idx);
+        } else {
+            afdep_wait_senders<kNumRanks, kNumTimeoutCycles>(workspace_layout, kAfdepDispatchPhase, rank_idx,
+                                                              kAfdFfnRanks, kNumSourceRanks, sm_idx, thread_idx);
+        }
+    } else {
+        comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
+                          kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kDispatchTag1, true, true, false>(
+            gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    }
 
     // Trigger the copy epilogue kernel
     cudaTriggerProgrammaticLaunchCompletion();

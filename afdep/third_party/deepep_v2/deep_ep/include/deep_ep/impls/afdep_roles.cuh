@@ -2,11 +2,72 @@
 // Local afdEP role specialization; transport kernels remain upstream-derived.
 #pragma once
 
+#include <cooperative_groups.h>
+
+#include <deep_ep/common/comm.cuh>
 #include <deep_ep/common/compiled.cuh>
+#include <deep_ep/common/handle.cuh>
 #include <deep_ep/common/layout.cuh>
 #include <deep_ep/common/ptx.cuh>
 
 namespace deep_ep::elastic {
+
+// Directed exit (role path, one NVLink domain). Senders flush, grid-sync and
+// release a per-peer monotonic arrival counter in each receiver's workspace;
+// only receivers wait. The direct path never uses the scale-out channel tails,
+// which hold [phase][sender] arrival counters followed by per-phase local rounds.
+constexpr int kAfdepDispatchPhase = 0;
+constexpr int kAfdepCombinePhase = 1;
+
+template <int kNumRanks>
+__device__ __forceinline__ int64_t* afdep_arrival_ptr(const layout::WorkspaceLayout& workspace,
+                                                      const int phase, const int sender) {
+    return workspace.get_scaleout_channel_signaled_tail_ptr(0, 0) + phase * kNumRanks + sender;
+}
+
+template <int kNumRanks>
+__device__ __forceinline__ int64_t* afdep_round_ptr(const layout::WorkspaceLayout& workspace, const int phase) {
+    return workspace.get_scaleout_channel_signaled_tail_ptr(0, 0) + 2 * kNumRanks + phase;
+}
+
+template <int kNumRanks, typename team_t>
+__device__ __forceinline__ void afdep_signal_receivers(const handle::NCCLGin& gin,
+                                                       const layout::WorkspaceLayout& workspace,
+                                                       const int phase, const int rank_idx,
+                                                       const int first_receiver, const int num_receivers,
+                                                       const int sm_idx, const int thread_idx) {
+    // Every CTA's TMA stores complete before SM0 releases the arrival.
+    ptx::tma_store_commit();
+    ptx::tma_store_wait();
+    __syncwarp();
+    cooperative_groups::this_grid().sync();
+    if (sm_idx == 0 and thread_idx < num_receivers) {
+        const auto dst = gin.get_sym_ptr<team_t>(afdep_arrival_ptr<kNumRanks>(workspace, phase, rank_idx),
+                                                 first_receiver + thread_idx);
+        ptx::red_add_rel_sys(dst, static_cast<int64_t>(1));
+    }
+}
+
+template <int kNumRanks, int64_t kNumTimeoutCycles>
+__device__ __forceinline__ void afdep_wait_senders(const layout::WorkspaceLayout& workspace,
+                                                   const int phase, const int rank_idx,
+                                                   const int first_sender, const int num_senders,
+                                                   const int sm_idx, const int thread_idx) {
+    if (sm_idx != 0 or thread_idx != 0)
+        return;
+    const int64_t target = ++ *afdep_round_ptr<kNumRanks>(workspace, phase);
+    for (int sender = first_sender; sender < first_sender + num_senders; ++ sender) {
+        comm::timeout_while<kNumTimeoutCycles>([=](const bool& is_last_check) {
+            const auto arrived = ptx::ld_acquire_sys(afdep_arrival_ptr<kNumRanks>(workspace, phase, sender));
+            if (arrived >= target)
+                return true;
+            if (is_last_check)
+                printf("afdEP directed exit timeout, rank: %d, phase: %d, sender: %d, arrived: %lld, target: %lld\n",
+                       rank_idx, phase, sender, static_cast<long long>(arrived), static_cast<long long>(target));
+            return false;
+        });
+    }
+}
 
 template <int kNumRealExperts>
 __device__ __forceinline__ int afdep_checked_expert(const topk_idx_t expert, const int lane) {
