@@ -59,10 +59,14 @@ void combine_reduce(const int& lane_idx, int (&topk_slot_idx)[kNumValidTopk],
                     vec_t* dst_buffer_ptr,
                     const get_src_buffer_ptr_func_t& get_src_buffer_ptr_func,
                     const wait_buffer_func_t& wait_buffer_func,
-                    vec_t* bias_0 = nullptr, vec_t* bias_1 = nullptr) {
+                    vec_t* bias_0 = nullptr, vec_t* bias_1 = nullptr,
+                    // afdEP: reduce only hidden chunks [chunk_begin, chunk_end); -1 means all.
+                    const int chunk_begin = 0, int chunk_end = -1) {
     constexpr int kNumElemsPerVec = sizeof(vec_t) / sizeof(nv_bfloat16);
     EP_STATIC_ASSERT(kNumElemsPerVec % 2 == 0, "Invalid number of elements");
     EP_STATIC_ASSERT(kHiddenVec % (kUnrollFactor * 32) == 0, "Invalid unrolling");
+    if (chunk_end < 0)
+        chunk_end = kHiddenVec / (kUnrollFactor * 32);
 
     // We use BF16 add as much as possible, as casting is slow
     const bool enable_hadd_bypass =
@@ -72,7 +76,7 @@ void combine_reduce(const int& lane_idx, int (&topk_slot_idx)[kNumValidTopk],
 
     if (enable_hadd_bypass) {
         #pragma unroll 1
-        for (int i = 0; i < kHiddenVec / (kUnrollFactor * 32); ++ i) {
+        for (int i = chunk_begin; i < chunk_end; ++ i) {
             // Read values 0
             const auto slot_0 = topk_slot_idx[0];
             const auto src_base_ptr_0 = get_src_buffer_ptr_func(slot_0);
@@ -94,7 +98,7 @@ void combine_reduce(const int& lane_idx, int (&topk_slot_idx)[kNumValidTopk],
             }
 
             // Wait buffer releases for the first write
-            if (i == 0)
+            if (i == chunk_begin)
                 wait_buffer_func();
 
             // Reduce into shared memory
@@ -110,7 +114,7 @@ void combine_reduce(const int& lane_idx, int (&topk_slot_idx)[kNumValidTopk],
         }
     } else {
         #pragma unroll 1
-        for (int i = 0; i < kHiddenVec / (kUnrollFactor * 32); ++ i) {
+        for (int i = chunk_begin; i < chunk_end; ++ i) {
             // Add bias
             float2 reduced[kUnrollFactor * kNumElemsPerVec / 2] = {};
             const auto add_bias = [&](const vec_t* base_ptr) {
@@ -152,7 +156,7 @@ void combine_reduce(const int& lane_idx, int (&topk_slot_idx)[kNumValidTopk],
             }
 
             // Wait buffer releases for the first write
-            if (i == 0)
+            if (i == chunk_begin)
                 wait_buffer_func();
 
             // Cast into shared memory

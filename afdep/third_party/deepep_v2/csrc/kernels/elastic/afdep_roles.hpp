@@ -41,6 +41,13 @@ static bool afdep_directional_notify() {
     return deep_ep::get_env<int>("AFDEP_UNION_NOTIFY", 0) == 0;
 }
 
+// Few-token FFN combine: spread each token's hidden chunks over idle warps so
+// their loads overlap instead of serializing one memory round trip per chunk.
+// AFDEP_NO_SPLIT_COMBINE=1 restores one warp per token as a measurement control.
+static bool afdep_split_combine_tokens() {
+    return deep_ep::get_env<int>("AFDEP_NO_SPLIT_COMBINE", 0) == 0;
+}
+
 static int afdep_combine_max_unroll() {
     const int value = deep_ep::get_env<int>("AFDEP_COMBINE_MAX_UNROLL", 0);
     return value > 0 ? std::min(value, 4) : kAfdCombineMaxUnroll;

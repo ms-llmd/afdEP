@@ -1301,7 +1301,8 @@ public:
             comm_stream,
             afd_direct ? afdep_combine_expected_topk(num_topk, afd_ffn_ranks) : 0,
             afd_direct ? afdep_combine_max_unroll() : 0,
-            afd_direct and afdep_skip_entry_barriers());
+            afd_direct and afdep_skip_entry_barriers(),
+            afd_direct and afdep_split_combine_tokens());
 
         // Allocate output tensors
         auto combined_x = torch::empty({num_combined_tokens, hidden}, x.options());

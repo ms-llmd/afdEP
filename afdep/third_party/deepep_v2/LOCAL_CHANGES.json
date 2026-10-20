@@ -4,11 +4,11 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "41081032192390d4e99507e8425ce1bc3e328ee8938f31fe69df7718ea0da2d6"
+      "sha256": "b386ce1e61cadbf06f12d89e2f198918c1ddfa8ff62087c0498a3fae458073a5"
     },
     "csrc/kernels/elastic/combine.hpp": {
       "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
-      "sha256": "4af9871153a3b33e69fc58dd6375472fa75c7da0755207e9c6aeb04c755564f5"
+      "sha256": "5cce2a245cd315ae4e39c9b6f1ae331ae4248c1f75a94799cdff73e1167ac32f"
     },
     "csrc/kernels/elastic/dispatch.hpp": {
       "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
@@ -20,7 +20,11 @@
     },
     "deep_ep/include/deep_ep/impls/combine.cuh": {
       "upstream_sha256": "6a0f1f3f978978a35f9616178825f8c29881aafc3a04d8c2ba68b50a4a283c9a",
-      "sha256": "cebc6bf8ecf58d39c368dc65a09220b70f185c1e345e71f6c7b6fa117d29fed6"
+      "sha256": "2874aac522a7bf6c5871745f719c6af6cbded0f568b27945eed9a02af6a940aa"
+    },
+    "deep_ep/include/deep_ep/impls/combine_utils.cuh": {
+      "upstream_sha256": "35f9dbed0cb937231e1edc389038c0d00f0890bbdb55a997e716605a3ab8e935",
+      "sha256": "856ed73a703635c169068e66051227b4b2c9c2dafb17889f68199f894d43a1e4"
     },
     "deep_ep/include/deep_ep/impls/dispatch.cuh": {
       "upstream_sha256": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
@@ -33,7 +37,7 @@
   },
   "added_files": {
     "csrc/kernels/elastic/afdep_roles.hpp": {
-      "sha256": "cf15077ec5d695754ecd9dc2bfad770746c487c2feea389fbb377b0ecb731194"
+      "sha256": "9d45c3f9762c0fdea9eae6d1287216ad014df745b9332e32d5ef1819f6515d0c"
     },
     "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
       "sha256": "bbf6eb2781fabe323093c183932c7f7678211c94ba7af8a99c325c059e3e246a"
@@ -51,11 +55,12 @@
     "v2.1: on the role-aware direct-NVLink path every rank instantiates combine with expected top-k ceil(top_k/ffn_ranks) and maximum reduction unroll 2; generic instantiations omit these defaulted template arguments and keep the upstream kernel.",
     "v2.1: role-aware direct-NVLink dispatch and combine skip their entry barriers on every rank; ordered complete pairs, non-PDL main kernels and the unchanged exit barriers imply buffer, counter and count-inbox availability (proof in afdep_roles.hpp). AFDEP_KEEP_ENTRY_BARRIERS=1 restores them as a measurement control.",
     "v2.1: role-aware direct-NVLink dispatch exchanges counts Attention->FFN only: sources reduce and send FFN rank/expert counts and wait for none; FFNs skip their zero-count reduction and wait only for source counts; prefix sums keep canonical positions. AFDEP_UNION_NOTIFY=1 restores the union exchange as a measurement control.",
+    "v2.1: with few received tokens, the role-path FFN combine spreads each token's hidden chunks over idle warps (each reduces and TMA-stores its slice) instead of one warp per token; one warp per token otherwise. AFDEP_NO_SPLIT_COMBINE=1 restores it as a measurement control.",
     "v2.1 screening aids: AFDEP_COMBINE_EXPECTED_TOPK/AFDEP_COMBINE_MAX_UNROLL override the role-path combine defaults."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",
     "source_manifest_sha256": "4211c4b4f72cf2c06d1e2177eb024438382968cbcb84414baa73c80b79304a4d"
   },
-  "scope_version": "afdEP v1 role specialization + v2.1 combine reduction, entry barriers and directional counts"
+  "scope_version": "afdEP v1 role specialization + v2.1 combine reduction, entry barriers, directional counts and split combine"
 }
