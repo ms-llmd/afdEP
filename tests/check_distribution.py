@@ -19,6 +19,7 @@ def source_files(root: str) -> set[str]:
         ".json",
         ".md",
         ".svg",
+        ".png",
         ".txt",
     }
     return {

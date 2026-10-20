@@ -23,3 +23,6 @@ Large configurations use hidden size 2,048 and top-k 8, exceeding local expert c
 These are correctness checks with synthetic expert outputs, **not performance or
 serving measurements**. Other architectures, layouts and multi-domain role
 specialization remain unvalidated.
+
+The opt-in v2 backend has separate [GPU validation and performance evidence](directional-performance.md).
+The [earlier directional record](validation-nvlink-2026-10-19.json) is historical.

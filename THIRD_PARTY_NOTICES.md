@@ -19,3 +19,14 @@ barriers and credit kernels remain upstream-derived.
 `afdep/deepep.py` and `afdep/_build.py` adapt the snapshot's Apache-2.0
 `deepep_m2n/{buffer,layout,jit_build}.py`. No DeepGEMM, CUTLASS or fmt subtree is
 included. PyTorch, CUDA and NCCL are external dependencies under their own licenses.
+
+## Directional backend
+
+The Apache-2.0 directional protocol in `afdep/csrc/` comes from measured
+AFD plugin experiments; its immutable input hashes and changes are in
+[ORIGIN.json](afdep/csrc/ORIGIN.json). The adapted NCCL runtime and
+DeepEP TMA/warp-reduction helpers retain MIT notices and the same
+[MIT license](afdep/third_party/deepep_v2/LICENSE).
+[NCCL extraction provenance](afdep/csrc/NCCL_PROVENANCE.json) records the
+original host-runtime inputs. Directional kernels do not call DeepEP
+dispatch/combine or require its runtime JIT.

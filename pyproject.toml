@@ -39,7 +39,7 @@ Issues = "https://github.com/ms-llmd/afdEP/issues"
 include = ["afdep*"]
 
 [tool.setuptools.package-data]
-afdep = ["py.typed", "third_party/deepep_v2/**/*", "third_party/deepep_v2/*"]
+afdep = ["csrc/*", "py.typed", "third_party/deepep_v2/**/*", "third_party/deepep_v2/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]

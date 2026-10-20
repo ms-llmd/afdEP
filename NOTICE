@@ -5,3 +5,7 @@ The DeepEP V2 elastic transport contains MIT-licensed code from DeepSeek,
 retained through FastAFD and the AFD plugin. Python/build adapters retain
 Apache-2.0 AFD plugin attribution. See THIRD_PARTY_NOTICES.md and the
 vendored LICENSE, PROVENANCE.json and LOCAL_CHANGES.json.
+
+The experimental directional backend also adapts MIT-licensed DeepEP NCCL
+bootstrap, TMA and reduction primitives. Apache-2.0 protocol and launcher files
+retain AFD plugin attribution. See afdep/csrc/ORIGIN.json and NCCL_PROVENANCE.json.

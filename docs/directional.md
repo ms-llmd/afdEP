@@ -1,0 +1,172 @@
+# Experimental directional backend
+
+V1 remains `afdep.Buffer` / `afdep.Config`. Opt in to v2 with
+`DirectionalBuffer` / `DirectionalConfig`. No DeepEP dispatch/combine calls.
+Use the same [installation](../README.md#use); `python -m afdep doctor --build`
+checks v1. The directional extension compiles on first buffer construction.
+
+## Endpoints
+
+Select the CUDA device and initialize an eight-rank CPU Gloo group first.
+Every rank constructs the same configuration and closes buffers in the same order.
+
+```python
+import afdep
+
+config = afdep.DirectionalConfig(
+    capacity_tokens_per_rank=8192,
+    hidden_size=2048,
+    num_experts=128,
+    top_k=8,
+    payload="bf16",
+    allow_hybrid_mode=True,  # False selects direct delivery.
+)
+buffer = afdep.DirectionalBuffer(group=group, config=config)
+# Attention role:
+buffer.source_dispatch(x, ids, weights, x_scale=None, bucket=bucket)
+buffer.source_collect(out)
+# FFN role, instead of the two source calls:
+r = buffer.worker_receive(bucket=bucket, read_host_counts=False)
+buffer.worker_reply(weighted_expert_rows, r.receipt)
+# Collectively, after the last completed exchange:
+buffer.close()
+```
+
+The default GIN backend orders FFN ranks 0–3 before Attention ranks 4–7.
+For a single NVLink domain, use `transport="nvlink", ffn_ranks=2, attention_ranks=2`:
+FFN ranks 0–1 precede Attention ranks 2–3. Each FFN owns a contiguous share of the
+real experts. All ranks participate even when empty.
+
+NVLink mode uses NCCL-registered peer windows with zero GIN contexts. Workers
+read source packets and push reply partials into source-owned slots; sources
+reduce those local partials. Every worker's reply epoch credits its source-packet reads;
+every source's next request credits its previous reply reads. This requires
+complete dispatch/collect or receive/reply pairs ordered on one CUDA stream
+(or equivalent explicit dependencies), including empty sources. Kernel boundaries
+complete all readers before the next phase; collective close drains final reads.
+It needs no RDMA; `EP_DISABLE_GIN=1` is supported. The hybrid flag and GIN tuning
+fields apply only to `transport="gin"`. Validate the four-GPU path with
+`torchrun --standalone --nproc-per-node=4 -m tests.gpu.nvlink --payload bf16 --graph --output /tmp/nvlink-check`.
+
+| `allow_hybrid_mode` | Dispatch / reply organization |
+|---|---|
+| `True` (default) | Rail-aligned GIN to an ingress worker; NVLink distribution and reduction on the FFN side |
+| `False` | Full-connectivity GIN directly to selected workers; each worker returns its partial, and the source reduces replies |
+
+Mode is fixed at construction and must agree on every rank. Direct mode requires
+full GIN connectivity; a rail-only fabric can support hybrid but reject direct.
+Both GIN modes require the same two pure-role four-GPU NVLink domains.
+
+| Configuration | Current contract/default |
+|---|---|
+| Capacity / bucket | Positive; `0 ≤ actual tokens ≤ bucket ≤ capacity`; shared bucket |
+| Hidden size / experts / top-k | H positive multiple of 128; E positive divisible by FFN ranks; `1 ≤ K ≤ min(32,E)` |
+| Roles / lanes | GIN: four per role; NVLink: two per role; one in-flight lane |
+| `expert_alignment`, `payload` | 128; `"bf16"` or `"fp8"` |
+| `num_gin_contexts`, `transport_stripes` | Eight each; positive stripes ≤ contexts |
+| `num_sms` | Base grid 132; must not exceed device SM count; NVLink bulk row grids use up to 8× this, capped by work size |
+| `gpu_timeout_s`, `rdma_traffic_class` | 60 seconds; zero (the H100 experiment used traffic class 3) |
+
+Gloo lifecycle timeouts are configured on the process group, independently.
+
+| Source tensor | Shape / dtype |
+|---|---|
+| `x` | Contiguous CUDA `[T,H]`, BF16 or `float8_e4m3fn` |
+| `ids`, `weights` | Contiguous `[T,K]`, INT64 and FP32 |
+| `x_scale` | FP8 only: FP32 `[T,H/128]`; strides accepted |
+| `out` | Contiguous BF16 `[T,H]`, including for FP8 dispatch |
+| `live_tokens` | Optional contiguous CUDA INT32 `[1]`; live prefix length within `T` |
+
+All tensors use the buffer's CUDA device. `x`/`out` need 16-byte-aligned pointers;
+contiguous views with offset storage can fail this check. IDs are real experts
+`[0,E)` or `-1` for a disabled slot; nonnegative IDs must be unique per token.
+FP8 is caller-prequantized block-128 data with FP32 dequantization scales;
+afdEP transports it without choosing a quantizer.
+
+For fixed-shape graphs with changing token counts, pass
+`source_dispatch(..., bucket=bucket, live_tokens=count)`. The GPU reads `count`
+once per exchange and checks `0 ≤ count[0] ≤ T ≤ bucket`. Only that leading
+prefix is read, transferred, and returned; only `out[:count[0]]` is valid.
+Inactive rows are ignored and are not sent as padding. Keep count storage alive
+and update it on the buffer's ordered CUDA stream before dispatch/replay.
+Without this argument, all `T` rows remain active. Invalid device count values
+are fatal device bounds errors, not a recoverable allocation fallback.
+
+## Receive rows and replies
+
+`ReceiveResult` provides `recv_x`, optional `recv_scale`, `recv_topk_weights`,
+`recv_count_psum`, optional `recv_counts_host`, and an opaque `receipt`.
+Rows are expert-major; weights/scales are FP32, device ends/receipt INT32.
+FP8 receive scales use padded column-major strides.
+For local expert e and alignment A:
+
+```text
+start[e] = 0 if e == 0 else round_up(recv_count_psum[e-1], A)
+end[e] = recv_count_psum[e]
+allocated_rows = attention_ranks * bucket * min(K, E/ffn_ranks) + (E/ffn_ranks) * (A-1)
+```
+
+This is the default allocation. For eager exact sizing, use
+`worker_receive(bucket=bucket, read_host_counts=True, exact_rows=True)` without
+`out`. It discovers GPU counts, waits for their CPU copy, then allocates payload
+storage with `allocated_rows = sum(recv_counts_host)` before packing. Alignment
+gaps remain; an empty receive has zero rows. This option is forbidden during
+CUDA capture and cannot use caller-owned storage. Registered transport windows
+retain their configured capacity in either case.
+
+Only `[start[e], end[e])` contains valid activations; gaps/tails are unspecified.
+Padding weights are zero. Host counts, when requested, are aligned per-expert
+counts; reading them synchronizes and is forbidden during graph capture.
+Supply contiguous BF16 `[allocated_rows,H]` expert outputs, **already multiplied
+by the received routing weights exactly once**. afdEP sums rows without applying
+weights again, using the matching unchanged receipt. Padding outputs are ignored.
+Local FP32 sums round to BF16 partials before the final FP32 sum/BF16 reply
+(on the FFN side in hybrid mode, on the Attention side in direct mode);
+this need not match one-rounding FP32 summation bit for bit.
+
+For caller-owned receive storage, reserve once outside capture and reuse it:
+
+```python
+r = buffer.reserve_worker_receive(bucket=bucket)  # FFN ranks only
+r = buffer.worker_receive(bucket=bucket, out=r)
+```
+
+The reservation allocates storage without advancing an exchange. Its bucket,
+shapes, dtypes, device, and FP8 scale layout must match the buffer. Storage must
+not overlap other live inputs/outputs or be used by concurrent exchanges.
+Every receive clears routing weights and receipts; activation padding remains
+unspecified. Keep the reservation alive through reply completion. Distinct
+graphs may reuse it only in the same sequential order as the transport.
+
+## Ordering and lifetime
+
+Use one ordered current PyTorch CUDA stream per buffer. Keep inputs, receive
+rows, receipts, and expert outputs alive until their enqueued users finish;
+manage events/lifetimes explicitly for other streams. No background stream or
+implicit cross-stream dependency is supplied.
+Keep the buffer's CUDA device current for every operation, including `close()`.
+
+Complete dispatch→collect or receive→reply before the next exchange. Device
+epochs and credits protect request, partial, and reply storage until all readers
+finish; readiness is awaited on every active GIN context, including empty stripes.
+Payloads and credits are posted without a per-message flush. Credits protect
+registered source storage; collective `close()` drains every active GIN context.
+
+Initialize/warm up outside CUDA capture. Capture a complete role-specific
+exchange, use device counts, and retain fixed addresses/shapes/bucket. Values and
+routes, including optional `live_tokens`, may change in place; different buckets
+use separate graphs replayed in the same logical order on every rank.
+Concurrent use of one buffer is unsupported.
+
+`close()` is collective, outside capture, after final GPU work; it drains peers
+before releasing windows. Do not use collective close as rank-local exception
+cleanup. A timeout/device error is fatal to the job: terminate and reconstruct
+its participants rather than reuse partially advanced communication state.
+
+
+## GPU checks
+
+Use `torchrun --standalone --nproc-per-node=4 -m tests.gpu.nvlink` for the
+single-domain path. `tests.gpu.directional` covers the eight-rank GIN path;
+launch four ranks on each of the two pure-role NVLink domains. Run BF16/FP8,
+eager/graph and both hybrid settings before claiming a new GIN validation.

@@ -10,6 +10,16 @@ Attention receive payloads and empty-side epilogues; FFN receive tensors are
 bounded by Attention source count. The collective protocol, logical expert
 slots, registered transport capacity and required synchronization remain.
 
+## Directional v2 · experimental
+
+![Directional architecture and GIN call order](docs/assets/directional-communication.svg)
+
+Opt in with `from afdep import DirectionalBuffer, DirectionalConfig`.
+V1 remains the default. V2 replaces dispatch/combine with directional requests
+and replies; it reuses DeepEP TMA and reduction primitives.
+[Contracts](docs/directional.md) · [H100 communication experiments](docs/directional-performance.md)
+· [vLLM serving measurements](https://github.com/ms-llmd/afd-plugin/pull/31).
+
 ## Use
 
 Linux, PyTorch ≥2.6, CUDA toolkit with `nvcc`, and NCCL ≥2.30.7 with device
@@ -57,13 +67,16 @@ prequantized FP8 dispatch return BF16 combined outputs. See the
 
 ## Support
 
-| Architecture | Evidence | Current v1 scope |
+| Architecture | Backend | Validated scope |
 |---|---|---|
-| Hopper (SM90) | H100 GPU suite | BF16/FP8; eager/CUDA graphs; one NVLink domain |
-| Blackwell | Not validated | No support claim yet |
-| Other architectures | Not validated | No support claim yet |
+| Hopper (SM90) | V1 DeepEP reuse | H100/H200: BF16/FP8; eager/CUDA graphs; 2 Attention + 2 FFN, one NVLink domain |
+| Hopper (SM90) | V2 directional | BF16/FP8; eager/CUDA graphs; H100/H200: 2 + 2 NVLink; H100: 4 + 4 GIN; H200: 4 + 4 direct GIN |
+| Blackwell | V1 DeepEP reuse | Not validated |
+| Other architectures | V1 DeepEP reuse | Not validated |
 
-Validation uses 2 Attention + 2 FFN ranks with partitioned experts. Other group
+The current V2 backend requires SM90; additional architecture backends are future work.
+
+V1 validation uses 2 Attention + 2 FFN ranks with partitioned experts. Other group
 layouts and multi-domain role specialization require validation. V1 rejects
 multiple physical NVLink domains when role specialization is enabled.
 `allow_hybrid_mode` retains DeepEP's meaning; it does not enable an unvalidated

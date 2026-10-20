@@ -1,0 +1,951 @@
+{
+  "date": "2026-10-19",
+  "scope": "Communication only; experimental single-domain directional transport; no serving or expert GEMM claim",
+  "hardware": {
+    "architecture": "Hopper SM90",
+    "device": "NVIDIA H100 80GB HBM3",
+    "gpus": 4,
+    "ffn_ranks": [
+      0,
+      1
+    ],
+    "attention_ranks": [
+      2,
+      3
+    ],
+    "nvlink_domains": 1
+  },
+  "software": {
+    "torch": "2.13.0+cu130",
+    "cuda": "13.0",
+    "nccl": "2.30.7",
+    "nsight_systems": "2026.5.1"
+  },
+  "workload": {
+    "hidden": 2048,
+    "experts": 128,
+    "top_k": 8,
+    "alignment": 128,
+    "capacity_tokens_per_source": 2048,
+    "return_dtype": "bf16",
+    "quantization_and_expert_compute": "excluded; persistent BF16 expert output ones"
+  },
+  "method": {
+    "warmup_replays": 1000,
+    "exchanges_per_block": 500,
+    "blocks_per_process": 3,
+    "timer": "CUDA events; maximum across Attention ranks",
+    "startup": "build, allocation and capture excluded; graph replay included",
+    "masked_comm_sms": 132,
+    "masked_epilogue_sms": 132,
+    "directional_base_grid": 132,
+    "performance_runs": "One full-bucket screen and one independent selected-directional process at 2048 per payload/routing; a fresh masked process at 2048. Runs serial, not randomized; intermediate experiments/builds ran between baseline and selected follow-ups. Previous masked references retained separately.",
+    "routing": "strided: (token*3 + lane*5 + source)%128; random: CUDA rand top-k without replacement, seed 1234+source",
+    "claim_limit": "Short communication microbenchmark, not a statistical confidence interval. Do not extrapolate old two-domain or serving gains."
+  },
+  "base_commit": "b979b8d157283f7e9021eaeb4b2ece6800e68b46",
+  "source_file_sha256": {
+    "afdep/buffer.py": "2bf600e2b2ed24c031a66255df1bce9a3a39719b8c330303aabca27924b249c7",
+    "afdep/config.py": "32c7529eb2a884adca82d3e354b910f9c28d6f3dcc37bad4f59aa1c68e59b66e",
+    "afdep/csrc/ORIGIN.json": "f6455b9a967c4cccae29d0c503f6704325a389a1f9cb5e80a6af3e8c5b69d927",
+    "afdep/csrc/bindings.cpp": "1ad1841821dff89f9ebb0597b505df543a66adb2d1cfca65f39d40a133f88644",
+    "afdep/csrc/buffer.hpp": "eb34278efded318f4535b400463b774f6fe87caf77f3647e1c27d050e8aa07fb",
+    "afdep/csrc/checks.hpp": "6813b14c2984042a343b3f06775e461dc1948f529e347a4db97fbc5798050629",
+    "afdep/csrc/deepep_reduce.cuh": "86521588910598de1d71a9619730ffe307b2d052269da860d96eb48e03e235d6",
+    "afdep/csrc/deepep_tma.cuh": "76cf2a78e43b8134eb2de0b112d95f28f26817bce2660e73c22d2c43866a89ec",
+    "afdep/csrc/kernels.cu": "7a6a1e56fe724d8ee12f1e3c769ecb838f6bebe0a931d5040db182ad2c1316e1",
+    "afdep/csrc/kernels.cuh": "4fa154b2494890983b7d53eb10a44066ddb485140d45908fa0886676911ea632",
+    "afdep/csrc/kernels.hpp": "d0078c7bebe2c4198efb6c80d936b47c340954f20450427cbb1b40aee2533d21",
+    "afdep/csrc/layout.hpp": "c43f7e9c49c523c2b1e60dc7792340f4f5012af2ce574899bc7deb8bb9492b66",
+    "afdep/csrc/nccl_runtime.cpp": "84f69fc5e7cb1ee6cc21e0e50ab4641868d58f951244fe84c9303e1d5cfd03a9",
+    "afdep/csrc/nccl_runtime.hpp": "e38afcdffaf1fdf72ff30c70b86455fe53a958c8f31d50ee14a4c2bdd12fe471",
+    "benchmarks/nvlink.py": "55838a53ffdc421d530246498eb211ef14edd406e36fcd3081ca555994d8e26b",
+    "tests/gpu/nvlink.py": "c62545dcc60e1617bd68581e71073b1f27741345b6f4986d98395ae003225fe7"
+  },
+  "correctness": [
+    {
+      "name": "bf16-small-eager",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-bf16-small-eager/rank-0.json",
+          "sha256": "9be1cd4e13a7c93c239c5b9be57494e6545f790952cef4c629ae5f1ea0cb0db8"
+        },
+        {
+          "file": "nvlink-v20-bf16-small-eager/rank-1.json",
+          "sha256": "b2111347655870c064c083bb712092831b5bcba852182b4062675fd1b936f4ec"
+        },
+        {
+          "file": "nvlink-v20-bf16-small-eager/rank-2.json",
+          "sha256": "2f9c06101f1b58e52f7db06eb4eeda13d5a961edc713bbd9355fb5193323d0ef"
+        },
+        {
+          "file": "nvlink-v20-bf16-small-eager/rank-3.json",
+          "sha256": "395a019cda31bd127b74d3c02182705a64d36feaa506f7bf676f076a812601cb"
+        }
+      ]
+    },
+    {
+      "name": "bf16-bulk-eager",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-bf16-bulk-eager/rank-0.json",
+          "sha256": "1c831b72b167778783e1d4cf4dbdfe4042d7867eb09aa4f39d5a1785f34261ef"
+        },
+        {
+          "file": "nvlink-v20-bf16-bulk-eager/rank-1.json",
+          "sha256": "207071a230fb67bba5f809781395bbf0e8c5136ae41ce02de8d85478fa794f45"
+        },
+        {
+          "file": "nvlink-v20-bf16-bulk-eager/rank-2.json",
+          "sha256": "fcf7679621d48bebc3c119ac7ebbb93f41d6407a0abdd3e1beacbe3f919d81fd"
+        },
+        {
+          "file": "nvlink-v20-bf16-bulk-eager/rank-3.json",
+          "sha256": "87c3bc4aaf79fcc658a549cfd6a3ac1b239c73182235383c2af056fec47df41e"
+        }
+      ]
+    },
+    {
+      "name": "bf16-small-graph",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-bf16-small-graph/rank-0.json",
+          "sha256": "cae9ef9f5deb8ef8acae7e56c46587caa6b854a5cef20da4728d93b7855a291b"
+        },
+        {
+          "file": "nvlink-v20-bf16-small-graph/rank-1.json",
+          "sha256": "65c9086627693580b72ec95a24abd7418bacfecc9fa326ad9cd8fc978a7eeb41"
+        },
+        {
+          "file": "nvlink-v20-bf16-small-graph/rank-2.json",
+          "sha256": "4c9e10c800e9ed3b07ff7cd034435b00a6804559a9f1a406ff444d9de122f69c"
+        },
+        {
+          "file": "nvlink-v20-bf16-small-graph/rank-3.json",
+          "sha256": "073f6f32897dd1a5759c27d026d9ffc283fa76b9ff565fb7d9054df3e5458b7e"
+        }
+      ]
+    },
+    {
+      "name": "bf16-bulk-graph",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-bf16-bulk-graph/rank-0.json",
+          "sha256": "f2f1642625a75b9efd6477f4ba734654fb6fe8b3b5105dda60d0fadcde5af0b4"
+        },
+        {
+          "file": "nvlink-v20-bf16-bulk-graph/rank-1.json",
+          "sha256": "fccf51f0a11c53b6923056033eb422e6db023e46f6a382b80a348ab58b4af897"
+        },
+        {
+          "file": "nvlink-v20-bf16-bulk-graph/rank-2.json",
+          "sha256": "16ae25227bb63d0a6e752517f650e85b15b81fc71724c8f18e6a16e74b4ff359"
+        },
+        {
+          "file": "nvlink-v20-bf16-bulk-graph/rank-3.json",
+          "sha256": "4c3654985bd3e16fcc6ffb9852829d8580ae3dad6167028126756b31238f2cc5"
+        }
+      ]
+    },
+    {
+      "name": "bf16-asymmetric-graph",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-bf16-asymmetric-graph/rank-0.json",
+          "sha256": "10015f3469f7c6f80a826c0bcd2ec6bb226db225f5c9368bdfddf96e85e69f98"
+        },
+        {
+          "file": "nvlink-v20-bf16-asymmetric-graph/rank-1.json",
+          "sha256": "40c20b51873781c8e87f33c9467c824d4c03ebf502e95422067fc11415ad93ab"
+        },
+        {
+          "file": "nvlink-v20-bf16-asymmetric-graph/rank-2.json",
+          "sha256": "1b49616b82c338f785e4d6a0795a00421af4e899c57a43d1259079fe32841d7b"
+        },
+        {
+          "file": "nvlink-v20-bf16-asymmetric-graph/rank-3.json",
+          "sha256": "c42b5b641796810f6b82f7925f24c53f1bb00977bbbe99a317e9c37c1d7f14ae"
+        }
+      ]
+    },
+    {
+      "name": "bf16-tiled-scan-graph",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-bf16-tiled-scan-graph/rank-0.json",
+          "sha256": "43bae01ce858c99012f4994a52c7d7e155a27dab3076be48d80c00237833d315"
+        },
+        {
+          "file": "nvlink-v20-bf16-tiled-scan-graph/rank-1.json",
+          "sha256": "f24fe8989cbebb9075bb95f499dec247c4d1ac4baf7af4e245319e5078bac9e0"
+        },
+        {
+          "file": "nvlink-v20-bf16-tiled-scan-graph/rank-2.json",
+          "sha256": "43e83a82781f9727bddc4aa998c03b6f8468b433f8718c626357c9f9e8010f14"
+        },
+        {
+          "file": "nvlink-v20-bf16-tiled-scan-graph/rank-3.json",
+          "sha256": "6d2207efdff3bdf5a70661ed5592077f551d0546cf777c6794910c4ef66d2f9b"
+        }
+      ]
+    },
+    {
+      "name": "fp8-small-eager",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-fp8-small-eager/rank-0.json",
+          "sha256": "3c904db9bd511898e6f25660f86a6c9356304c9398c6acf2a2c5c195a65e6585"
+        },
+        {
+          "file": "nvlink-v20-fp8-small-eager/rank-1.json",
+          "sha256": "d44e4227f3fb22c7b6f4dc082d6ebcbce969332f55b21ee1c87ef6838c2382a0"
+        },
+        {
+          "file": "nvlink-v20-fp8-small-eager/rank-2.json",
+          "sha256": "04f4c59a491bbc45c2a6c36b075bca441c408841b5916f599d0b24608a37ba87"
+        },
+        {
+          "file": "nvlink-v20-fp8-small-eager/rank-3.json",
+          "sha256": "224c591b88e095a14f43922878e71d41e21ef1940a81a92f9d506e49a8541dee"
+        }
+      ]
+    },
+    {
+      "name": "fp8-bulk-eager",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-fp8-bulk-eager/rank-0.json",
+          "sha256": "e93036962a5eb249dcb40e0a24db4fce8772bcdb332d3bd22e0a0f2db506d39f"
+        },
+        {
+          "file": "nvlink-v20-fp8-bulk-eager/rank-1.json",
+          "sha256": "178febbc08bd9735fbd4b869f90ed1a7c01d8972510eb0196aa8990e3ac5e913"
+        },
+        {
+          "file": "nvlink-v20-fp8-bulk-eager/rank-2.json",
+          "sha256": "d3785a14fd781026944ab24dd737eda08092f424c82c81189dbc967737fa66ee"
+        },
+        {
+          "file": "nvlink-v20-fp8-bulk-eager/rank-3.json",
+          "sha256": "38aedeee666a348b094857817140ae8cab3fd38df4fb55e7c4837bb76a64ea0e"
+        }
+      ]
+    },
+    {
+      "name": "fp8-small-graph",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-fp8-small-graph/rank-0.json",
+          "sha256": "e0fabc041abc5816a2300ff40e779a9b244dd0dd3bea43aea11a86b14be4e996"
+        },
+        {
+          "file": "nvlink-v20-fp8-small-graph/rank-1.json",
+          "sha256": "4633d3ff614ac625eed5a34818b2357dfa161cd4464c09390d5bb8b7b83470b2"
+        },
+        {
+          "file": "nvlink-v20-fp8-small-graph/rank-2.json",
+          "sha256": "f6182eb2342cc11ffe170ce1bd47e48af13cdd57e62e4d76d6f2607e36352157"
+        },
+        {
+          "file": "nvlink-v20-fp8-small-graph/rank-3.json",
+          "sha256": "20fa095a3f209f64243ff5b3faabafa2eb2aa922e9d4e9ce957cac82dba178b2"
+        }
+      ]
+    },
+    {
+      "name": "fp8-bulk-graph",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-fp8-bulk-graph/rank-0.json",
+          "sha256": "c45de4c835446b224015c7c4841a7087e1e1bd1276373296436d5a1e51ee0bec"
+        },
+        {
+          "file": "nvlink-v20-fp8-bulk-graph/rank-1.json",
+          "sha256": "bab8e4afd79acae817e093cccf6b75d14b37b1ea648731e0b3ae75eada8f1a01"
+        },
+        {
+          "file": "nvlink-v20-fp8-bulk-graph/rank-2.json",
+          "sha256": "91b30fc1a193c74314180681d363b94d9b1cd3ec744348d8013fdd1d03890759"
+        },
+        {
+          "file": "nvlink-v20-fp8-bulk-graph/rank-3.json",
+          "sha256": "0245d1b21110c2a5108dbe5c803ea124f27c4b6538c0dc1f8f8c16525a3a0103"
+        }
+      ]
+    },
+    {
+      "name": "fp8-asymmetric-graph",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-fp8-asymmetric-graph/rank-0.json",
+          "sha256": "6206d3e1d483d6a457e53dbb78a8384dc15bd3cde9bb178efad022de637df56e"
+        },
+        {
+          "file": "nvlink-v20-fp8-asymmetric-graph/rank-1.json",
+          "sha256": "5d29bcdc7226c43ea760bc6e5dd17687940000c664c31bf223a8851d5683f4be"
+        },
+        {
+          "file": "nvlink-v20-fp8-asymmetric-graph/rank-2.json",
+          "sha256": "d3f206e706665d9837b43d22d8c31e38c92531a133e210e49aa61dbb0d6c61ee"
+        },
+        {
+          "file": "nvlink-v20-fp8-asymmetric-graph/rank-3.json",
+          "sha256": "24e13e4a278679e9b1d0c191b1dc84b6ee549097b278774fa27e5dd8355333c3"
+        }
+      ]
+    },
+    {
+      "name": "fp8-tiled-scan-graph",
+      "ok": true,
+      "returncode": 0,
+      "expected_error": false,
+      "synchronized_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v20-fp8-tiled-scan-graph/rank-0.json",
+          "sha256": "cb99136fa97f590bddb5c762e6b40b1c9c8d4074bcba19f3cee0d86a1f61d2f7"
+        },
+        {
+          "file": "nvlink-v20-fp8-tiled-scan-graph/rank-1.json",
+          "sha256": "906b58bb1c54c7e6465fc82e2585490b0ef387a34e25b5d4db4e5db5aa7d2056"
+        },
+        {
+          "file": "nvlink-v20-fp8-tiled-scan-graph/rank-2.json",
+          "sha256": "248a5977dd1295a2d748e4a725cf40d398404446bd2732b835dacaa8f1181207"
+        },
+        {
+          "file": "nvlink-v20-fp8-tiled-scan-graph/rank-3.json",
+          "sha256": "a8de39ce5c02cb9d4d2c7ec2a5fa4b07fc37cd6b06a43448426c2df09706ab28"
+        }
+      ]
+    },
+    {
+      "name": "invalid-expert",
+      "ok": true,
+      "returncode": 1,
+      "expected_error": "invalid real expert"
+    },
+    {
+      "name": "invalid-duplicate",
+      "ok": true,
+      "returncode": 1,
+      "expected_error": "duplicate expert"
+    },
+    {
+      "name": "invalid-count",
+      "ok": true,
+      "returncode": 1,
+      "expected_error": "live source tokens exceed input capacity/bucket"
+    }
+  ],
+  "unit_tests": {
+    "passed": 48,
+    "ruff": "passed",
+    "diff_check": "passed"
+  },
+  "registered_capacity_mib": {
+    "bf16": 48.375732421875,
+    "fp8": 40.625732421875,
+    "definition": "sum of registered logical window capacities across four ranks; excludes Torch allocations and allocator granularity; not total VRAM"
+  },
+  "large_bucket_comparison": [
+    {
+      "payload": "bf16",
+      "routing": "strided",
+      "tokens": 2048,
+      "measurements": {
+        "masked": {
+          "source_max_gpu_us": [
+            146.01478576660156,
+            145.3621063232422,
+            145.49285888671875
+          ],
+          "median_us": 145.49285888671875,
+          "raw_artifact": {
+            "file": "paired-masked-bf16-strided-v19.json",
+            "sha256": "d4d2e0c7382399fff75106f0e48c7e317c626e00d7e29b34aedcebe3fe55be1c"
+          }
+        },
+        "masked_previous": {
+          "source_max_gpu_us": [
+            144.7720947265625,
+            144.88595581054688,
+            144.70643615722656
+          ],
+          "median_us": 144.7720947265625,
+          "raw_artifact": {
+            "file": "warm-masked-v2-bf16-132.json",
+            "sha256": "b96fc679e50ad3bdb296484e90dd8ae2eb2e8a7aee71971b99be1e1bc8863b67"
+          }
+        },
+        "directional_pull": {
+          "source_max_gpu_us": [
+            169.5535430908203,
+            169.95481872558594,
+            169.41159057617188
+          ],
+          "median_us": 169.5535430908203,
+          "raw_artifact": {
+            "file": "warm-directional-v19-bf16.json",
+            "sha256": "3524f11937bf3d6aeb4c326cf63f57929ddb9d0efc2a8f2e082c6b25b74591bd"
+          }
+        },
+        "directional_push": {
+          "source_max_gpu_us": [
+            146.78848266601562,
+            146.8695068359375,
+            146.80487060546875
+          ],
+          "median_us": 146.80487060546875,
+          "raw_artifact": {
+            "file": "warm-directional-v20-bf16.json",
+            "sha256": "365bd52ed7ca1fd3e167bc877a5ca9fa076511a6b9dc07108db189d54d2ba000"
+          }
+        },
+        "directional_push_paired": {
+          "source_max_gpu_us": [
+            146.93043518066406,
+            145.72653198242188,
+            146.2184295654297
+          ],
+          "median_us": 146.2184295654297,
+          "raw_artifact": {
+            "file": "paired-directional-bf16-strided-v20.json",
+            "sha256": "6184b4cb99f18370d1ba2f3764b73ac46aba31d248931041b2c58ba426b3ab13"
+          }
+        }
+      }
+    },
+    {
+      "payload": "bf16",
+      "routing": "random",
+      "tokens": 2048,
+      "measurements": {
+        "masked": {
+          "source_max_gpu_us": [
+            179.56057739257812,
+            179.28172302246094,
+            179.30712890625
+          ],
+          "median_us": 179.30712890625,
+          "raw_artifact": {
+            "file": "paired-masked-bf16-random-v19.json",
+            "sha256": "32ae64d6331483b9357e587f9209c9495602365f838bbf2cbfb53356b7eeecdb"
+          }
+        },
+        "masked_previous": {
+          "source_max_gpu_us": [
+            179.13189697265625,
+            178.68505859375,
+            178.6728973388672
+          ],
+          "median_us": 178.68505859375,
+          "raw_artifact": {
+            "file": "random-masked-bf16-sms132-v19.json",
+            "sha256": "328ed4971d2fa721abf8e72c41b5d689c8eab729d4bb358e87b11a41bb35bb95"
+          }
+        },
+        "directional_pull": {
+          "source_max_gpu_us": [
+            182.3345947265625,
+            182.55731201171875,
+            182.26853942871094
+          ],
+          "median_us": 182.3345947265625,
+          "raw_artifact": {
+            "file": "random-directional-bf16-sms132-v19.json",
+            "sha256": "fd73a5d75236009bdeeee0ce85e3271d75564e32f0ae8c1620d3f7aae3744d33"
+          }
+        },
+        "directional_push": {
+          "source_max_gpu_us": [
+            155.5648651123047,
+            155.73094177246094,
+            155.49305725097656
+          ],
+          "median_us": 155.5648651123047,
+          "raw_artifact": {
+            "file": "random-directional-v20-bf16.json",
+            "sha256": "8d2dedcbc8a3e66114b04808e9f53b5fe1b9e1cec4a32c932c45f224fdcf8933"
+          }
+        },
+        "directional_push_paired": {
+          "source_max_gpu_us": [
+            156.2487030029297,
+            155.0417938232422,
+            155.4596405029297
+          ],
+          "median_us": 155.4596405029297,
+          "raw_artifact": {
+            "file": "paired-directional-bf16-random-v20.json",
+            "sha256": "3a06c4c1d5967bc4003b0c6e42fedbe859edc13e1efc9f75f15cab4dd40c8cf5"
+          }
+        }
+      }
+    },
+    {
+      "payload": "fp8",
+      "routing": "strided",
+      "tokens": 2048,
+      "measurements": {
+        "masked": {
+          "source_max_gpu_us": [
+            117.01542663574219,
+            116.00678253173828,
+            116.04691314697266
+          ],
+          "median_us": 116.04691314697266,
+          "raw_artifact": {
+            "file": "paired-masked-fp8-strided-v19.json",
+            "sha256": "2c2bdd3f7b40b1cedbdd94ef8276a62b99a1f1395cf18c8ffab3b4628f26c9d8"
+          }
+        },
+        "masked_previous": {
+          "source_max_gpu_us": [
+            115.80057525634766,
+            115.99961853027344,
+            115.86758422851562
+          ],
+          "median_us": 115.86758422851562,
+          "raw_artifact": {
+            "file": "warm-masked-v2-fp8-132.json",
+            "sha256": "e9fc2a9b564dad3e779b5df5f0b5da1539b5bcf14d189989bb2d8f79a6a8a5d2"
+          }
+        },
+        "directional_pull": {
+          "source_max_gpu_us": [
+            150.93466186523438,
+            150.96556091308594,
+            150.9514923095703
+          ],
+          "median_us": 150.9514923095703,
+          "raw_artifact": {
+            "file": "warm-directional-v19-fp8.json",
+            "sha256": "f8621472634be4757f0fd275d11d4460d076a93c4533b0d9671e248de571fb7b"
+          }
+        },
+        "directional_push": {
+          "source_max_gpu_us": [
+            123.71654510498047,
+            123.56806182861328,
+            123.31974029541016
+          ],
+          "median_us": 123.56806182861328,
+          "raw_artifact": {
+            "file": "warm-directional-v20-fp8.json",
+            "sha256": "f782d5bbd227aeaffd2e73a05c96417e5db064bc212611dc6d5aedb80769dead"
+          }
+        },
+        "directional_push_paired": {
+          "source_max_gpu_us": [
+            124.00588989257812,
+            123.75929260253906,
+            123.79027557373047
+          ],
+          "median_us": 123.79027557373047,
+          "raw_artifact": {
+            "file": "paired-directional-fp8-strided-v20.json",
+            "sha256": "8eb1c1abd042a993a8ac9d7005c3d3a043cf7fb83e85370068d3bbbf62befa2d"
+          }
+        }
+      }
+    },
+    {
+      "payload": "fp8",
+      "routing": "random",
+      "tokens": 2048,
+      "measurements": {
+        "masked": {
+          "source_max_gpu_us": [
+            145.98687744140625,
+            145.28179931640625,
+            145.242431640625
+          ],
+          "median_us": 145.28179931640625,
+          "raw_artifact": {
+            "file": "paired-masked-fp8-random-v19.json",
+            "sha256": "f99a34167e4cb6272c19988acd085c1b2376ca9429a49954fcd05efc5b4de65d"
+          }
+        },
+        "masked_previous": {
+          "source_max_gpu_us": [
+            145.32601928710938,
+            145.33453369140625,
+            145.3140411376953
+          ],
+          "median_us": 145.32601928710938,
+          "raw_artifact": {
+            "file": "random-masked-fp8-sms132-v19.json",
+            "sha256": "bf2b7f36870a0fad43b9ea5db35bc2868ac58ca81ce3dd0aee80de199c82b838"
+          }
+        },
+        "directional_pull": {
+          "source_max_gpu_us": [
+            162.2376251220703,
+            162.1655731201172,
+            162.17401123046875
+          ],
+          "median_us": 162.17401123046875,
+          "raw_artifact": {
+            "file": "random-directional-fp8-sms132-v19.json",
+            "sha256": "94585693567cf0b6f504c5e5e19de2423c76cf1da7cd2ffa84b6cfe673a5c26d"
+          }
+        },
+        "directional_push": {
+          "source_max_gpu_us": [
+            130.42848205566406,
+            130.94093322753906,
+            131.29632568359375
+          ],
+          "median_us": 130.94093322753906,
+          "raw_artifact": {
+            "file": "random-directional-v20-fp8.json",
+            "sha256": "c6d94f0554a49e75cacc746ed67669e073c2a55cff2138d98c731697537bfede"
+          }
+        },
+        "directional_push_paired": {
+          "source_max_gpu_us": [
+            131.75225830078125,
+            130.0860137939453,
+            131.3017578125
+          ],
+          "median_us": 131.3017578125,
+          "raw_artifact": {
+            "file": "paired-directional-fp8-random-v20.json",
+            "sha256": "177f7e9e765452316ed64ea7aac932a32e085f2adfe4890562dc5e168ea9ed31"
+          }
+        }
+      }
+    }
+  ],
+  "nsight": {
+    "profile-masked-v19-2048-random-sms132": {
+      "report_sha256": "28fc6b4e024ec5929208335b73a57f77a0647bf00315d7a65258c41e6287f149",
+      "sqlite_sha256": "70387376facf8db688902fe63d4b357121146bad81d62c6be311bd0b9329f741",
+      "median_kernel_us_by_rank": {
+        "0": {
+          "dispatch_impl": 67.536,
+          "dispatch_copy_epilogue_impl": 65.2315,
+          "combine_impl": 74.912,
+          "combine_reduce_epilogue_impl": 1.536
+        },
+        "1": {
+          "dispatch_impl": 67.28,
+          "dispatch_copy_epilogue_impl": 66.41650000000001,
+          "combine_impl": 75.29599999999999,
+          "combine_reduce_epilogue_impl": 1.568
+        },
+        "2": {
+          "dispatch_impl": 60.3035,
+          "dispatch_copy_epilogue_impl": 1.376,
+          "combine_impl": 107.90350000000001,
+          "combine_reduce_epilogue_impl": 8.416
+        },
+        "3": {
+          "dispatch_impl": 60.304,
+          "dispatch_copy_epilogue_impl": 1.6,
+          "combine_impl": 108.0,
+          "combine_reduce_epilogue_impl": 8.608
+        }
+      }
+    },
+    "profile-directional-v19-2048-random-sms132": {
+      "report_sha256": "c9b956827ea9c224c4b8dea1d2563eb5c6bf05451f6461facd0a54d5399dda29",
+      "sqlite_sha256": "b3f182c525725be72b516e137f88e5e80ac9fe0e11b1eff4cebced38c92e704d",
+      "median_kernel_us_by_rank": {
+        "0": {
+          "4": 67.968,
+          "5": 8.0,
+          "6": 1.44,
+          "20": 54.544,
+          "18": 45.664,
+          "13": 3.616
+        },
+        "1": {
+          "4": 66.81649999999999,
+          "5": 8.096,
+          "6": 1.536,
+          "20": 55.248000000000005,
+          "18": 45.616,
+          "13": 3.616
+        },
+        "2": {
+          "0": 3.136,
+          "2": 6.0,
+          "3": 2.592,
+          "17": 121.136,
+          "19": 49.152
+        },
+        "3": {
+          "0": 3.136,
+          "2": 5.952,
+          "3": 2.656,
+          "17": 121.6325,
+          "19": 49.248000000000005
+        }
+      }
+    },
+    "profile-directional-v20-2048-random-sms132": {
+      "report_sha256": "ccaac19d0983980d89e4e86871d471c9c9cee3c3d6cf6e916bcca00e10ae740c",
+      "sqlite_sha256": "4755ecd4a5b36b6db94c41233c9b58cba9fc20c8fe886827a1c63cfac97081c9",
+      "median_kernel_us_by_rank": {
+        "0": {
+          "4": 31.695999999999998,
+          "5": 7.968,
+          "6": 1.44,
+          "20": 54.176,
+          "18": 54.176,
+          "13": 3.36
+        },
+        "1": {
+          "4": 32.208,
+          "5": 7.968,
+          "6": 1.44,
+          "20": 54.064,
+          "18": 54.0165,
+          "13": 3.36
+        },
+        "2": {
+          "0": 3.2,
+          "2": 12.0,
+          "3": 2.576,
+          "17": 128.448,
+          "19": 8.608
+        },
+        "3": {
+          "0": 3.2,
+          "2": 11.984,
+          "3": 2.656,
+          "17": 128.8965,
+          "19": 8.672
+        }
+      }
+    }
+  },
+  "nsight_limits": "Profiled timings separate from unprofiled latency; waiting kernels include peer work and backpressure. Kernel medians across ranks must not be summed as a critical path.",
+  "gin_regression": "Original eight-rank GIN path not rerun in this validation",
+  "package": {
+    "ok": true,
+    "filename": "afdep-0.1.0.dev0-py3-none-any.whl",
+    "sha256": "4fdb7c0655a005433747148d06327559c13ef13aeedbf30b7aee486943867bd2",
+    "runtime_sources_and_notices_verified": true
+  },
+  "rejected_zero_elision": {
+    "selected": false,
+    "reason": "Correct in six affected eager/graph/asymmetric configurations, but slower in random-route screens. Less payload did not establish lower latency; exact cause not isolated.",
+    "source_archive_sha256": "fb4d77f33dada4e1ff16268ba19d3577ba78af717446d02566c030d8c60c2084",
+    "timings": [
+      {
+        "payload": "bf16",
+        "routing": "strided",
+        "source_max_gpu_us": [
+          149.66514587402344,
+          149.08761596679688,
+          148.93734741210938
+        ],
+        "raw": {
+          "file": "warm-directional-bf16-v21.json",
+          "sha256": "f3ec773346829990e98c532f3d6f19a9937133ad8b2fe7a6402cb79644d7f526"
+        }
+      },
+      {
+        "payload": "bf16",
+        "routing": "random",
+        "source_max_gpu_us": [
+          167.3607635498047,
+          166.61318969726562,
+          166.98016357421875
+        ],
+        "raw": {
+          "file": "paired-directional-bf16-random-v21.json",
+          "sha256": "0ce08b944fa444bcb0cf83edec10618f3aa6bb7b9c86a9a48ed731968086ddba"
+        }
+      },
+      {
+        "payload": "fp8",
+        "routing": "strided",
+        "source_max_gpu_us": [
+          126.67411041259766,
+          126.03590393066405,
+          125.87174224853514
+        ],
+        "raw": {
+          "file": "paired-directional-fp8-strided-v21.json",
+          "sha256": "1e5dd0074831682efdb148dcb4578fe41a71852191a56003ee4aa5ceeb9c1b5e"
+        }
+      },
+      {
+        "payload": "fp8",
+        "routing": "random",
+        "source_max_gpu_us": [
+          142.74009704589844,
+          142.86866760253906,
+          142.47520446777344
+        ],
+        "raw": {
+          "file": "paired-directional-fp8-random-v21.json",
+          "sha256": "7c97f08d84fd9bc1afe654c67ecb6e8836db9747748b736850d117e8413af307"
+        }
+      }
+    ]
+  },
+  "mixed_buffer_lifecycle_checks": [
+    {
+      "payload": "bf16",
+      "ok": true,
+      "source_count_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v22-bf16-mixed-buffer-graph/rank-0.json",
+          "sha256": "dab913fd5321cd7fa1af66111b831fef9a178af291efc6b9871fc81d8e357f04"
+        },
+        {
+          "file": "nvlink-v22-bf16-mixed-buffer-graph/rank-1.json",
+          "sha256": "6d85d3c4dbe48d483c070335ff34870359d059fbfd9a937600ddae7c2f5e1123"
+        },
+        {
+          "file": "nvlink-v22-bf16-mixed-buffer-graph/rank-2.json",
+          "sha256": "4d472dde67f59eb5952ff25c9e81cfdb30370e95a5d5411494500797fa722f82"
+        },
+        {
+          "file": "nvlink-v22-bf16-mixed-buffer-graph/rank-3.json",
+          "sha256": "56bf71cdd21c89a0d40f05be0124bc6faf3939870e56dfba819dc1467ece723c"
+        }
+      ]
+    },
+    {
+      "payload": "fp8",
+      "ok": true,
+      "source_count_cases": 12,
+      "queued_reuse_epochs": 12,
+      "raw_rank_artifacts": [
+        {
+          "file": "nvlink-v22-fp8-mixed-buffer-graph/rank-0.json",
+          "sha256": "5995cb6dae8b752ed9a4cfa50649c5e3ef5219070faf146d454c7996ab81bd04"
+        },
+        {
+          "file": "nvlink-v22-fp8-mixed-buffer-graph/rank-1.json",
+          "sha256": "efa31079023a28eb6d10df87b45abf806bd03192daaf47124b09bf364ee5f218"
+        },
+        {
+          "file": "nvlink-v22-fp8-mixed-buffer-graph/rank-2.json",
+          "sha256": "9ed97aa45c54e7f8e19f9f8a7a86df5658ba18d3444ac27f8cdbfb5ecbd45c1a"
+        },
+        {
+          "file": "nvlink-v22-fp8-mixed-buffer-graph/rank-3.json",
+          "sha256": "3c7c4ec624c01fc05c0c805f71007369f40c52af521cbb70d2feb4caaaffc2d6"
+        }
+      ]
+    }
+  ],
+  "final_host_change": "v22 fixes the shared-memory function ceiling across BF16/FP8 constructors before capture. TMA per-launch bytes, grid selection, layout.hpp, kernels.cuh and both DeepEP-derived device helper headers are byte-identical to selected v20. Benchmark startup excluded; v20 timings retained. Six v21 zero-elision checks belong to the rejected variant.",
+  "timed_device_source_sha256": {
+    "afdep/csrc/kernels.cuh": "4fa154b2494890983b7d53eb10a44066ddb485140d45908fa0886676911ea632",
+    "afdep/csrc/layout.hpp": "c43f7e9c49c523c2b1e60dc7792340f4f5012af2ce574899bc7deb8bb9492b66",
+    "afdep/csrc/deepep_tma.cuh": "76cf2a78e43b8134eb2de0b112d95f28f26817bce2660e73c22d2c43866a89ec",
+    "afdep/csrc/deepep_reduce.cuh": "86521588910598de1d71a9619730ffe307b2d052269da860d96eb48e03e235d6"
+  },
+  "upstream": "1198c52f8bed0c20a2b51ff550db5ccf2fda0906",
+  "final_launcher_timing_checks_fp8": [
+    {
+      "routing": "strided",
+      "source_max_gpu_us": [
+        124.61996459960938,
+        124.05260467529297,
+        124.00211334228516
+      ],
+      "median_us": 124.05260467529297,
+      "sha256": "cee64556ab1fe0a9194c4cefe19e42bc9e1f9bff460ec5a2ad6e58a6bb0958f8"
+    },
+    {
+      "routing": "random",
+      "source_max_gpu_us": [
+        132.08160400390625,
+        130.89625549316406,
+        130.54815673828125
+      ],
+      "median_us": 130.89625549316406,
+      "sha256": "c338379eeeea31efb8015837f750ac4a87037d650c5f7bfce6c349460a8516f7"
+    }
+  ],
+  "directional_operation_names": {
+    "0": "BeginSource",
+    "1": "PlanDirectRequests",
+    "2": "PackSource",
+    "3": "SendRequest",
+    "4": "BeginWorker",
+    "5": "Histogram",
+    "6": "Prefix",
+    "7": "PackRows",
+    "8": "PublishPackAndCredit",
+    "9": "MakePartials",
+    "10": "PublishPartialAndWait",
+    "11": "ReduceReply",
+    "12": "PublishConsumedAndWaitCredit",
+    "13": "SendReply",
+    "14": "CollectReply",
+    "15": "ReplyConsumedCredit",
+    "16": "Drain",
+    "17": "WaitReply",
+    "18": "WarpPartials",
+    "19": "WarpCollect",
+    "20": "TmaPackRows"
+  }
+}

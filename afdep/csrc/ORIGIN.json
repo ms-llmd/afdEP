@@ -1,0 +1,154 @@
+{
+  "description": "AFDEP extraction of the measured Apache-2.0 directional protocol, with native CUDA compilation replacing DeepEP generic runtime JIT",
+  "source_repository": "https://github.com/ms-llmd/afd-plugin",
+  "source_base_commit": "7cc7ebd2283eff0388a7aa9495a9445a1cbd8349",
+  "measured_source_snapshot_fingerprint": "b09debb67fc60ae197c2f28e90a7bbf5aa9d92230d3bfe09739e8813dcd169fa",
+  "snapshot_note": "The directional implementation was an uncommitted patch on the base commit; base commit alone does not contain this implementation.",
+  "input_files": {
+    "afd_m2n/buffer.hpp": "252396ed1443043817186aeb46da65d502440c411f0076f605dc78740e3a425c",
+    "afd_m2n/layout.hpp": "0b305b800f4a06840f187f3ec0080249ec80b56aa0838735bad63e359a2efca8",
+    "afd_m2n/kernels.cuh": "9594491d167c4c6032478bf4fc5a63040b2b5e92ef2b6c845f401ed037cde224"
+  },
+  "kernel_preservation": "At initial extraction: layout.hpp and kernels.cuh are byte-identical after namespace/macro rename, one copyright attribution line, explicit layout include in place of JIT-prepend comment, and diagnostic text rename. No arithmetic, synchronization, or transport instruction changed. Subsequent device changes are listed in protocol_changes; extracted_file_sha256 preserves the initial hashes and current_file_sha256 identifies the current files.",
+  "host_changes": [
+    "Compile 15 existing kernel specializations into CUDA extension instead of per-kernel DeepEP JIT compilation.",
+    "Launch the same kernels in the same stream and operation order with 256 threads and zero dynamic shared memory.",
+    "Use AFDEP minimal NCCL runtime and CUDA device properties, eliminating dependency on DeepEP/vLLM/AFD-plugin/DeepGEMM.",
+    "Default to measured tuned 132 local SMs and eight transport stripes; preserve user configuration.",
+    "Add index bounds validation and initialization-failure cleanup.",
+    "Remove unused cpu_timeout_s constructor argument; GPU timeout and distributed bootstrap timeout remain explicit in their respective layers.",
+    "Validate 16-byte alignment of nonempty source activation and output pointers before vector-copy kernels, including storage-offset views.",
+    "Add validated caller-owned receive tensors with per-exchange weight/receipt resets; preserve native device protocol and reader credits.",
+    "Add opt-in eager exact receive allocation: discover GPU counts and read aligned counts on the CPU before allocating receive payload tensors, then retain the same packing and credit protocol.",
+    "Add explicit transport selection and topology validation for 2F2A single-domain NVLink alongside the original two-domain 4F4A GIN path. Preserve real FFN-only expert ownership and source-count receive bounds.",
+    "Configure the TMA copy function shared-memory ceiling to the common BF16 maximum before capture; constructing an FP8 buffer cannot lower the limit for an existing BF16 graph. Per-launch bytes and device kernels unchanged."
+  ],
+  "verification": "The original implementation was validated on eight H100 GPUs. This extracted build requires its own GPU validation before claiming equivalence or performance.",
+  "extracted_file_sha256": {
+    "afdep/csrc/layout.hpp": "7141d10aabfb8f659f06933b87549a211e98d1d2b3ede9ecd1cc45e9867c1888",
+    "afdep/csrc/kernels.cuh": "05b50095f694231db3012821aed1fdf48e86b7a06d9c81eaeb8aee3e4db08bc0"
+  },
+  "current_file_sha256": {
+    "afdep/csrc/layout.hpp": "5d9d8452f0dda67a0147871d4ce4a8f3bac9a327150385a3dce28b969da5300b",
+    "afdep/csrc/kernels.cuh": "adccceb864ac845e35b9d597d8770369399c311f9cfb0b963df8c74595a6bc79",
+    "afdep/csrc/deepep_reduce.cuh": "e98b37b6f5625d4e6c685ca2333c6db73ccbbc819dde77eb5b84af85eef53571",
+    "afdep/csrc/deepep_tma.cuh": "76cf2a78e43b8134eb2de0b112d95f28f26817bce2660e73c22d2c43866a89ec",
+    "afdep/csrc/buffer.hpp": "dc9e5c91e0ab613b6d5710c6eccb7853f13f54e8e7fcb567ea93005a055ba175"
+  },
+  "protocol_changes": [
+    {
+      "date": "2026-10-18",
+      "description": "Add opt-in direct delivery alongside the original hybrid protocol. Compact one request per selected worker with original-token maps, return worker partials directly to the source, and reduce there. Use FULL GIN/world addressing, per-peer readiness and reuse credits, and GPU-shared GIN contexts for concurrent peer sends. Hybrid remains the default; its allocation and protocol ordering are retained."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Add opt-in device-side live source token counts for fixed-capacity inputs and CUDA graphs. BeginSource validates and caches the live prefix once; packing, compact maps, packet layouts and GIN request bytes use that count in both modes. Iterate worker histogram, packing and partial generation over actual per-source counts while preserving every readiness signal, reuse credit and receipt bucket stride."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Post request/reply payloads without per-payload local flush. Strong readiness signals still cover every active context; all request/reply consumption credits and their flushes remain. Wait for previous reply credits at BeginWorker before any local reply-source storage can be overwritten, rather than relying on the old payload flush for local DMA lifetime. No arithmetic, routing, or allocation policy changes."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Post consumption-credit signals asynchronously as well. Preserve every signal and wait, and explicitly drain every active GIN context during collective close before rank synchronization and window teardown. Early reply-credit waits protect local outgoing storage before any overwrite; no credit or readiness dependency is removed."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Read each received activation vector and FP8 scale once per selected worker and fan it out to that worker's selected expert rows. Avoid repeated NVLink reads when multiple selected experts share a worker. Preserve row assignment, receipts, tensor values, and every readiness/credit dependency."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Vectorize BF16 partial, hybrid reply, and direct source reductions over eight adjacent values. Use one CTA per token and share expert receipt rows within that CTA, avoiding per-element integer divisions and redundant route lookups. Preserve FP32 addition order, BF16 rounding, actual-count bounds and every credit/readiness dependency."
+    },
+    {
+      "date": "2026-10-18",
+      "description": "Acquire hybrid peer readiness and packet token counts once in the single-CTA BeginWorker kernel. Publish counts locally before Histogram via the CUDA stream kernel dependency, rather than having every histogram CTA poll the same remote control/header lines. Preserve all peer and GIN-context readiness waits, bounds checks, epochs and consumption credits."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Add experimental opt-in 2F2A single-domain NVLink transport. Sources publish one packet; FFN workers pack real expert rows and publish local BF16 partials; sources pull and reduce those partials directly. NCCL registers/maps the windows with zero GIN contexts. Per-peer GPU epoch/consumption slots protect every source packet and worker partial through changing graph replays and delayed readers. The original 4F4A GIN control layout remains unchanged. This extension requires separate GPU validation; no performance claim."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "For experimental NVLink only, replace the serial expert offset loop with a tiled CUB block exclusive scan of aligned expert counts. Preserve exact expert starts, unpadded prefix ends and cursor initialization; original GIN prefix unchanged. Requires separate GPU correctness and timing."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "For NVLink only, clear expert counts in BeginWorker and assign every valid/inactive receipt slot in PackRows. Remove two standalone fill launches while retaining kernel-boundary publication, actual-token payload bounds and all reader credits. Original GIN fills and signaling preserved. Requires GPU validation for empty, skipped and changing graph routes."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "For NVLink only, use up to eight times the base grid for bulk expert packing and partial reduction, capped by source-token work. Cap source copy, source collect and histogram grids by their fixed shapes. Preserve all device-live count bounds, reduction order and separate completion/credit kernels. Share the fixed thread-block constant between CUB scan and CUDA launches. Requires separate GPU validation and profiling; GIN grid selection unchanged."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "For NVLink buckets up to 32 tokens/source, build expert counts and aligned offsets in the existing single-CTA BeginWorker after all request readiness and prior reader credits. Share the same histogram and CUB scan helpers with the separate large-bucket kernels. Retain a CTA barrier before route reads and before the scan; preserve epochs and kernel-boundary payload/credit publication. GIN keeps separate histogram/prefix launches."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Adapt the pinned DeepEP V2 warp-per-token reduction, four-vector unrolling and two-input BF16 bypass for NVLink H2048/top-k8. Use coherent volatile vector loads instead of upstream noncoherent loads; omit bias/TMA output staging. Compact FFN receipt rows in original top-k order. Sources deduplicate destination ranks from their own immutable current packet IDs and read only selected worker partials; workers still write zero partials for unselected tokens so mixed source extents can use the generic collector safely. Select warp reduction for fixed extents at least 512; smaller shapes retain the generic kernels. Acquire readiness once before warp collect, while generic collect keeps its original per-CTA waits. Retain all readiness flags, every consumption credit, and generic fallbacks for other shapes.",
+      "upstream_file": "afdep/third_party/deepep_v2/deep_ep/include/deep_ep/impls/combine_utils.cuh",
+      "upstream_sha256": "35f9dbed0cb937231e1edc389038c0d00f0890bbdb55a997e716605a3ab8e935",
+      "adapted_file": "afdep/csrc/deepep_reduce.cuh"
+    },
+    {
+      "date": "2026-10-19",
+      "description": "For NVLink H2048/top-k8 buckets at least 512, adapt the pinned DeepEP expert-copy epilogue warp-per-token staging: one-dimensional TMA reads each selected activation into warp-private shared storage, selected expert lanes fan it out with TMA stores, and FP8 scales/weights/receipts retain the directional layout. Every issuing lane waits for its store group before shared tile reuse and at kernel end; request credits remain in the following kernel. Extract unchanged TMA instructions into a MIT header; no DeepEP runtime/JIT or dispatch/combine calls. Requires separate GPU validation for peer reads, changing graph routes and delayed readers. Use 32 warps per block with opt-in dynamic shared memory configured before graph capture.",
+      "upstream_files": {
+        "afdep/third_party/deepep_v2/deep_ep/include/deep_ep/common/ptx.cuh": "ededf87dc3260882fc33d92112541ce2030203a29e937351c9909ae8ef72e3f0",
+        "afdep/third_party/deepep_v2/deep_ep/include/deep_ep/impls/dispatch_copy_epilogue.cuh": "77eb7a54c2d645e5137255e399f465af550f56bcb2d8fd000d6de9a7f3d7c033"
+      },
+      "adapted_file": "afdep/csrc/deepep_tma.cuh"
+    },
+    {
+      "date": "2026-10-19",
+      "description": "NVLink single-lane full-pair protocol only: piggyback each worker request-read credit on its reply readiness and each source reply-read credit on its next request readiness. Wait every reader, including empty/delayed peers; retain kernel-boundary ordering and collective synchronized close. Remove two separate credit kernels and their slots, add host full-pair guards and local device pair markers. GIN credits and control layout unchanged. Select the DeepEP-derived TMA/warp bulk path for fixed extents >=2048, retaining generic kernels for medium shapes. Requires full GPU validation of changing graphs and delayed reader reuse."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "NVLink return-path experiment: allocate one incoming partial slot per FFN on each source, keeping only control windows on workers. Generic workers push vector partials; bulk workers adapt DeepEP combine.cuh reduction to shared memory followed by TMA peer stores, draining every issuing warp before tile reuse and before reply readiness. Sources reduce local slots. Preserve ordered full-pair per-reader credits, all shape fallbacks and GIN behavior. Requires new GPU correctness and timing before selection.",
+      "upstream_file": "afdep/third_party/deepep_v2/deep_ep/include/deep_ep/impls/combine.cuh",
+      "upstream_sha256": "6a0f1f3f978978a35f9616178825f8c29881aafc3a04d8c2ba68b50a4a283c9a"
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Experimental NVLink source-owned expert histograms. Append real-expert counts after each source packet payload; clear them only after every previous request reader credits reuse, and accumulate them during existing source packing. After acquiring all request readiness, workers sum source counts and compute aligned expert offsets in BeginWorker, removing the separate large-bucket Histogram and Prefix launches. Small buckets retain the existing fused route histogram. Preserve IDs, row assignment, reply reductions, every reader epoch and all GIN packet layouts. Native protocol version 2. Requires GPU validation and matched timing before selection."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Experimental NVLink generic source collect: reuse the MIT DeepEP two-input BF16 vector-add bypass already selected by its warp collector. The validated two-worker backend still reads both reply slots, including required zero partials, and preserves readiness, source lifecycle and all epoch credits. Factor the same pair addition for the existing warp path. Requires exact weighted eager/graph tests across payloads/shapes and matched timing before selection."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Compose the separately measured H4096 NVLink bulk extension, shared-memory-sized packing geometry and deferred return-staging wait on the vector-reference source. This composition excludes the rejected generic sparse/threshold changes: workers still write zero partials when a source collector may need them. Wide packing chooses up to32 warps from payload tile size and actual kernel/device shared-memory/thread limits. The wide return loads and reduces its first register tile before waiting for prior TMA reads, then waits before the first shared write; every final drain and reader credit is preserved. H2048 retains its original early wait and launch shapes. Independent component tests are not evidence for this exact combined source; it requires fresh GPU correctness and matched timing."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Experimental tiny NVLink receive preparation: for conservative buckets up to 32, pass the already validated receive-weight tensor into BeginWorker and clear its entire conservative extent there, overlapping local padding initialization with the existing remote request waits. The existing CTA barrier and following PackRows kernel boundary complete every zero write before valid weights are assigned. Omit only the redundant standalone weight-zero launch. Exact eager allocation retains its later standalone zero because receive storage does not exist at count discovery; larger buckets and GIN are unchanged. No peer payload, credit, readiness or arithmetic changes. Requires GPU validation of padding weights, changing/skipped/empty routes, eager/graph replay, maximum-capacity tiny buckets and exact-allocation fallback, then matched timing."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Specialize only the validated H4096 NVLink TMA packing entry by payload type and hidden width. Preserve the runtime H2048 helper, shared-memory-derived launch geometry, all TMA drains and per-peer credits. Configure the selected BF16/FP8 function before capture. The isolated component passed22 GPU correctness configurations and three paired process repeats; its composition with the selected source still requires exact-source GPU correctness and performance validation."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Compose contiguous H4096 NVLink return work assignment with the selected source. Each warp covers a disjoint chunk of flattened live source counts, translated back to source receipt/reply addresses. The processing order within each token, TMA lifetime/drains, peer credits and H2048 mapping remain unchanged. This matches upstream contiguous work assignment but not its compact arrival-order metadata layout. Isolated G evidence is selection-only; this composition requires exact-source GPU correctness and paired performance."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Experimental NVLink protocol version 3: publish a per-source collector capability in the existing request header on every epoch, derived from the shared host/device bulk-shape predicate and captured source storage extent. Workers acquire and cache it within the unchanged aligned control prefix. Only bulk partial generation may omit unselected replies to selective collectors; generic collectors retain unconditional vector reads and generic workers retain all zero writes. Preserve every request/reply readiness, reader credit, TMA drain and all GIN layouts/operations. Requires exact-source GPU validation before selection."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Isolated NVLink capability header-load experiment: after the existing RequestReady acquisition, read the aligned 16-byte Packet with one coherent volatile vector load and extract both token count and collector mode. Preserve token/mode bounds checks, packet/control layout, epochs, readers, sparse policy and GIN behavior. Native protocol remains version 3; separate exact-source GPU and matched timing validation required."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Compose the measured per-source collector capability and single vector header load with selected packing and contiguous H4096 return scheduling. Share the exact host/device bulk eligibility predicate for both2048 and4096 widths. Explicit zero replies to generic collectors use the instantiated hidden width for row addressing and TMA byte size; H2048 bulk workers may omit only replies unselected by a selective collector. H4096 retains its measured reducer/store body and conservatively writes every reply, which remains valid for both collector modes; the unmeasured wide skip branch is not selected. Preserve generic worker/collector kernels, every request/reply epoch and reader lifetime, TMA drains, and all GIN behavior. This is a new composition: component measurements are not evidence of its correctness or additive performance; exact mixed-extent/changing-capability GPU validation and paired timing remain required."
+    },
+    {
+      "date": "2026-10-19",
+      "description": "Isolated host-only source-grid experiment: multiply the base NVLink PackSourceCounts grid by four only for bulk-eligible H4096 source storage, retaining the existing fixed packet-size work cap and blocks>1 tuning guard. All CUDA kernel bodies, launch block sizes, H2048/tiny/generic/GIN paths, packet/control layouts, epochs and reader credits are unchanged. Exact e376 source profiling measured132 blocks of256 threads and approximately90us packet-copy/count time on H4096 BF16 n8192; this motivates a launch-grid probe, not a bandwidth or occupancy claim. Requires exact-source correctness, identical-device-code audit and balanced matched timing before selection."
+    }
+  ]
+}
