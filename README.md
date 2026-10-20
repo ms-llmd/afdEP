@@ -68,7 +68,7 @@ prequantized FP8 dispatch return BF16 combined outputs. See the
 
 v1 validation uses 2 Attention + 2 FFN ranks with partitioned experts. The v2.1
 role path is also validated with 3 Attention + 1 FFN and 1 Attention + 3 FFN in
-one four-GPU NVLink domain ([evidence](docs/validation-v2.1-ratios.json)). Other
+one four-GPU NVLink domain ([evidence](docs/validation-v2.1-clean.json)). Other
 group layouts and multi-domain role specialization require validation. V1 rejects
 multiple physical NVLink domains when role specialization is enabled.
 `allow_hybrid_mode` retains DeepEP's meaning; it does not enable an unvalidated

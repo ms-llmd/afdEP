@@ -21,13 +21,8 @@ template <bool kIsScaleupNVLink,
           int kNumMaxTokensPerRank,
           int kNumExperts, int kNumTopk,
           int kNumQPs, int64_t kNumTimeoutCycles,
-          // afdEP: AFD callers pass the real per-FFN expectation; defaults keep upstream kernels.
-          int kNumExpectedTopk = math::constexpr_ceil_div(kNumTopk, kNumRanks),
-          int kMaxUnrollFactor = 4,
           // afdEP: role path only; ordering proof in csrc/kernels/elastic/afdep_roles.hpp.
           bool kAfdSkipEntryBarrier = false,
-          // afdEP: split each token's hidden chunks across idle warps when tokens are few.
-          bool kAfdSplitTokens = false,
           // afdEP: FFN ranks [0, kAfdDirectedFfnRanks) signal Attention receivers; 0 keeps the all-rank exit.
           int kAfdDirectedFfnRanks = 0,
           int kNumThreads = kNumWarps * 32,
@@ -91,98 +86,11 @@ combine_impl(nv_bfloat16* x,
             gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
     }
 
-    // afdEP: with few tokens, one warp per token serializes one memory round trip
-    // per hidden chunk. Spread the chunks over idle warps instead; each warp
-    // reduces and TMA-stores its own slice of the token.
-    using afd_vec_t = typename CombineVecTraits<kHidden * sizeof(nv_bfloat16)>::vec_t;
-    constexpr int kAfdHiddenVec = kHidden * sizeof(nv_bfloat16) / sizeof(afd_vec_t);
-    constexpr int kAfdUnroll = get_max_unroll_factor<kAfdHiddenVec, kMaxUnrollFactor>();
-    constexpr int kAfdChunks = kAfdHiddenVec / (kAfdUnroll * 32);
-    constexpr int kAfdChunkBytes = kAfdUnroll * 32 * sizeof(afd_vec_t);
-    constexpr int kAfdTotalWarps = kNumSMs * kNumWarps;
-    int afd_parts = 1;
-    if constexpr (kAfdSplitTokens) {
-        EP_STATIC_ASSERT(kIsScaleupNVLink and kUseExpandedLayout and kAllowMultipleReduction,
-                         "Split combine requires the direct-NVLink expanded reduction path");
-        afd_parts = max(1, min(kAfdChunks, kAfdTotalWarps / max(num_reduced_tokens, 1)));
-    }
-    const int afd_chunks_per_part = math::ceil_div(kAfdChunks, afd_parts);
-    afd_parts = math::ceil_div(kAfdChunks, afd_chunks_per_part);
-    if (kAfdSplitTokens and afd_parts > 1) {
-        for (int item = global_warp_idx; item < num_reduced_tokens * afd_parts; item += kAfdTotalWarps) {
-            const int i = item / afd_parts;
-            const int chunk_begin = (item % afd_parts) * afd_chunks_per_part;
-            const int chunk_end = min(chunk_begin + afd_chunks_per_part, kAfdChunks);
-            const int slice_offset = chunk_begin * kAfdChunkBytes;
-            const int slice_bytes = (chunk_end - chunk_begin) * kAfdChunkBytes;
-
-            constexpr int kMetadataStride = 2 + kNumTopk;
-            const int src_token_idx = __ldg(src_metadata + i * kMetadataStride) % kNumMaxTokensPerRank;
-            const int src_rank_topk_idx = __ldg(src_metadata + i * kMetadataStride + 1);
-            const int src_rank_idx = src_rank_topk_idx / kNumTopk;
-            const int src_topk_idx = src_rank_topk_idx % kNumTopk;
-            EP_DEVICE_ASSERT(gin.is_nvlink_accessible<team_t>(src_rank_idx));
-            auto master_token_buffer = recv_buffer.get_rank_buffer(kUseRankLayout ? rank_idx : src_topk_idx)
-                .get_token_buffer(src_token_idx);
-            master_token_buffer.set_base_ptr(gin.get_sym_ptr<team_t>(master_token_buffer.get_base_ptr(), src_rank_idx));
-            const auto dst_slice = math::advance_ptr(master_token_buffer.get_base_ptr(), slice_offset);
-            const auto smem_slice = math::advance_ptr(tma_buffer.get_base_ptr(), slice_offset);
-
-            int stored_topk_slot_idx = -1;
-            if (lane_idx < kNumTopk)
-                stored_topk_slot_idx = __ldg(src_metadata + i * kMetadataStride + (2 + lane_idx));
-            __syncwarp();
-            const auto reduce_valid_mask = ptx::gather(stored_topk_slot_idx >= 0);
-            if (__popc(reduce_valid_mask) == 1) {
-                const auto slot_idx = ptx::exchange(stored_topk_slot_idx, ptx::get_master_lane_idx(reduce_valid_mask));
-                if (ptx::elect_one_sync()) {
-                    const auto load_ptr = math::advance_ptr(
-                        x, static_cast<int64_t>(slot_idx) * kNumHiddenBytes + slice_offset);
-                    ptx::tma_store_wait();
-                    ptx::tma_load_1d(smem_slice, load_ptr, mbarrier_ptr, slice_bytes);
-                    ptx::mbarrier_arrive_and_set_tx(mbarrier_ptr, slice_bytes);
-                    ptx::mbarrier_wait_and_flip_phase(mbarrier_ptr, phase);
-                    ptx::tma_store_1d(dst_slice, smem_slice, slice_bytes);
-                    ptx::tma_store_commit();
-                }
-                __syncwarp();
-            } else {
-                int topk_slot_idx[kNumTopk];
-                compute_topk_slots(
-                    topk_slot_idx, reduce_valid_mask,
-                    [=](const int& idx) {
-                        return ptx::exchange(stored_topk_slot_idx, idx);
-                    }
-                );
-                combine_reduce<kAfdHiddenVec, kAfdUnroll, kNumExpectedTopk>(
-                    lane_idx, topk_slot_idx, static_cast<afd_vec_t*>(tma_buffer.get_base_ptr()),
-                    [=](const int& slot_idx) {
-                        return math::advance_ptr<afd_vec_t>(
-                            x, slot_idx * static_cast<int64_t>(kNumHiddenBytes));
-                    },
-                    [=]() {
-                        ptx::tma_store_wait();
-                        __syncwarp();
-                    },
-                    static_cast<afd_vec_t*>(nullptr), static_cast<afd_vec_t*>(nullptr),
-                    chunk_begin, chunk_end
-                );
-                ptx::tma_store_fence();
-                __syncwarp();
-                if (ptx::elect_one_sync()) {
-                    ptx::tma_store_1d(dst_slice, smem_slice, slice_bytes);
-                    ptx::tma_store_commit();
-                }
-                __syncwarp();
-            }
-        }
-    }
-
     // Do TMA writes into the remote buffers
     int num_tokens_per_warp = math::ceil_div(num_reduced_tokens, kNumSMs * kNumWarps);
     const int token_start_idx = num_tokens_per_warp * global_warp_idx;
     const int token_end_idx = min(token_start_idx + num_tokens_per_warp, num_reduced_tokens);
-    for (int i = token_start_idx; i < token_end_idx and not (kAfdSplitTokens and afd_parts > 1); ++ i) {
+    for (int i = token_start_idx; i < token_end_idx; ++ i) {
         // The master slot index during dispatch
         constexpr int kMetadataStride = 2 + kNumTopk;
         const int src_token_idx = __ldg(src_metadata + i * kMetadataStride) % kNumMaxTokensPerRank;
@@ -252,8 +160,8 @@ combine_impl(nv_bfloat16* x,
             );
 
             // Reduce into shared memory
-            constexpr int kUnrollFactor = get_max_unroll_factor<kHiddenVec, kMaxUnrollFactor>();
-            combine_reduce<kHiddenVec, kUnrollFactor, kNumExpectedTopk>(
+            constexpr int kUnrollFactor = get_max_unroll_factor<kHiddenVec, 4>();
+            combine_reduce<kHiddenVec, kUnrollFactor, math::constexpr_ceil_div(kNumTopk, kNumRanks)>(
                 lane_idx, topk_slot_idx, static_cast<combine_vec_t*>(tma_buffer.get_base_ptr()),
                 /* Get source base */ [=](const int& slot_idx) {
                     return math::advance_ptr<combine_vec_t>(

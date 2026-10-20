@@ -4,11 +4,11 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "6b7653434b8048adc25c64c56049ce8428266e89b48eec7c1d902ae1ee08d864"
+      "sha256": "3da88e4f9a3b63fe6d7751b495011496a56fa954c234b78cd2bc4d27b7b56682"
     },
     "csrc/kernels/elastic/combine.hpp": {
       "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
-      "sha256": "05f2ff7d532089eae35e39a7bab777f875842463c7ad59c592aa178eb1e44d18"
+      "sha256": "c255df5b7d7469a7fb15cffef07e610d0a8322b8179abcfa2381aef51c3f1f11"
     },
     "csrc/kernels/elastic/dispatch.hpp": {
       "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
@@ -20,11 +20,7 @@
     },
     "deep_ep/include/deep_ep/impls/combine.cuh": {
       "upstream_sha256": "6a0f1f3f978978a35f9616178825f8c29881aafc3a04d8c2ba68b50a4a283c9a",
-      "sha256": "0a5328e240953f2dd03fb76002d3f1bc741503d4f2aaa6fcc142e5775095a82e"
-    },
-    "deep_ep/include/deep_ep/impls/combine_utils.cuh": {
-      "upstream_sha256": "35f9dbed0cb937231e1edc389038c0d00f0890bbdb55a997e716605a3ab8e935",
-      "sha256": "856ed73a703635c169068e66051227b4b2c9c2dafb17889f68199f894d43a1e4"
+      "sha256": "522b43712b49f61106aef1306a6195f1cd129156417e6f1bdc18c5b1b4388fe2"
     },
     "deep_ep/include/deep_ep/impls/dispatch.cuh": {
       "upstream_sha256": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
@@ -37,14 +33,14 @@
   },
   "added_files": {
     "csrc/kernels/elastic/afdep_roles.hpp": {
-      "sha256": "44ffc31fe3b5aa79f51b7f567cde82db97e0705eb95d86112ba78dfa2a0dce54"
+      "sha256": "422fcf76f8c2cbcd074fb51bbf9ff378ed2795ca0122783f69f60ba80d967175"
     },
     "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
       "sha256": "8c0b2fd74780eb2db72deec7132a50fb321ba43242eaa72b4bdf65487b3bb055"
     }
   },
   "scope": [
-    "Keep registered transport capacity, main barriers/credits, hybrid dispatch and all main combine kernels unchanged.",
+    "v1: keep registered transport capacity, main barriers/credits, hybrid dispatch and all main combine kernels unchanged; the v2.1 entries below record where the direct-NVLink role path now differs.",
     "Validate full-width real expert IDs and duplicate experts before route-derived indexing in both direct-dispatch routing loops; preserve -1 padding and destination-rank deduplication.",
     "Fuse only noncached, nondeterministic role dispatch in one logical NVLink domain; deterministic and other logical paths retain the separate route guard and completion helpers.",
     "Assert every incoming source count is zero in the main notify phase; use existing normal stream events and tensor lifetimes instead of empty-side completion kernels on the fused path.",
@@ -52,17 +48,14 @@
     "Read actual device counts after reducing allocation bounds; preserve hybrid forwarding metadata.",
     "Known-empty sources return zero host counts without CPU polling or per-dispatch host counter clears; device counter resets and launch flags remain unchanged.",
     "Expose compiled and loaded NCCL versions for startup compatibility checks.",
-    "v2.1: on the role-aware direct-NVLink path every rank instantiates combine with expected top-k ceil(top_k/ffn_ranks) and maximum reduction unroll 2; generic instantiations omit these defaulted template arguments and keep the upstream kernel.",
     "v2.1: role-aware direct-NVLink dispatch and combine skip their entry barriers on every rank; ordered complete pairs, non-PDL main kernels and the unchanged exit barriers imply buffer, counter and count-inbox availability (proof in afdep_roles.hpp). AFDEP_KEEP_ENTRY_BARRIERS=1 restores them as a measurement control.",
     "v2.1: role-aware direct-NVLink dispatch exchanges counts Attention->FFN only: sources reduce and send FFN rank/expert counts and wait for none; FFNs skip their zero-count reduction and wait only for source counts; prefix sums keep canonical positions. AFDEP_UNION_NOTIFY=1 restores the union exchange as a measurement control.",
-    "v2.1: with few received tokens, the role-path FFN combine spreads each token's hidden chunks over idle warps (each reduces and TMA-stores its slice) instead of one warp per token; one warp per token otherwise. AFDEP_NO_SPLIT_COMBINE=1 restores it as a measurement control.",
     "v2.1: role-aware direct-NVLink dispatch and combine replace their all-rank exit barriers with directed arrival: senders flush, grid-sync and release per-peer monotonic counters (unused scale-out channel-tail workspace in direct mode); only receivers wait. AFDEP_ALL_RANK_EXIT=1 restores the exit barriers as a measurement control.",
-    "v2.1: role-sized registered buffers. In one NVLink domain the role path sizes FFN dispatch inboxes for the Attention sources only (source s writes region s - F; the copy epilogue reads with the same offset) and, in the rank layout, Attention combine inboxes for the F FFN senders only; every rank registers the same maximum. AFDEP_UNION_BUFFERS=1 keeps union sizing as a measurement control.",
-    "v2.1 screening aids: AFDEP_COMBINE_EXPECTED_TOPK/AFDEP_COMBINE_MAX_UNROLL override the role-path combine defaults."
+    "v2.1: role-sized registered buffers. In one NVLink domain the role path sizes FFN dispatch inboxes for the Attention sources only (source s writes region s - F; the copy epilogue reads with the same offset) and, in the rank layout, Attention combine inboxes for the F FFN senders only; every rank registers the same maximum. AFDEP_UNION_BUFFERS=1 keeps union sizing as a measurement control."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",
     "source_manifest_sha256": "4211c4b4f72cf2c06d1e2177eb024438382968cbcb84414baa73c80b79304a4d"
   },
-  "scope_version": "afdEP v1 role specialization + v2.1 combine reduction, entry barriers, directional counts, split combine, directed exit and role-sized buffers"
+  "scope_version": "afdEP v1 role specialization + v2.1 entry barriers, directional counts, directed exit and role-sized buffers"
 }

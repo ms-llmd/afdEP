@@ -1313,10 +1313,7 @@ public:
             num_channels,
             use_expanded_layout, allow_multiple_reduction,
             comm_stream,
-            afd_direct ? afdep_combine_expected_topk(num_topk, afd_ffn_ranks) : 0,
-            afd_direct ? afdep_combine_max_unroll() : 0,
             afd_direct and afdep_skip_entry_barriers(),
-            afd_direct and afdep_split_combine_tokens(),
             afd_direct and afdep_directed_exit() ? afd_ffn_ranks : 0);
 
         // Allocate output tensors

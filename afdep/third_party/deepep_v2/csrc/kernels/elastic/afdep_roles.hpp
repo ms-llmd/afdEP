@@ -6,18 +6,6 @@
 
 namespace deep_ep::elastic {
 
-// FFN combine reduction: upstream sizes its branch-free top-k prefix for the
-// union world (dummy Attention ranks included) and unrolls by 4, which spills at
-// the transport grid's register budget. AFD uses each FFN's expected share and
-// unroll 2 (H100 screens: faster in every 2A2F H2048/H4096 cell, 2026-10-20).
-// AFDEP_COMBINE_* environment overrides are screening aids only.
-constexpr int kAfdCombineMaxUnroll = 2;
-
-static int afdep_combine_expected_topk(const int num_topk, const int ffn_ranks) {
-    const int value = deep_ep::get_env<int>("AFDEP_COMBINE_EXPECTED_TOPK", 0);
-    return value > 0 ? std::min(value, num_topk) : (num_topk + ffn_ranks - 1) / ffn_ranks;
-}
-
 // Role-path entry barriers (dispatch Tag0, combine Tag0) are implied by order.
 // Each rank runs complete dispatch->combine pairs on one ordered stream; the
 // epilogues are PDL dependents that finish before the next main kernel starts.
@@ -41,13 +29,6 @@ static bool afdep_directional_notify() {
     return deep_ep::get_env<int>("AFDEP_UNION_NOTIFY", 0) == 0;
 }
 
-// Few-token FFN combine: spread each token's hidden chunks over idle warps so
-// their loads overlap instead of serializing one memory round trip per chunk.
-// AFDEP_NO_SPLIT_COMBINE=1 restores one warp per token as a measurement control.
-static bool afdep_split_combine_tokens() {
-    return deep_ep::get_env<int>("AFDEP_NO_SPLIT_COMBINE", 0) == 0;
-}
-
 // Directed exit: dispatch sources and combine FFN ranks release per-peer arrival
 // counters; only receivers wait (ordering argument in afdep_skip_entry_barriers).
 // AFDEP_ALL_RANK_EXIT=1 restores the all-rank exit barriers as a measurement control.
@@ -62,11 +43,6 @@ static bool afdep_directed_exit() {
 // AFDEP_UNION_BUFFERS=1 keeps upstream union sizing as a measurement control.
 static bool afdep_role_buffers() {
     return deep_ep::get_env<int>("AFDEP_UNION_BUFFERS", 0) == 0;
-}
-
-static int afdep_combine_max_unroll() {
-    const int value = deep_ep::get_env<int>("AFDEP_COMBINE_MAX_UNROLL", 0);
-    return value > 0 ? std::min(value, 4) : kAfdCombineMaxUnroll;
 }
 
 class AfdEPRouteGuardRuntime final : public jit::LaunchRuntime<AfdEPRouteGuardRuntime> {

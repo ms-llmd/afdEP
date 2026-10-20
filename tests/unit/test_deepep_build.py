@@ -45,13 +45,7 @@ def test_role_template_parameters_default_to_upstream_kernels():
     """Generic (Masked) instantiations omit role arguments and keep upstream code."""
     impls = VENDOR_ROOT / "deep_ep/include/deep_ep/impls"
     combine = (impls / "combine.cuh").read_text()
-    assert (
-        "int kNumExpectedTopk = math::constexpr_ceil_div(kNumTopk, kNumRanks),"
-        in combine
-    )
-    assert "int kMaxUnrollFactor = 4," in combine
     assert "bool kAfdSkipEntryBarrier = false," in combine
-    assert "bool kAfdSplitTokens = false," in combine
     assert "int kAfdDirectedFfnRanks = 0," in combine
     dispatch = (impls / "dispatch.cuh").read_text()
     assert "int kAfdFfnRanks = 0," in dispatch
