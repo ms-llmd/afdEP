@@ -968,7 +968,8 @@ public:
                         num_smem_bytes,
                         num_qps, num_gpu_timeout_cycles,
                         cached_mode, deterministic, do_cpu_sync,
-                        comm_stream, afd_direct_nvlink ? afd_ffn_ranks : 0);
+                        comm_stream, afd_direct_nvlink ? afd_ffn_ranks : 0,
+                        afd_direct_nvlink and afdep_skip_entry_barriers());
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
@@ -1191,9 +1192,11 @@ public:
         const auto [num_combined_tokens, num_topk] = get_shape<2>(combined_topk_idx);
         const int afd_rank = nccl_context->rank_idx;
         const bool afd_worker = afd_ffn_ranks > 0 and afd_rank < afd_ffn_ranks;
-        const bool afd_direct_worker = afd_worker and
+        // Every role must instantiate the same collective combine protocol.
+        const bool afd_direct = afd_ffn_ranks > 0 and
             nccl_context->num_scaleout_ranks == 1 and nccl_context->is_scaleup_nvlink and
             not deterministic;
+        const bool afd_direct_worker = afd_worker and afd_direct;
         if (afd_worker)
             EP_HOST_ASSERT(num_combined_tokens == 0);
         const auto [num_scaleup_ranks] = get_shape<1>(psum_num_recv_tokens_per_scaleup_rank);
@@ -1294,7 +1297,10 @@ public:
             num_sms, jit::device_runtime->get_num_smem_bytes(),
             num_channels,
             use_expanded_layout, allow_multiple_reduction,
-            comm_stream);
+            comm_stream,
+            afd_direct ? afdep_combine_expected_topk(num_topk, afd_ffn_ranks) : 0,
+            afd_direct ? afdep_combine_max_unroll() : 0,
+            afd_direct and afdep_skip_entry_barriers());
 
         // Allocate output tensors
         auto combined_x = torch::empty({num_combined_tokens, hidden}, x.options());

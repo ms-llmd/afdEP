@@ -34,11 +34,26 @@ def test_pinned_origin_and_declared_role_specialization():
     assert actual == expected
     assert all(name in expected for name in SOURCE_NAMES)
     assert "MIT License" in (VENDOR_ROOT / "LICENSE").read_text()
-    # Direct dispatch adds opt-in role checks. The remaining main transport and
-    # credit kernels remain the pinned input, independently reviewable here.
-    for name in ("hybrid_dispatch", "combine", "hybrid_combine", "barrier"):
+    # Direct dispatch/combine add opt-in role specializations. Hybrid transport
+    # and credit kernels remain the pinned input, independently reviewable here.
+    for name in ("hybrid_dispatch", "hybrid_combine", "barrier"):
         path = f"deep_ep/include/deep_ep/impls/{name}.cuh"
         assert expected[path] == provenance["file_sha256"][path]
+
+
+def test_role_template_parameters_default_to_upstream_kernels():
+    """Generic (Masked) instantiations omit role arguments and keep upstream code."""
+    impls = VENDOR_ROOT / "deep_ep/include/deep_ep/impls"
+    combine = (impls / "combine.cuh").read_text()
+    assert (
+        "int kNumExpectedTopk = math::constexpr_ceil_div(kNumTopk, kNumRanks),"
+        in combine
+    )
+    assert "int kMaxUnrollFactor = 4," in combine
+    assert "bool kAfdSkipEntryBarrier = false," in combine
+    dispatch = (impls / "dispatch.cuh").read_text()
+    assert "int kAfdFfnRanks = 0," in dispatch
+    assert "bool kAfdSkipEntryBarrier = false," in dispatch
 
 
 def test_runtime_header_contents_invalidate_build(tmp_path):

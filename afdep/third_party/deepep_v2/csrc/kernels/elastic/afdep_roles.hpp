@@ -6,6 +6,28 @@
 
 namespace deep_ep::elastic {
 
+// FFN combine reduction: upstream sizes its branch-free top-k prefix for the
+// union world (dummy Attention ranks included) and unrolls by 4, which spills at
+// the transport grid's register budget. AFD uses each FFN's expected share and
+// unroll 2 (H100 screens: faster in every 2A2F H2048/H4096 cell, 2026-10-20).
+// AFDEP_COMBINE_* environment overrides are screening aids only.
+constexpr int kAfdCombineMaxUnroll = 2;
+
+static int afdep_combine_expected_topk(const int num_topk, const int ffn_ranks) {
+    const int value = deep_ep::get_env<int>("AFDEP_COMBINE_EXPECTED_TOPK", 0);
+    return value > 0 ? std::min(value, num_topk) : (num_topk + ffn_ranks - 1) / ffn_ranks;
+}
+
+// Screening aid until the entry-barrier ordering proof and tests land.
+static bool afdep_skip_entry_barriers() {
+    return deep_ep::get_env<int>("AFDEP_SKIP_ENTRY_BARRIERS", 0) != 0;
+}
+
+static int afdep_combine_max_unroll() {
+    const int value = deep_ep::get_env<int>("AFDEP_COMBINE_MAX_UNROLL", 0);
+    return value > 0 ? std::min(value, 4) : kAfdCombineMaxUnroll;
+}
+
 class AfdEPRouteGuardRuntime final : public jit::LaunchRuntime<AfdEPRouteGuardRuntime> {
 public:
     struct Args {

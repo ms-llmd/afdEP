@@ -10,6 +10,9 @@ Attention receive payloads and empty-side epilogues; FFN receive tensors are
 bounded by Attention source count. The collective protocol, logical expert
 slots, registered transport capacity and required synchronization remain.
 
+**v2.1 (in progress) specializes those kernels for AFD**, measured against
+Masked DeepEP: [changes and communication-only evidence](docs/v2.1.md).
+
 ## Use
 
 Linux, PyTorch ≥2.6, CUDA toolkit with `nvcc`, and NCCL ≥2.30.7 with device

@@ -4,28 +4,36 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "80b9e1d073787d2d62d008ace8e85e4d79c4015bd5a9b6b4d5a7631f135897a6"
+      "sha256": "b346ce7c5eee0dfcad70e84a469a0e971a34f9af4c1ff4f5caf1410654953c16"
+    },
+    "csrc/kernels/elastic/combine.hpp": {
+      "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
+      "sha256": "4af9871153a3b33e69fc58dd6375472fa75c7da0755207e9c6aeb04c755564f5"
     },
     "csrc/kernels/elastic/dispatch.hpp": {
       "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
-      "sha256": "33a04fb2dd96d31622aee9dff8bf8e4d8b1fad348ce06854c52652c21e0bae47"
-    },
-    "deep_ep/include/deep_ep/impls/dispatch_copy_epilogue.cuh": {
-      "upstream_sha256": "77eb7a54c2d645e5137255e399f465af550f56bcb2d8fd000d6de9a7f3d7c033",
-      "sha256": "ca6373e5694886f259ad9ce2ad1366ca060e62d0bb285930731d1daa27b4dd6f"
-    },
-    "deep_ep/include/deep_ep/impls/dispatch.cuh": {
-      "upstream_sha256": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
-      "sha256": "4fd27e4ae09fc87351bb9ace2e9a49b0e071d7dec22f4daed80da77a3110ffea"
+      "sha256": "5d38145fdf616864e3ba3f7f8d305b942f7093b69982629df0dea363fbe31757"
     },
     "csrc/python_api.cpp": {
       "upstream_sha256": "64b6041b75c1027c9f7f16b236e1fb037f0838f5338020804035e8e39d5710ba",
       "sha256": "fd3f14ee9316ea7d05615738ed2ac18e3687b9c27a44dc773c510c3fe2dfe0bf"
+    },
+    "deep_ep/include/deep_ep/impls/combine.cuh": {
+      "upstream_sha256": "6a0f1f3f978978a35f9616178825f8c29881aafc3a04d8c2ba68b50a4a283c9a",
+      "sha256": "dba629004185e8121ee5f69963747adddc4dae5621f9b6ccd0b2ec0a209517a0"
+    },
+    "deep_ep/include/deep_ep/impls/dispatch.cuh": {
+      "upstream_sha256": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
+      "sha256": "bc6de97d20a45b047b82076def9927222e54d2f6ede7f2dbcb5459a3ab3c0e4c"
+    },
+    "deep_ep/include/deep_ep/impls/dispatch_copy_epilogue.cuh": {
+      "upstream_sha256": "77eb7a54c2d645e5137255e399f465af550f56bcb2d8fd000d6de9a7f3d7c033",
+      "sha256": "ca6373e5694886f259ad9ce2ad1366ca060e62d0bb285930731d1daa27b4dd6f"
     }
   },
   "added_files": {
     "csrc/kernels/elastic/afdep_roles.hpp": {
-      "sha256": "40faf4c6463e05550f0e3c04b4bc0d8a80e1b17b441e718287b8a8813f866c4c"
+      "sha256": "3b5723b7d697636934373877f9dc44ccf74df03c04129c5737f4328c3e6e1305"
     },
     "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
       "sha256": "bbf6eb2781fabe323093c183932c7f7678211c94ba7af8a99c325c059e3e246a"
@@ -39,11 +47,13 @@
     "Allocate no source receive rows; bound worker receive rows by explicit source count.",
     "Read actual device counts after reducing allocation bounds; preserve hybrid forwarding metadata.",
     "Known-empty sources return zero host counts without CPU polling or per-dispatch host counter clears; device counter resets and launch flags remain unchanged.",
-    "Expose compiled and loaded NCCL versions for startup compatibility checks."
+    "Expose compiled and loaded NCCL versions for startup compatibility checks.",
+    "v2.1: on the role-aware direct-NVLink path every rank instantiates combine with expected top-k ceil(top_k/ffn_ranks) and maximum reduction unroll 2; generic instantiations omit these defaulted template arguments and keep the upstream kernel.",
+    "v2.1 screening aid (default off): AFDEP_SKIP_ENTRY_BARRIERS removes the dispatch/combine entry barriers on every role-path rank together; AFDEP_COMBINE_EXPECTED_TOPK/AFDEP_COMBINE_MAX_UNROLL override the combine defaults."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",
     "source_manifest_sha256": "4211c4b4f72cf2c06d1e2177eb024438382968cbcb84414baa73c80b79304a4d"
   },
-  "scope_version": "afdEP v1 role specialization"
+  "scope_version": "afdEP v1 role specialization + v2.1 combine reduction"
 }

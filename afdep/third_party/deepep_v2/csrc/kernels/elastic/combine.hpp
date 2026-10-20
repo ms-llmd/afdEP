@@ -24,6 +24,9 @@ public:
         int num_topk;
         int num_qps;
         int64_t num_timeout_cycles;
+        // afdEP: zero keeps the upstream instantiation
+        int num_expected_topk, max_unroll_factor;
+        bool afd_skip_entry_barrier;
 
         // Parameters
         nv_bfloat16* x;
@@ -46,7 +49,10 @@ public:
         std::string header_name, func_name;
         if (args.num_scaleout_ranks == 1) {
             header_name = "combine";
-            func_name = fmt::format("combine_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}>",
+            const auto afdep_args = args.num_expected_topk > 0 ?
+                fmt::format(", {}, {}, {}", args.num_expected_topk, args.max_unroll_factor,
+                            args.afd_skip_entry_barrier) : std::string();
+            func_name = fmt::format("combine_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>",
                                     args.is_scaleup_nvlink,
                                     args.use_expanded_layout, args.allow_multiple_reduction,
                                     args.launch_args.grid_dim.first,
@@ -56,7 +62,8 @@ public:
                                     args.num_max_tokens_per_rank,
                                     args.num_experts,
                                     args.num_topk,
-                                    args.num_qps, args.num_timeout_cycles);
+                                    args.num_qps, args.num_timeout_cycles,
+                                    afdep_args);
         } else {
             header_name = "hybrid_combine";
             func_name = fmt::format("hybrid_combine_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}>",
@@ -129,9 +136,14 @@ static void* launch_combine(void* x,
                             const int& num_sms, const int& num_smem_bytes,
                             const int& num_channels,
                             const bool& use_expanded_layout, const bool& allow_multiple_reduction,
-                            const at::cuda::CUDAStream& stream) {
+                            const at::cuda::CUDAStream& stream,
+                            const int& num_expected_topk = 0, const int& max_unroll_factor = 0,
+                            const bool& afd_skip_entry_barrier = false) {
     // Maximize shared memory utilization
     const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
+    EP_HOST_ASSERT(num_expected_topk >= 0 and num_expected_topk <= num_topk and
+                   (num_expected_topk == 0) == (max_unroll_factor == 0) and max_unroll_factor <= 4 and
+                   (num_expected_topk > 0 or not afd_skip_entry_barrier));
     auto num_warps = std::min(num_smem_bytes / token_layout.get_num_bytes<true>(), 32);
 
     // Decide warps
@@ -160,6 +172,9 @@ static void* launch_combine(void* x,
         .num_experts = num_experts,
         .num_topk = num_topk,
         .num_qps = num_qps, .num_timeout_cycles = num_timeout_cycles,
+        .num_expected_topk = num_scaleout_ranks == 1 ? num_expected_topk : 0,
+        .max_unroll_factor = num_scaleout_ranks == 1 ? max_unroll_factor : 0,
+        .afd_skip_entry_barrier = num_scaleout_ranks == 1 and afd_skip_entry_barrier,
         .x = static_cast<nv_bfloat16*>(x),
         .topk_weights = static_cast<float*>(topk_weights),
         .src_metadata = src_metadata,

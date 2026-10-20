@@ -104,6 +104,7 @@ public:
         int num_qps;
         int64_t num_timeout_cycles;
         int afd_ffn_ranks;
+        bool afd_skip_entry_barrier;
 
         // Parameters
         void* x; sf_pack_t* sf; topk_idx_t* topk_idx; float* topk_weights;
@@ -128,7 +129,7 @@ public:
         std::string header_name, func_name;
         if (args.num_scaleout_ranks == 1) {
             header_name = "dispatch";
-            func_name = fmt::format("dispatch_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}>",
+            func_name = fmt::format("dispatch_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>",
                 args.is_scaleup_nvlink,
                 args.do_cpu_sync,
                 args.reuse_slot_indices,
@@ -138,7 +139,8 @@ public:
                 args.num_hidden_bytes, args.num_sf_packs,
                 args.num_max_tokens_per_rank,
                 args.num_experts, args.num_topk, args.expert_alignment,
-                args.num_qps, args.num_timeout_cycles, args.afd_ffn_ranks);
+                args.num_qps, args.num_timeout_cycles, args.afd_ffn_ranks,
+                args.afd_skip_entry_barrier ? ", true" : "");
         } else {
             header_name = "hybrid_dispatch";
             func_name = fmt::format("hybrid_dispatch_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}>",
@@ -237,7 +239,8 @@ static void launch_dispatch(void* x, void* sf,
                             const bool& deterministic,
                             const bool& do_cpu_sync,
                             const at::cuda::CUDAStream& stream,
-                            const int afd_ffn_ranks = 0) {
+                            const int afd_ffn_ranks = 0,
+                            const bool afd_skip_entry_barrier = false) {
     // Cached mode does not support expert token counting
     if (cached_mode)
         EP_HOST_ASSERT(cumulative_local_expert_recv_stats == nullptr);
@@ -289,6 +292,7 @@ static void launch_dispatch(void* x, void* sf,
         .num_experts = num_experts, .num_topk = num_topk, .expert_alignment = expert_alignment,
         .num_qps = num_qps, .num_timeout_cycles = num_timeout_cycles,
         .afd_ffn_ranks = afd_ffn_ranks,
+        .afd_skip_entry_barrier = num_scaleout_ranks == 1 and afd_ffn_ranks > 0 and afd_skip_entry_barrier,
         .x = x, .sf = static_cast<sf_pack_t*>(sf), .topk_idx = topk_idx, .topk_weights = topk_weights,
         .copied_topk_idx = copied_topk_idx,
         .cumulative_local_expert_recv_stats = cumulative_local_expert_recv_stats,

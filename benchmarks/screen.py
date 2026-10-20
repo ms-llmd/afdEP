@@ -19,11 +19,15 @@ from pathlib import Path
 
 # Arms are Config overrides. Masked keeps DeepEP's union protocol and dummy slots.
 DEFAULT_ARMS = {"masked": {"role_aware": False}, "afd": {}}
+ENV_KEY = "_env"
 LAUNCH = ["torchrun", "--standalone", "--nproc-per-node"]
 PROCESS_TIMEOUT_S = 900
 
 
 def run_arm(name, overrides, repeat, args, passthrough):
+    """Run one fresh process; an arm's optional "_env" applies to that process."""
+    overrides = dict(overrides)
+    env = os.environ | overrides.pop(ENV_KEY, {})
     output = args.output.parent / f"{args.output.stem}-{name}-r{repeat}.json"
     command = [
         *LAUNCH,
@@ -39,7 +43,11 @@ def run_arm(name, overrides, repeat, args, passthrough):
     log = output.with_suffix(".log")
     with log.open("w") as stream:
         code = subprocess.run(
-            command, stdout=stream, stderr=subprocess.STDOUT, timeout=PROCESS_TIMEOUT_S
+            command,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            timeout=PROCESS_TIMEOUT_S,
+            env=env,
         ).returncode
     if code:
         raise SystemExit(f"{name} repeat {repeat} failed ({code}); see {log}")

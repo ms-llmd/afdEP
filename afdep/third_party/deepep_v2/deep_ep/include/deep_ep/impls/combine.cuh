@@ -20,6 +20,11 @@ template <bool kIsScaleupNVLink,
           int kNumMaxTokensPerRank,
           int kNumExperts, int kNumTopk,
           int kNumQPs, int64_t kNumTimeoutCycles,
+          // afdEP: AFD callers pass the real per-FFN expectation; defaults keep upstream kernels.
+          int kNumExpectedTopk = math::constexpr_ceil_div(kNumTopk, kNumRanks),
+          int kMaxUnrollFactor = 4,
+          // afdEP: every rank skips together; ordered pairs imply buffer availability.
+          bool kAfdSkipEntryBarrier = false,
           int kNumThreads = kNumWarps * 32,
           int kNumHiddenBytes = kHidden * sizeof(nv_bfloat16),
           bool kUseRankLayout = use_rank_layout<kAllowMultipleReduction, kNumRanks, kNumTopk>(),
@@ -75,9 +80,11 @@ combine_impl(nv_bfloat16* x,
 
     // Full barrier to ensure the remote buffer is available
     const auto workspace_layout = layout::WorkspaceLayout(workspace, 1, kNumRanks, kNumExperts);
-    comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
-                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kCombineTag0, false, false, true>(
-        gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    if constexpr (not kAfdSkipEntryBarrier) {
+        comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
+                          kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kCombineTag0, false, false, true>(
+            gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    }
 
     // Do TMA writes into the remote buffers
     int num_tokens_per_warp = math::ceil_div(num_reduced_tokens, kNumSMs * kNumWarps);
@@ -153,8 +160,8 @@ combine_impl(nv_bfloat16* x,
             );
 
             // Reduce into shared memory
-            constexpr int kUnrollFactor = get_max_unroll_factor<kHiddenVec, 4>();
-            combine_reduce<kHiddenVec, kUnrollFactor, math::constexpr_ceil_div(kNumTopk, kNumRanks)>(
+            constexpr int kUnrollFactor = get_max_unroll_factor<kHiddenVec, kMaxUnrollFactor>();
+            combine_reduce<kHiddenVec, kUnrollFactor, kNumExpectedTopk>(
                 lane_idx, topk_slot_idx, static_cast<combine_vec_t*>(tma_buffer.get_base_ptr()),
                 /* Get source base */ [=](const int& slot_idx) {
                     return math::advance_ptr<combine_vec_t>(
