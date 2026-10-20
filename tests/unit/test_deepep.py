@@ -232,12 +232,13 @@ def test_explicit_disable_rejects_multidomain_before_buffer_creation(
     runtime.module.destroy_nccl_comm.assert_called_once_with(17)
 
 
-def test_role_aware_rejects_unvalidated_multidomain_before_buffer_creation(runtime):
+def test_role_aware_accepts_multidomain_with_gin(runtime, monkeypatch):
+    monkeypatch.delenv("EP_DISABLE_GIN", raising=False)
     runtime.module.get_physical_domain_size.return_value = (2, 2)
-    with pytest.raises(ValueError, match="requires one physical NVLink domain"):
-        elastic(runtime, role_aware=True, ffn_ranks=2)
-    runtime.module.ElasticBuffer.assert_not_called()
-    runtime.module.destroy_nccl_comm.assert_called_once_with(17)
+    buffer = elastic(runtime, role_aware=True, ffn_ranks=2)
+    assert buffer.physical_domain == (2, 2)
+    assert runtime.module.ElasticBuffer.call_args.args[-1] == 2
+    buffer.close()
 
 
 def test_opaque_handle_is_required_and_native_output_is_returned(runtime):

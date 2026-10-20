@@ -62,15 +62,19 @@ prequantized FP8 dispatch return BF16 combined outputs. See the
 
 | Architecture | Evidence | Current v1 scope |
 |---|---|---|
-| Hopper (SM90) | H100 GPU suite | BF16/FP8; eager/CUDA graphs; one NVLink domain |
+| Hopper (SM90) | H100 GPU suite; H200 two-domain suite | BF16/FP8; eager/CUDA graphs; one NVLink domain, or two joined by GIN |
 | Blackwell | Not validated | No support claim yet |
 | Other architectures | Not validated | No support claim yet |
 
 v1 validation uses 2 Attention + 2 FFN ranks with partitioned experts. The v2.1
 role path is also validated with 3 Attention + 1 FFN and 1 Attention + 3 FFN in
-one four-GPU NVLink domain ([evidence](docs/validation-v2.1-clean.json)). Other
-group layouts and multi-domain role specialization require validation. V1 rejects
-multiple physical NVLink domains when role specialization is enabled.
+one four-GPU NVLink domain ([evidence](docs/validation-v2.1-clean.json)), and
+across two NVLink domains of two H200 GPUs joined by InfiniBand GIN (FFN domain +
+Attention domain, plus 3:1 and 1:3 layouts that mix roles in a domain;
+[evidence](docs/validation-v2.1-cross-node.json)). Across domains the role path
+uses DeepEP's hybrid kernels and measures at Masked parity; the v2.1 AFD
+optimizations are single-domain. Other group layouts and larger multi-domain
+worlds require validation.
 `allow_hybrid_mode` retains DeepEP's meaning; it does not enable an unvalidated
 topology.
 

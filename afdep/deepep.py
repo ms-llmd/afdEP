@@ -318,10 +318,6 @@ class ElasticBuffer:
             self.physical_domain = tuple(
                 module.get_physical_domain_size(self._nccl_comm)
             )
-            if role_aware and self.physical_domain[0] != 1:
-                raise ValueError(
-                    "role_aware currently requires one physical NVLink domain"
-                )
             if self.physical_domain[0] > 1 and records[0]["disable_gin"] == "1":
                 raise ValueError(
                     "Multiple NVLink domains require GIN; EP_DISABLE_GIN=1 is set"

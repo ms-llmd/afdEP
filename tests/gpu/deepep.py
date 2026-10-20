@@ -352,8 +352,9 @@ def main() -> None:
         gpu_timeout_s=10 if args.invalid_route else 120,
     )
     buffer = Buffer(group=dist.group.WORLD, config=config)
-    if buffer.physical_domain != (1, config.world_size):
-        raise ValueError("this runner requires four GPUs in one NVLink domain")
+    # One NVLink domain, or NVLink domains joined by GIN (recorded per rank).
+    if buffer.physical_domain[0] * buffer.physical_domain[1] != config.world_size:
+        raise ValueError("physical domain does not cover the world")
     if config.role_aware and buffer.role == "attention":
         native_dispatch = buffer.transport.dispatch
 
