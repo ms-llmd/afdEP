@@ -18,9 +18,20 @@ static int afdep_combine_expected_topk(const int num_topk, const int ffn_ranks) 
     return value > 0 ? std::min(value, num_topk) : (num_topk + ffn_ranks - 1) / ffn_ranks;
 }
 
-// Screening aid until the entry-barrier ordering proof and tests land.
+// Role-path entry barriers (dispatch Tag0, combine Tag0) are implied by order.
+// Each rank runs complete dispatch->combine pairs on one ordered stream; the
+// epilogues are PDL dependents that finish before the next main kernel starts.
+// Every remote write of exchange N+1 (FFN payload/count inboxes, Attention
+// count inboxes, atomic slot counters) is issued after its writer passes the
+// combine-N exit barrier, which each rank reaches only after finishing all
+// exchange-N inbox reads and counter clears. Combine-N writes into Attention
+// inboxes follow the dispatch-N exit barrier, which an Attention rank reaches
+// only after its combine-(N-1) reduce epilogue. Every rank skips together, so
+// the shared NVLink barrier phase stays aligned. Construction synchronizes all
+// ranks before the first exchange. AFDEP_KEEP_ENTRY_BARRIERS=1 restores them as
+// a measurement control.
 static bool afdep_skip_entry_barriers() {
-    return deep_ep::get_env<int>("AFDEP_SKIP_ENTRY_BARRIERS", 0) != 0;
+    return deep_ep::get_env<int>("AFDEP_KEEP_ENTRY_BARRIERS", 0) == 0;
 }
 
 static int afdep_combine_max_unroll() {

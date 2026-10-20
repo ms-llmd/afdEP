@@ -26,7 +26,7 @@ template <bool kIsScaleupNVLink,
           int kNumExperts, int kNumTopk, int kExpertAlignment,
           int kNumQPs, int64_t kNumTimeoutCycles,
           int kAfdFfnRanks = 0,
-          // afdEP: every rank skips together; ordered pairs imply buffer availability.
+          // afdEP: role path only; ordering proof in csrc/kernels/elastic/afdep_roles.hpp.
           bool kAfdSkipEntryBarrier = false,
           int kNumNotifyThreads = kNumNotifyWarps * 32,
           int kNumDispatchThreads = kNumDispatchWarps * 32,

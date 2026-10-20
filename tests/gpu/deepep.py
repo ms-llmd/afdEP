@@ -26,6 +26,8 @@ FFN_RANKS = 2
 ATTENTION_RANKS = 2
 GRAPH_STEPS = 26
 DELAY_CYCLES = 2_000_000
+# FFN rank 0 delays replies; this Attention rank delays its next dispatch.
+DELAYED_SOURCE = 1
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,10 @@ class Exchange:
             if alternate:
                 self.input.neg_()
                 self._quantize()
+            if delay and self.buffer.role_rank == DELAYED_SOURCE:
+                # A lagging source must not let peers overwrite its prior-exchange
+                # inputs or receive before every source has published.
+                torch.cuda._sleep(DELAY_CYCLES)
             self.buffer.source_dispatch(
                 self.x,
                 self.ids,

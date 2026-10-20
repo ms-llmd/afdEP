@@ -23,7 +23,7 @@ template <bool kIsScaleupNVLink,
           // afdEP: AFD callers pass the real per-FFN expectation; defaults keep upstream kernels.
           int kNumExpectedTopk = math::constexpr_ceil_div(kNumTopk, kNumRanks),
           int kMaxUnrollFactor = 4,
-          // afdEP: every rank skips together; ordered pairs imply buffer availability.
+          // afdEP: role path only; ordering proof in csrc/kernels/elastic/afdep_roles.hpp.
           bool kAfdSkipEntryBarrier = false,
           int kNumThreads = kNumWarps * 32,
           int kNumHiddenBytes = kHidden * sizeof(nv_bfloat16),
