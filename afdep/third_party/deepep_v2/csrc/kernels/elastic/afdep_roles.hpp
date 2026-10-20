@@ -34,6 +34,13 @@ static bool afdep_skip_entry_barriers() {
     return deep_ep::get_env<int>("AFDEP_KEEP_ENTRY_BARRIERS", 0) == 0;
 }
 
+// Role-path dispatch sends counts Attention->FFN only; FFN ranks never wait on or
+// reduce their own (zero) counts. AFDEP_UNION_NOTIFY=1 restores the all-to-all
+// count exchange as a measurement control.
+static bool afdep_directional_notify() {
+    return deep_ep::get_env<int>("AFDEP_UNION_NOTIFY", 0) == 0;
+}
+
 static int afdep_combine_max_unroll() {
     const int value = deep_ep::get_env<int>("AFDEP_COMBINE_MAX_UNROLL", 0);
     return value > 0 ? std::min(value, 4) : kAfdCombineMaxUnroll;

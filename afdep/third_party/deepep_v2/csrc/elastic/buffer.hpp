@@ -969,7 +969,8 @@ public:
                         num_qps, num_gpu_timeout_cycles,
                         cached_mode, deterministic, do_cpu_sync,
                         comm_stream, afd_direct_nvlink ? afd_ffn_ranks : 0,
-                        afd_direct_nvlink and afdep_skip_entry_barriers());
+                        afd_direct_nvlink and afdep_skip_entry_barriers(),
+                        afd_direct_nvlink and afdep_directional_notify());
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;

@@ -105,6 +105,7 @@ public:
         int64_t num_timeout_cycles;
         int afd_ffn_ranks;
         bool afd_skip_entry_barrier;
+        bool afd_directional_notify;
 
         // Parameters
         void* x; sf_pack_t* sf; topk_idx_t* topk_idx; float* topk_weights;
@@ -140,7 +141,8 @@ public:
                 args.num_max_tokens_per_rank,
                 args.num_experts, args.num_topk, args.expert_alignment,
                 args.num_qps, args.num_timeout_cycles, args.afd_ffn_ranks,
-                args.afd_skip_entry_barrier ? ", true" : "");
+                args.afd_ffn_ranks > 0 ? fmt::format(", {}, {}", args.afd_skip_entry_barrier,
+                                                     args.afd_directional_notify) : std::string());
         } else {
             header_name = "hybrid_dispatch";
             func_name = fmt::format("hybrid_dispatch_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}>",
@@ -240,7 +242,8 @@ static void launch_dispatch(void* x, void* sf,
                             const bool& do_cpu_sync,
                             const at::cuda::CUDAStream& stream,
                             const int afd_ffn_ranks = 0,
-                            const bool afd_skip_entry_barrier = false) {
+                            const bool afd_skip_entry_barrier = false,
+                            const bool afd_directional_notify = false) {
     // Cached mode does not support expert token counting
     if (cached_mode)
         EP_HOST_ASSERT(cumulative_local_expert_recv_stats == nullptr);
@@ -293,6 +296,8 @@ static void launch_dispatch(void* x, void* sf,
         .num_qps = num_qps, .num_timeout_cycles = num_timeout_cycles,
         .afd_ffn_ranks = afd_ffn_ranks,
         .afd_skip_entry_barrier = num_scaleout_ranks == 1 and afd_ffn_ranks > 0 and afd_skip_entry_barrier,
+        .afd_directional_notify = num_scaleout_ranks == 1 and afd_ffn_ranks > 0 and is_scaleup_nvlink and
+                                  not cached_mode and afd_directional_notify,
         .x = x, .sf = static_cast<sf_pack_t*>(sf), .topk_idx = topk_idx, .topk_weights = topk_weights,
         .copied_topk_idx = copied_topk_idx,
         .cumulative_local_expert_recv_stats = cumulative_local_expert_recv_stats,
