@@ -34,6 +34,8 @@ template <bool kIsScaleupNVLink,
           bool kAfdDirectedExit = false,
           // afdEP: FFN dispatch inboxes hold one region per Attention source (source - kAfdFfnRanks).
           bool kAfdRoleBuffers = false,
+          // afdEP: with directed exit, every source CTA releases its own arrival (no sender grid sync).
+          bool kAfdPerCtaExit = false,
           int kNumNotifyThreads = kNumNotifyWarps * 32,
           int kNumDispatchThreads = kNumDispatchWarps * 32,
           int kNumThreads = kNumNotifyThreads + kNumDispatchThreads,
@@ -61,6 +63,7 @@ dispatch_impl(
                      "Directed exit requires the direct-NVLink role path");
     EP_STATIC_ASSERT(not kAfdRoleBuffers or (kAfdFfnRanks > 0 and kIsScaleupNVLink),
                      "Role-sized buffers require the direct-NVLink role path");
+    EP_STATIC_ASSERT(not kAfdPerCtaExit or kAfdDirectedExit, "Per-CTA exit requires directed exit");
     // FFN ranks own the first kAfdFfnRanks * kNumExpertsPerRank logical experts.
     constexpr int kNumSourceRanks = kNumRanks - kAfdFfnRanks;
     constexpr int kNumReducedCountElems = kAfdDirectionalNotify ?
@@ -487,10 +490,11 @@ dispatch_impl(
         // Sources publish payload arrival to FFN ranks; FFN ranks (no payload
         // to send) wait on SM0 for every source before triggering the epilogue.
         if (afd_source) {
-            afdep_signal_receivers<kNumRanks, team_t>(gin, workspace_layout, kAfdepDispatchPhase, rank_idx,
+            afdep_signal_receivers<kNumRanks, team_t, kAfdPerCtaExit>(gin, workspace_layout, kAfdepDispatchPhase, rank_idx,
                                                       0, kAfdFfnRanks, sm_idx, thread_idx);
         } else {
-            afdep_wait_senders<kNumRanks, kNumTimeoutCycles>(workspace_layout, kAfdepDispatchPhase, rank_idx,
+            afdep_wait_senders<kNumRanks, kNumTimeoutCycles, kAfdPerCtaExit ? kNumSMs : 1>(
+                workspace_layout, kAfdepDispatchPhase, rank_idx,
                                                               kAfdFfnRanks, kNumSourceRanks, sm_idx, thread_idx);
         }
     } else {
@@ -504,7 +508,26 @@ dispatch_impl(
 
     // Clean atomic counters
     EP_STATIC_ASSERT(kNumRanks <= kNumThreads, "Insufficient threads");
-    if (not kReuseSlotIndices and sm_idx == 0 and thread_idx < kNumRanks)
+    bool clean_counters = sm_idx == 0;
+    if constexpr (kAfdPerCtaExit) {
+        // Without a sender grid sync, the last source CTA to finish (after every
+        // CTA's slot atomics) resets the slot counters. No static shared memory:
+        // the kernel already uses the maximum dynamic size.
+        if (afd_source) {
+            int is_last_cta = 0;
+            if (thread_idx == 0) {
+                __threadfence();
+                const auto done_ptr = reinterpret_cast<unsigned long long*>(afdep_done_ptr<kNumRanks>(workspace_layout));
+                is_last_cta = atomicAdd(done_ptr, 1ull) == kNumSMs - 1;
+                if (is_last_cta) {
+                    *done_ptr = 0;
+                    __threadfence();
+                }
+            }
+            clean_counters = __syncthreads_or(is_last_cta);
+        }
+    }
+    if (not kReuseSlotIndices and clean_counters and thread_idx < kNumRanks)
         workspace_layout.get_scaleup_atomic_sender_counter()[thread_idx] = 0;
 }
 

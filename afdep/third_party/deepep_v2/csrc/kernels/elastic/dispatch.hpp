@@ -108,6 +108,7 @@ public:
         bool afd_directional_notify;
         bool afd_directed_exit;
         bool afd_role_buffers;
+        bool afd_per_cta_exit;
 
         // Parameters
         void* x; sf_pack_t* sf; topk_idx_t* topk_idx; float* topk_weights;
@@ -143,9 +144,9 @@ public:
                 args.num_max_tokens_per_rank,
                 args.num_experts, args.num_topk, args.expert_alignment,
                 args.num_qps, args.num_timeout_cycles, args.afd_ffn_ranks,
-                args.afd_ffn_ranks > 0 ? fmt::format(", {}, {}, {}, {}", args.afd_skip_entry_barrier,
+                args.afd_ffn_ranks > 0 ? fmt::format(", {}, {}, {}, {}, {}", args.afd_skip_entry_barrier,
                                                      args.afd_directional_notify, args.afd_directed_exit,
-                                                     args.afd_role_buffers)
+                                                     args.afd_role_buffers, args.afd_per_cta_exit)
                                        : std::string());
         } else {
             header_name = "hybrid_dispatch";
@@ -249,7 +250,8 @@ static void launch_dispatch(void* x, void* sf,
                             const bool afd_skip_entry_barrier = false,
                             const bool afd_directional_notify = false,
                             const bool afd_directed_exit = false,
-                            const bool afd_role_buffers = false) {
+                            const bool afd_role_buffers = false,
+                            const bool afd_per_cta_exit = false) {
     // Cached mode does not support expert token counting
     if (cached_mode)
         EP_HOST_ASSERT(cumulative_local_expert_recv_stats == nullptr);
@@ -308,6 +310,8 @@ static void launch_dispatch(void* x, void* sf,
                              afd_directed_exit,
         .afd_role_buffers = num_scaleout_ranks == 1 and afd_ffn_ranks > 0 and is_scaleup_nvlink and
                             afd_role_buffers,
+        .afd_per_cta_exit = num_scaleout_ranks == 1 and afd_ffn_ranks > 0 and is_scaleup_nvlink and
+                            afd_directed_exit and afd_per_cta_exit,
         .x = x, .sf = static_cast<sf_pack_t*>(sf), .topk_idx = topk_idx, .topk_weights = topk_weights,
         .copied_topk_idx = copied_topk_idx,
         .cumulative_local_expert_recv_stats = cumulative_local_expert_recv_stats,

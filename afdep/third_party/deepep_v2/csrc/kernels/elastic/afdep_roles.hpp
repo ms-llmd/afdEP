@@ -36,6 +36,15 @@ static bool afdep_directed_exit() {
     return deep_ep::get_env<int>("AFDEP_ALL_RANK_EXIT", 0) == 0;
 }
 
+// Per-CTA exit: a sending role receives nothing in its phase, so with directed
+// exit each sending CTA releases its own arrival once its TMA stores complete,
+// without the sender grid sync; receivers wait for round x sender CTAs (every
+// rank uses the same transport SM count). The last source CTA resets the slot
+// counters. AFDEP_GRID_SYNC_EXIT=1 keeps the grid-synced release as a control.
+static bool afdep_per_cta_exit() {
+    return deep_ep::get_env<int>("AFDEP_GRID_SYNC_EXIT", 0) == 0;
+}
+
 // Role-sized registered buffers: in one NVLink domain only Attention sources
 // write FFN dispatch inboxes and only FFN ranks write Attention combine inboxes,
 // so the union window's FFN-source dispatch regions and Attention-source combine

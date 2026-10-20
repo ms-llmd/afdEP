@@ -25,37 +25,50 @@ __device__ __forceinline__ int64_t* afdep_arrival_ptr(const layout::WorkspaceLay
     return workspace.get_scaleout_channel_signaled_tail_ptr(0, 0) + phase * kNumRanks + sender;
 }
 
+// Per-CTA exit: source CTAs that have finished this dispatch (after the rounds).
+template <int kNumRanks>
+__device__ __forceinline__ int64_t* afdep_done_ptr(const layout::WorkspaceLayout& workspace) {
+    return workspace.get_scaleout_channel_signaled_tail_ptr(0, 0) + 2 * kNumRanks + 2;
+}
+
 template <int kNumRanks>
 __device__ __forceinline__ int64_t* afdep_round_ptr(const layout::WorkspaceLayout& workspace, const int phase) {
     return workspace.get_scaleout_channel_signaled_tail_ptr(0, 0) + 2 * kNumRanks + phase;
 }
 
-template <int kNumRanks, typename team_t>
+template <int kNumRanks, typename team_t, bool kPerCta = false>
 __device__ __forceinline__ void afdep_signal_receivers(const handle::NCCLGin& gin,
                                                        const layout::WorkspaceLayout& workspace,
                                                        const int phase, const int rank_idx,
                                                        const int first_receiver, const int num_receivers,
                                                        const int sm_idx, const int thread_idx) {
-    // Every CTA's TMA stores complete before SM0 releases the arrival.
+    // Every CTA's TMA stores complete before the arrival release.
     ptx::tma_store_commit();
     ptx::tma_store_wait();
     __syncwarp();
-    cooperative_groups::this_grid().sync();
-    if (sm_idx == 0 and thread_idx < num_receivers) {
+    if constexpr (kPerCta) {
+        // The sending role receives nothing in this phase, so it needs no grid
+        // sync: each CTA releases its own arrival (receivers count every CTA).
+        __syncthreads();
+    } else {
+        cooperative_groups::this_grid().sync();
+    }
+    if ((kPerCta or sm_idx == 0) and thread_idx < num_receivers) {
         const auto dst = gin.get_sym_ptr<team_t>(afdep_arrival_ptr<kNumRanks>(workspace, phase, rank_idx),
                                                  first_receiver + thread_idx);
         ptx::red_add_rel_sys(dst, static_cast<int64_t>(1));
     }
 }
 
-template <int kNumRanks, int64_t kNumTimeoutCycles>
+// kNumSenderCtas: arrivals per sender per round (its grid size with per-CTA release, else 1).
+template <int kNumRanks, int64_t kNumTimeoutCycles, int kNumSenderCtas = 1>
 __device__ __forceinline__ void afdep_wait_senders(const layout::WorkspaceLayout& workspace,
                                                    const int phase, const int rank_idx,
                                                    const int first_sender, const int num_senders,
                                                    const int sm_idx, const int thread_idx) {
     if (sm_idx != 0 or thread_idx != 0)
         return;
-    const int64_t target = ++ *afdep_round_ptr<kNumRanks>(workspace, phase);
+    const int64_t target = (++ *afdep_round_ptr<kNumRanks>(workspace, phase)) * kNumSenderCtas;
     for (int sender = first_sender; sender < first_sender + num_senders; ++ sender) {
         comm::timeout_while<kNumTimeoutCycles>([=](const bool& is_last_check) {
             const auto arrived = ptx::ld_acquire_sys(afdep_arrival_ptr<kNumRanks>(workspace, phase, sender));

@@ -983,7 +983,8 @@ public:
                         afd_direct_nvlink and afdep_skip_entry_barriers(),
                         afd_direct_nvlink and afdep_directional_notify(),
                         afd_direct_nvlink and afdep_directed_exit(),
-                        afd_role_buffers);
+                        afd_role_buffers,
+                        afd_direct_nvlink and afdep_directed_exit() and afdep_per_cta_exit());
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
@@ -1314,7 +1315,8 @@ public:
             use_expanded_layout, allow_multiple_reduction,
             comm_stream,
             afd_direct and afdep_skip_entry_barriers(),
-            afd_direct and afdep_directed_exit() ? afd_ffn_ranks : 0);
+            afd_direct and afdep_directed_exit() ? afd_ffn_ranks : 0,
+            afd_direct and afdep_directed_exit() and afdep_per_cta_exit());
 
         // Allocate output tensors
         auto combined_x = torch::empty({num_combined_tokens, hidden}, x.options());

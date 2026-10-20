@@ -25,6 +25,8 @@ template <bool kIsScaleupNVLink,
           bool kAfdSkipEntryBarrier = false,
           // afdEP: FFN ranks [0, kAfdDirectedFfnRanks) signal Attention receivers; 0 keeps the all-rank exit.
           int kAfdDirectedFfnRanks = 0,
+          // afdEP: with directed exit, every FFN CTA releases its own arrival (no sender grid sync).
+          bool kAfdPerCtaExit = false,
           int kNumThreads = kNumWarps * 32,
           int kNumHiddenBytes = kHidden * sizeof(nv_bfloat16),
           bool kUseRankLayout = use_rank_layout<kAllowMultipleReduction, kNumRanks, kNumTopk>(),
@@ -238,15 +240,17 @@ combine_impl(nv_bfloat16* x,
     }
 
     // Final barrier to ensure data arrival
+    EP_STATIC_ASSERT(not kAfdPerCtaExit or kAfdDirectedFfnRanks > 0, "Per-CTA exit requires directed exit");
     if constexpr (kAfdDirectedFfnRanks > 0) {
         EP_STATIC_ASSERT(kIsScaleupNVLink, "Directed exit requires one NVLink domain");
         // FFN ranks publish reply arrival to Attention ranks, which send nothing.
         if (rank_idx < kAfdDirectedFfnRanks) {
-            afdep_signal_receivers<kNumRanks, team_t>(gin, workspace_layout, kAfdepCombinePhase, rank_idx,
+            afdep_signal_receivers<kNumRanks, team_t, kAfdPerCtaExit>(gin, workspace_layout, kAfdepCombinePhase, rank_idx,
                                                       kAfdDirectedFfnRanks, kNumRanks - kAfdDirectedFfnRanks,
                                                       sm_idx, thread_idx);
         } else {
-            afdep_wait_senders<kNumRanks, kNumTimeoutCycles>(workspace_layout, kAfdepCombinePhase, rank_idx,
+            afdep_wait_senders<kNumRanks, kNumTimeoutCycles, kAfdPerCtaExit ? kNumSMs : 1>(
+                workspace_layout, kAfdepCombinePhase, rank_idx,
                                                               0, kAfdDirectedFfnRanks, sm_idx, thread_idx);
         }
     } else {
