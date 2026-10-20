@@ -68,10 +68,7 @@ the specializations; the high-level `Buffer` does this from `Config`.
 
 `allow_hybrid_mode`, `num_sms`, `num_qps`, timeouts and RDMA traffic class pass
 through to the pinned transport. `num_sms=0` selects approximately 24/132 of the
-smallest device's SM count; with role specialization it selects the full grid
-for buckets of at least 512 tokens (`FULL_GRID_MIN_BUCKET`). Every rank shares
-each exchange's bucket and therefore its grid. Choose/tune explicitly for a
-workload. Both hybrid
+smallest device's SM count; choose/tune explicitly for a workload. Both hybrid
 settings are checked on one physical NVLink domain. Role specialization rejects
 multiple physical domains; no inter-node v1 claim is made.
 
