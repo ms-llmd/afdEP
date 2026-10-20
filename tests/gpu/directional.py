@@ -43,6 +43,7 @@ DELAY_SECONDS = 0.02
 DELAYED_READER = FFN_RANKS + 1
 READER_DELAY_CYCLES = 20_000_000
 LIVE_COLLECT_COUNTS = (1, 2, 8, 23, 24, 25, 32, 131, 132, 133)
+LIVE_COLLECT_MIXED_COUNTS = (131, 132, 133, 0)
 
 
 def check_received(exchange: Exchange, epoch: int, *, exact_rows: bool = False) -> None:
@@ -521,10 +522,19 @@ def live_token_checks(buffer: Buffer, config: Config, rank: int, epochs: int) ->
             for count in LIVE_COLLECT_COUNTS
             if count <= capacity
         ),
-        Case(
-            "live_grid_boundary_mixed",
-            tuple(min(count, capacity) for count in (131, 132, 133, 0)),
-            rotate_worker=True,
+        *(
+            Case(
+                "live_grid_boundary_mixed"
+                if shift == 0
+                else f"live_grid_boundary_mixed_rotated_{shift}",
+                tuple(
+                    min(count, capacity)
+                    for count in LIVE_COLLECT_MIXED_COUNTS[-shift:]
+                    + LIVE_COLLECT_MIXED_COUNTS[:-shift]
+                ),
+                rotate_worker=True,
+            )
+            for shift in range(ATTENTION_RANKS)
         ),
     )
     scalar_pointer = live_tokens.data_ptr() if live_tokens is not None else None
