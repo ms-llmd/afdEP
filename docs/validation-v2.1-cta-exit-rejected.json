@@ -1,6 +1,6 @@
 {
  "date": "2026-10-21",
- "decision": "rejected",
+ "decision": "invalid measurement",
  "change": "directed exit without the sender grid sync: each sending CTA flushes its TMA stores and releases its own arrival; receivers wait for round x sender CTAs; the last source CTA resets the slot counters (scratch build, selected per arm by PYTHONPATH)",
  "scope": "4 x H100, 2A2F, random, BF16, graphs, 24 SMs; three fresh-process repeats",
  "correctness": "BF16/FP8 small and large and the 3:1 and 1:3 small cases passed",
@@ -328,5 +328,5 @@
    ]
   }
  ],
- "conclusion": "Within noise at every size (-4.0% to +0.8%, mixed repeat signs): the sender grid sync is not a measurable cost. Not shipped."
+ "conclusion": "Void: both arms recorded the same native digest (the screen's working directory shadowed PYTHONPATH), so the variant was not measured. Re-run with PYTHONSAFEPATH=1."
 }
