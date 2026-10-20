@@ -46,8 +46,11 @@ has a launch cost.
 `read_host_counts=True` performs host synchronization for exact eager receive
 allocation on FFN. Otherwise receive capacity is conservative and device counts
 identify live rows. Attention has zero receive payload rows. FFN bounds count
-Attention sources only. Registered transport buffers remain conservatively
-sized by DeepEP and are distinct from receive tensors.
+Attention sources only. Registered transport buffers are distinct from receive
+tensors. In one NVLink domain the role-aware path sizes them by role: FFN
+dispatch inboxes for the Attention sources and, when ranks do not exceed top-k,
+Attention combine inboxes for the FFN ranks; every rank registers the same size.
+Generic buffers and `AFDEP_UNION_BUFFERS=1` keep DeepEP's union sizing.
 
 Operations order their internal communication stream with the current CUDA
 stream using DeepEP events. Use caller stream dependencies before passing data
