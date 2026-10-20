@@ -1,0 +1,163 @@
+{
+ "date": "2026-10-21",
+ "decision": "rejected",
+ "change": "Attention ranks skip their send-free main combine kernel; every reduce-epilogue CTA waits for the FFN arrival counters itself (scratch build; AFDEP_SCRATCH_MERGE=1 arm)",
+ "native_source_sha256": "302198fbc0e13ca8d1f9182fee4ccf7033ab16223c02963682ba9e85f9ada7af",
+ "scope": "4 x H100, 2A2F, H2048 random, BF16, graphs, 24 SMs; three fresh-process repeats",
+ "correctness": "BF16/FP8 small and large GPU cases passed with the merge enabled",
+ "processes": [
+  {
+   "order": [
+    "afd",
+    "afd_merge"
+   ],
+   "median_us": {
+    "afd": {
+     "1": 22.63271927833557,
+     "8": 26.186000108718872,
+     "32": 28.18511962890625,
+     "128": 36.96936011314392,
+     "512": 72.12655782699585,
+     "2048": 194.11416053771973
+    },
+    "afd_merge": {
+     "1": 22.445839643478394,
+     "8": 27.0687997341156,
+     "32": 28.48599910736084,
+     "128": 36.362799406051636,
+     "512": 72.10839986801147,
+     "2048": 194.42527770996094
+    }
+   }
+  },
+  {
+   "order": [
+    "afd_merge",
+    "afd"
+   ],
+   "median_us": {
+    "afd_merge": {
+     "1": 22.451200485229492,
+     "8": 26.557281017303467,
+     "32": 27.820159196853638,
+     "128": 36.28319978713989,
+     "512": 72.22055912017822,
+     "2048": 194.10847663879395
+    },
+    "afd": {
+     "1": 22.67359972000122,
+     "8": 26.603440046310425,
+     "32": 27.731279134750366,
+     "128": 37.09432005882263,
+     "512": 72.0307993888855,
+     "2048": 193.86968612670898
+    }
+   }
+  },
+  {
+   "order": [
+    "afd",
+    "afd_merge"
+   ],
+   "median_us": {
+    "afd": {
+     "1": 22.785359621047974,
+     "8": 27.041919231414795,
+     "32": 28.1112003326416,
+     "128": 36.75920009613037,
+     "512": 72.02936172485352,
+     "2048": 194.05184745788574
+    },
+    "afd_merge": {
+     "1": 22.2816801071167,
+     "8": 26.550800800323486,
+     "32": 28.025760650634766,
+     "128": 36.23416066169739,
+     "512": 72.37488031387329,
+     "2048": 194.20543670654297
+    }
+   }
+  }
+ ],
+ "table": [
+  {
+   "tokens": 1,
+   "afd": {
+    "median_us": 22.674,
+    "geomean_change_pct": 0.0,
+    "repeats_faster": 0
+   },
+   "afd_merge": {
+    "median_us": 22.446,
+    "geomean_change_pct": -1.341,
+    "repeats_faster": 3
+   }
+  },
+  {
+   "tokens": 8,
+   "afd": {
+    "median_us": 26.603,
+    "geomean_change_pct": 0.0,
+    "repeats_faster": 0
+   },
+   "afd_merge": {
+    "median_us": 26.557,
+    "geomean_change_pct": 0.437,
+    "repeats_faster": 2
+   }
+  },
+  {
+   "tokens": 32,
+   "afd": {
+    "median_us": 28.111,
+    "geomean_change_pct": 0.0,
+    "repeats_faster": 0
+   },
+   "afd_merge": {
+    "median_us": 28.026,
+    "geomean_change_pct": 0.36,
+    "repeats_faster": 1
+   }
+  },
+  {
+   "tokens": 128,
+   "afd": {
+    "median_us": 36.969,
+    "geomean_change_pct": 0.0,
+    "repeats_faster": 0
+   },
+   "afd_merge": {
+    "median_us": 36.283,
+    "geomean_change_pct": -1.752,
+    "repeats_faster": 3
+   }
+  },
+  {
+   "tokens": 512,
+   "afd": {
+    "median_us": 72.031,
+    "geomean_change_pct": 0.0,
+    "repeats_faster": 0
+   },
+   "afd_merge": {
+    "median_us": 72.221,
+    "geomean_change_pct": 0.239,
+    "repeats_faster": 1
+   }
+  },
+  {
+   "tokens": 2048,
+   "afd": {
+    "median_us": 194.052,
+    "geomean_change_pct": 0.0,
+    "repeats_faster": 0
+   },
+   "afd_merge": {
+    "median_us": 194.205,
+    "geomean_change_pct": 0.121,
+    "repeats_faster": 0
+   }
+  }
+ ],
+ "conclusion": "At most -1.8% (0.2-0.7 us), and only by occupying every Attention SM with polling CTAs for the whole FFN round trip; the kernel handoff is not where the time goes. Not shipped."
+}
