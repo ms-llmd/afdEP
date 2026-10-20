@@ -31,10 +31,11 @@
   },
   "current_file_sha256": {
     "afdep/csrc/layout.hpp": "5d9d8452f0dda67a0147871d4ce4a8f3bac9a327150385a3dce28b969da5300b",
-    "afdep/csrc/kernels.cuh": "adccceb864ac845e35b9d597d8770369399c311f9cfb0b963df8c74595a6bc79",
+    "afdep/csrc/kernels.cuh": "10f03a8b6beaa79b1fa3ec145c6526ed86419aea0a92cb289e6b2a44bb2f6c90",
     "afdep/csrc/deepep_reduce.cuh": "e98b37b6f5625d4e6c685ca2333c6db73ccbbc819dde77eb5b84af85eef53571",
     "afdep/csrc/deepep_tma.cuh": "76cf2a78e43b8134eb2de0b112d95f28f26817bce2660e73c22d2c43866a89ec",
-    "afdep/csrc/buffer.hpp": "0e83716639864773bfdea1db8c70227bdff59ec0f70d84a043c2c9de84e6eb37"
+    "afdep/csrc/buffer.hpp": "0e83716639864773bfdea1db8c70227bdff59ec0f70d84a043c2c9de84e6eb37",
+    "afdep/csrc/kernels.cu": "77784f73b4683a65a14f0c5686b9ed3e93ca9e1183a577e3af899e635f141da6"
   },
   "protocol_changes": [
     {
@@ -150,6 +151,10 @@
     {
       "date": "2026-10-19",
       "description": "Isolated host-only source-grid experiment: multiply the base NVLink PackSourceCounts grid by four only for bulk-eligible H4096 source storage, retaining the existing fixed packet-size work cap and blocks>1 tuning guard. All CUDA kernel bodies, launch block sizes, H2048/tiny/generic/GIN paths, packet/control layouts, epochs and reader credits are unchanged. Exact e376 source profiling measured132 blocks of256 threads and approximately90us packet-copy/count time on H4096 BF16 n8192; this motivates a launch-grid probe, not a bandwidth or occupancy claim. Requires exact-source correctness, identical-device-code audit and balanced matched timing before selection."
+    },
+    {
+      "date": "2026-10-20",
+      "description": "Unvalidated direct-GIN live collector experiment on the host-grid candidate: select a separate kernel entry only for direct GIN CollectReply, with a default-false helper template gate. Before readiness waits or CTA barriers, omit CTAs outside the current epoch live source prefix; retain CTA zero for empty exchanges. Preserve the existing grid-stride token loop, all readiness waits in active CTAs and the separate reply-consumed credit launch. Keep the default generic, hybrid and NVLink paths unchanged in source. Requires exact eight-rank fixed-capacity/mixed-source GPU correctness, old-entry SASS/resource equivalence and matched timing before promotion; no performance or current correctness claim."
     }
   ]
 }

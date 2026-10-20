@@ -42,6 +42,7 @@ DELAYED_EPOCH = 8
 DELAY_SECONDS = 0.02
 DELAYED_READER = FFN_RANKS + 1
 READER_DELAY_CYCLES = 20_000_000
+LIVE_COLLECT_COUNTS = (1, 8, 32, 131, 132, 133)
 
 
 def check_received(exchange: Exchange, epoch: int, *, exact_rows: bool = False) -> None:
@@ -515,9 +516,21 @@ def live_token_checks(buffer: Buffer, config: Config, rank: int, epochs: int) ->
         Case("zero_after_dense", (0,) * ATTENTION_RANKS),
         Case("capacity_after_zero", (capacity,) * ATTENTION_RANKS),
         Case("zero_after_capacity", (0,) * ATTENTION_RANKS),
+        *(
+            Case(f"live_uniform_{count}", (count,) * ATTENTION_RANKS)
+            for count in LIVE_COLLECT_COUNTS
+            if count <= capacity
+        ),
+        Case(
+            "live_grid_boundary_mixed",
+            tuple(min(count, capacity) for count in (131, 132, 133, 0)),
+            rotate_worker=True,
+        ),
     )
     scalar_pointer = live_tokens.data_ptr() if live_tokens is not None else None
-    for epoch in range(epochs):
+    # Every declared live-count case must execute even in a short diagnostic.
+    live_epochs = max(epochs, len(changed))
+    for epoch in range(live_epochs):
         case = changed[epoch % len(changed)]
         sample = None
         if rank >= FFN_RANKS:
@@ -550,7 +563,7 @@ def live_token_checks(buffer: Buffer, config: Config, rank: int, epochs: int) ->
     torch.cuda.synchronize()
     dist.barrier()
     return {
-        "graph_epochs": epochs,
+        "graph_epochs": live_epochs,
         "one_fixed_capacity_graph": True,
         "cases": [case.name for case in changed],
         "malformed_counts_rejected_before_exchange": True,

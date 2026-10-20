@@ -10,6 +10,10 @@ __global__ void directional_wide_pack(DeviceArgs args) {
     nvlink_tma_pack<kNVLinkWideHidden, kFP8>(args);
 }
 
+__global__ void directional_direct_collect(DeviceArgs args) {
+    direct_operation<CollectReply, true>(args);
+}
+
 cudaError_t get_wide_tma_attributes(cudaFuncAttributes* attributes, bool fp8) {
     return fp8 ? cudaFuncGetAttributes(attributes, directional_wide_pack<true>) :
                  cudaFuncGetAttributes(attributes, directional_wide_pack<false>);
@@ -65,7 +69,12 @@ cudaError_t launch_kernel(int operation, DeviceArgs args, int blocks, cudaStream
         AFDEP_LAUNCH(ReduceReply);
         AFDEP_LAUNCH(PublishConsumedAndWaitCredit);
         AFDEP_LAUNCH(SendReply);
-        AFDEP_LAUNCH(CollectReply);
+    case CollectReply:
+        if (!args.layout.nvlink && !args.layout.hybrid)
+            directional_direct_collect<<<blocks, kThreadsPerBlock, shared_bytes, stream>>>(args);
+        else
+            directional_kernel<CollectReply><<<blocks, kThreadsPerBlock, shared_bytes, stream>>>(args);
+        break;
         AFDEP_LAUNCH(ReplyConsumedCredit);
         AFDEP_LAUNCH(Drain);
         AFDEP_LAUNCH(WaitReply);

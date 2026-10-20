@@ -555,7 +555,7 @@ __device__ __forceinline__ int direct_signal(int phase, int peer) { return phase
 // message is completion, not permission to skip an epoch or buffer-reuse credit.
 // Worker loops carry residual grid-stride indices across actual-length source
 // segments, retaining parallelism without scanning inactive bucket rows.
-template <int kOperation>
+template <int kOperation, bool kCullInactive = false>
 __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
     const Layout l = a.layout;
     Control* state = control(a.base);
@@ -707,6 +707,11 @@ __device__ __forceinline__ void direct_operation(const DeviceArgs& a) {
                  size_t(state->received_tokens[source]) * l.hidden * sizeof(uint16_t), source + 4,
                  direct_signal(ReplyReady, worker), true);
     } else if constexpr (kOperation == CollectReply) {
+        if constexpr (kCullInactive) {
+            // BeginSource owns this epoch-stable count. Empty exchanges retain
+            // CTA zero to wait for every reply before the separate credit launch.
+            if (blockIdx.x >= max(state->source_tokens, 1)) return;
+        }
         if (threadIdx.x == 0)
             for (int peer = 0; peer < 4; ++peer)
                 for (int q = 0; q < a.stripes; ++q)
