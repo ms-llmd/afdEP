@@ -32,6 +32,8 @@ template <bool kIsScaleupNVLink,
           bool kAfdDirectionalNotify = false,
           // afdEP: sources signal FFN receivers; only receivers wait (no all-rank exit).
           bool kAfdDirectedExit = false,
+          // afdEP: FFN dispatch inboxes hold one region per Attention source (source - kAfdFfnRanks).
+          bool kAfdRoleBuffers = false,
           int kNumNotifyThreads = kNumNotifyWarps * 32,
           int kNumDispatchThreads = kNumDispatchWarps * 32,
           int kNumThreads = kNumNotifyThreads + kNumDispatchThreads,
@@ -57,6 +59,8 @@ dispatch_impl(
                      "Directional notify requires the direct-NVLink role path");
     EP_STATIC_ASSERT(not kAfdDirectedExit or (kAfdFfnRanks > 0 and kIsScaleupNVLink),
                      "Directed exit requires the direct-NVLink role path");
+    EP_STATIC_ASSERT(not kAfdRoleBuffers or (kAfdFfnRanks > 0 and kIsScaleupNVLink),
+                     "Role-sized buffers require the direct-NVLink role path");
     // FFN ranks own the first kAfdFfnRanks * kNumExpertsPerRank logical experts.
     constexpr int kNumSourceRanks = kNumRanks - kAfdFfnRanks;
     constexpr int kNumReducedCountElems = kAfdDirectionalNotify ?
@@ -339,7 +343,8 @@ dispatch_impl(
             math::advance_ptr<int>(smem, kNumSmemBytesForNotify)).get_rank_buffer(dispatch_warp_idx).get_token_buffer(0);
         auto recv_buffer = layout::BufferLayout<false>(token_layout, kNumRanks, kNumMaxTokensPerRank, buffer);
         auto send_buffer = layout::BufferLayout<false>(token_layout, 1, kNumMaxTokensPerRank, recv_buffer.get_buffer_end_ptr());
-        recv_buffer = recv_buffer.get_rank_buffer(rank_idx);
+        // FFN ranks send nothing (asserted on the host); clamp their unused region.
+        recv_buffer = recv_buffer.get_rank_buffer(kAfdRoleBuffers ? max(rank_idx - kAfdFfnRanks, 0) : rank_idx);
 
         // Init TMA
         ptx::arrival_phase phase = 0;

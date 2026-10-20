@@ -168,10 +168,13 @@ def test_role_aware_requires_explicit_geometry_and_preserves_generic_ctor(runtim
     runtime.module.ElasticBuffer.assert_not_called()
     generic = elastic(runtime)
     assert len(runtime.module.ElasticBuffer.call_args.args) == 13
+    # Union sizing for the generic buffer; role-sized inboxes for the role path.
+    assert runtime.module.calculate_elastic_buffer_size.call_args.args[-1] == 0
     generic.close()
     roles = elastic(runtime, role_aware=True, ffn_ranks=2)
     assert len(runtime.module.ElasticBuffer.call_args.args) == 14
     assert runtime.module.ElasticBuffer.call_args.args[-1] == 2
+    assert runtime.module.calculate_elastic_buffer_size.call_args.args[-1] == 2
     roles.close()
 
 

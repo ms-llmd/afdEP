@@ -537,16 +537,18 @@ public:
                                             const int& hidden, const int& num_sf_packs, const int& num_topk,
                                             const int& elem_size,
                                             const int& num_scaleout_ranks, const int& num_scaleup_ranks,
-                                            const bool& is_scaleup_nvlink) {
+                                            const bool& is_scaleup_nvlink,
+                                            const int& afd_role_ffn_ranks = 0) {
         const auto num_ranks = num_scaleup_ranks * num_scaleout_ranks;
         const auto token_layout = get_dispatch_token_layout(hidden, elem_size, num_sf_packs, num_topk);
 
         if (num_scaleout_ranks == 1) {
-            // Direct dispatch
+            // Direct dispatch (afdEP role buffers: one inbox region per Attention source)
+            EP_HOST_ASSERT(afd_role_ffn_ranks == 0 or is_scaleup_nvlink);
             const auto send_buffer_layout = layout::BufferLayout<false>(
                 token_layout, is_scaleup_nvlink ? 0 : 1, num_max_tokens_per_rank);
             const auto recv_buffer_layout = layout::BufferLayout<false>(
-                token_layout, num_ranks, num_max_tokens_per_rank);
+                token_layout, num_ranks - afd_role_ffn_ranks, num_max_tokens_per_rank);
             return send_buffer_layout.get_num_bytes() + recv_buffer_layout.get_num_bytes();
         } else {
             // Hybrid dispatch
@@ -566,13 +568,18 @@ public:
     static int64_t get_combine_buffer_size(const int& num_max_tokens_per_rank, const int& hidden, const int& num_topk,
                                            const int& num_scaleout_ranks, const int& num_scaleup_ranks,
                                            const bool& is_scaleup_nvlink,
-                                           const bool& allow_multiple_reduction) {
+                                           const bool& allow_multiple_reduction,
+                                           const int& afd_role_ffn_ranks = 0) {
         const auto num_ranks = num_scaleup_ranks * num_scaleout_ranks;
         const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
 
         if (num_scaleout_ranks == 1) {
-            // Direct combine
-            const auto num_tokens_in_layout = allow_multiple_reduction ? std::min(num_ranks, num_topk) : num_topk;
+            // Direct combine. The rank layout indexes inbox regions by sending
+            // rank; with afdEP role buffers only the FFN ranks [0, F) send.
+            const bool use_rank_layout = allow_multiple_reduction and num_ranks <= num_topk;
+            EP_HOST_ASSERT(afd_role_ffn_ranks == 0 or is_scaleup_nvlink);
+            const auto num_tokens_in_layout = use_rank_layout and afd_role_ffn_ranks > 0 ? afd_role_ffn_ranks :
+                (allow_multiple_reduction ? std::min(num_ranks, num_topk) : num_topk);
             const auto send_buffer_layout = layout::BufferLayout<false>(
                 token_layout, is_scaleup_nvlink ? 0 : num_ranks,
                 // For single reduction cases, the maximum number of received tokens is
@@ -603,7 +610,8 @@ public:
                                          const int& num_max_tokens_per_rank, const int& hidden,
                                          int num_topk, const bool& use_fp8_dispatch,
                                          const bool& allow_hybrid_mode,
-                                         const bool& allow_multiple_reduction) {
+                                         const bool& allow_multiple_reduction,
+                                         const int& afd_ffn_ranks) {
         EP_HOST_ASSERT(num_max_tokens_per_rank > 0 and hidden > 0);
 
         // The worst case SF bytes must be less than the main part
@@ -616,6 +624,8 @@ public:
         const auto [num_rdma_ranks, num_nvl_ranks] = nccl::get_physical_domain_size(nccl_comm);
         const auto [num_scaleout_ranks, num_scaleup_ranks] = nccl::get_logical_domain_size(nccl_comm, allow_hybrid_mode);
         const auto is_scaleup_nvlink = num_scaleup_ranks == num_nvl_ranks;
+        const auto afd_role_ffn_ranks = afd_ffn_ranks > 0 and num_scaleout_ranks == 1 and is_scaleup_nvlink and
+            afdep_role_buffers() ? afd_ffn_ranks : 0;
 
         // Dispatch size
         const auto elem_size = use_fp8_dispatch ? sizeof(__nv_fp8_e4m3) : sizeof(nv_bfloat16);
@@ -623,13 +633,13 @@ public:
         const auto num_dispatch_bytes = get_dispatch_buffer_size(
             num_max_tokens_per_rank, hidden, num_sf_packs, num_topk, elem_size,
             num_scaleout_ranks, num_scaleup_ranks,
-            is_scaleup_nvlink);
+            is_scaleup_nvlink, afd_role_ffn_ranks);
 
         // Combine layout
         const auto num_combine_bytes = get_combine_buffer_size(
             num_max_tokens_per_rank, hidden, num_topk,
             num_scaleout_ranks, num_scaleup_ranks,
-            is_scaleup_nvlink, allow_multiple_reduction);
+            is_scaleup_nvlink, allow_multiple_reduction, afd_role_ffn_ranks);
 
         // Return the maximum of those layouts
         return std::max(num_dispatch_bytes, num_combine_bytes);
@@ -924,10 +934,11 @@ public:
         }
 
         // Check buffer size
+        const bool afd_role_buffers = afd_direct_nvlink and afdep_role_buffers();
         EP_HOST_ASSERT(get_dispatch_buffer_size(
                        num_max_tokens_per_rank, hidden, num_sf_packs, num_topk, x.element_size(),
                        nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks,
-                       nccl_context->is_scaleup_nvlink) <= num_buffer_bytes);
+                       nccl_context->is_scaleup_nvlink, afd_role_buffers ? afd_ffn_ranks : 0) <= num_buffer_bytes);
 
         // Ready and clean host workspace for this round
         const auto host_workspace_layout = layout::WorkspaceLayout(
@@ -971,7 +982,8 @@ public:
                         comm_stream, afd_direct_nvlink ? afd_ffn_ranks : 0,
                         afd_direct_nvlink and afdep_skip_entry_barriers(),
                         afd_direct_nvlink and afdep_directional_notify(),
-                        afd_direct_nvlink and afdep_directed_exit());
+                        afd_direct_nvlink and afdep_directed_exit(),
+                        afd_role_buffers);
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
@@ -1131,7 +1143,7 @@ public:
                                       jit::device_runtime->get_num_smem_bytes(),
                                       num_channels,
                                       do_expand, cached_mode, afd_role_aware and not do_cpu_sync,
-                                      comm_stream);
+                                      comm_stream, afd_role_buffers ? afd_ffn_ranks : 0);
         }
 
         // Stream control
@@ -1247,7 +1259,8 @@ public:
         // Check buffer size
         EP_HOST_ASSERT(get_combine_buffer_size(num_max_tokens_per_rank, hidden, num_topk,
                                                nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks,
-                                               nccl_context->is_scaleup_nvlink, allow_multiple_reduction) <= num_buffer_bytes);
+                                               nccl_context->is_scaleup_nvlink, allow_multiple_reduction,
+                                               afd_direct and afdep_role_buffers() ? afd_ffn_ranks : 0) <= num_buffer_bytes);
 
         // Optional configs and metadata for hybrid combine
         int num_channels = 1;

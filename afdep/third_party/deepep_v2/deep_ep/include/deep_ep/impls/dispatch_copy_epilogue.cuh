@@ -15,6 +15,8 @@ template <bool kDoExpand, bool kCachedMode, bool kReadDeviceCount,
           int kNumHiddenBytes, int kNumSFPacks,
           int kNumMaxTokensPerRank,
           int kNumExperts, int kNumTopk,
+          // afdEP role buffers: inbox regions start at the first Attention source.
+          int kAfdRegionOffset = 0,
           int kNumRanks = kNumScaleoutRanks * kNumScaleupRanks,
           int kNumThreads = kNumWarps * 32,
           int kNumMaxTokensPerChannel = math::constexpr_ceil_div(kNumMaxTokensPerRank, kNumChannels),
@@ -81,7 +83,11 @@ dispatch_copy_epilogue_impl(void* buffer, void* workspace,
             current_rank_start = current_rank_end;
             current_rank_end = ptx::exchange(stored_psum_num_recv_tokens, stored_lane_idx);
         }
-        const auto buffer_token = scaleup_buffer.get_rank_buffer(current_rank_idx).get_token_buffer(i - current_rank_start);
+        EP_STATIC_ASSERT(kAfdRegionOffset == 0 or kNumScaleoutRanks == 1, "Role buffers are direct-NVLink only");
+        if constexpr (kAfdRegionOffset > 0)
+            EP_DEVICE_ASSERT(current_rank_idx >= kAfdRegionOffset);
+        const auto buffer_token = scaleup_buffer.get_rank_buffer(current_rank_idx - kAfdRegionOffset)
+            .get_token_buffer(i - current_rank_start);
 
         // Wait buffer releases
         ptx::tma_store_wait();

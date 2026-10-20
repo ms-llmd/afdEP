@@ -55,6 +55,15 @@ static bool afdep_directed_exit() {
     return deep_ep::get_env<int>("AFDEP_ALL_RANK_EXIT", 0) == 0;
 }
 
+// Role-sized registered buffers: in one NVLink domain only Attention sources
+// write FFN dispatch inboxes and only FFN ranks write Attention combine inboxes,
+// so the union window's FFN-source dispatch regions and Attention-source combine
+// regions are never written. Dispatch regions are indexed by source - FFN ranks.
+// AFDEP_UNION_BUFFERS=1 keeps upstream union sizing as a measurement control.
+static bool afdep_role_buffers() {
+    return deep_ep::get_env<int>("AFDEP_UNION_BUFFERS", 0) == 0;
+}
+
 static int afdep_combine_max_unroll() {
     const int value = deep_ep::get_env<int>("AFDEP_COMBINE_MAX_UNROLL", 0);
     return value > 0 ? std::min(value, 4) : kAfdCombineMaxUnroll;

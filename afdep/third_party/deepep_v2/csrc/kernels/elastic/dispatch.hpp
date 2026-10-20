@@ -107,6 +107,7 @@ public:
         bool afd_skip_entry_barrier;
         bool afd_directional_notify;
         bool afd_directed_exit;
+        bool afd_role_buffers;
 
         // Parameters
         void* x; sf_pack_t* sf; topk_idx_t* topk_idx; float* topk_weights;
@@ -142,8 +143,9 @@ public:
                 args.num_max_tokens_per_rank,
                 args.num_experts, args.num_topk, args.expert_alignment,
                 args.num_qps, args.num_timeout_cycles, args.afd_ffn_ranks,
-                args.afd_ffn_ranks > 0 ? fmt::format(", {}, {}, {}", args.afd_skip_entry_barrier,
-                                                     args.afd_directional_notify, args.afd_directed_exit)
+                args.afd_ffn_ranks > 0 ? fmt::format(", {}, {}, {}, {}", args.afd_skip_entry_barrier,
+                                                     args.afd_directional_notify, args.afd_directed_exit,
+                                                     args.afd_role_buffers)
                                        : std::string());
         } else {
             header_name = "hybrid_dispatch";
@@ -246,7 +248,8 @@ static void launch_dispatch(void* x, void* sf,
                             const int afd_ffn_ranks = 0,
                             const bool afd_skip_entry_barrier = false,
                             const bool afd_directional_notify = false,
-                            const bool afd_directed_exit = false) {
+                            const bool afd_directed_exit = false,
+                            const bool afd_role_buffers = false) {
     // Cached mode does not support expert token counting
     if (cached_mode)
         EP_HOST_ASSERT(cumulative_local_expert_recv_stats == nullptr);
@@ -303,6 +306,8 @@ static void launch_dispatch(void* x, void* sf,
                                   not cached_mode and afd_directional_notify,
         .afd_directed_exit = num_scaleout_ranks == 1 and afd_ffn_ranks > 0 and is_scaleup_nvlink and
                              afd_directed_exit,
+        .afd_role_buffers = num_scaleout_ranks == 1 and afd_ffn_ranks > 0 and is_scaleup_nvlink and
+                            afd_role_buffers,
         .x = x, .sf = static_cast<sf_pack_t*>(sf), .topk_idx = topk_idx, .topk_weights = topk_weights,
         .copied_topk_idx = copied_topk_idx,
         .cumulative_local_expert_recv_stats = cumulative_local_expert_recv_stats,
@@ -334,6 +339,7 @@ public:
         int num_hidden_bytes, num_sf_packs;
         int num_max_tokens_per_rank;
         int num_experts, num_topk;
+        int afd_region_offset;
 
         // Parameters
         void *buffer, *workspace;
@@ -357,7 +363,7 @@ public:
 using namespace deep_ep::elastic;
 
 static void __instantiate_kernel() {{
-    auto ptr = reinterpret_cast<void*>(&dispatch_copy_epilogue_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}>);
+    auto ptr = reinterpret_cast<void*>(&dispatch_copy_epilogue_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>);
 }}
 )",
                            args.do_expand, args.cached_mode, args.read_device_count,
@@ -365,7 +371,8 @@ static void __instantiate_kernel() {{
                            args.num_scaleout_ranks, args.num_scaleup_ranks,
                            args.num_hidden_bytes, args.num_sf_packs,
                            args.num_max_tokens_per_rank,
-                           args.num_experts, args.num_topk);
+                           args.num_experts, args.num_topk,
+                           args.afd_region_offset > 0 ? fmt::format(", {}", args.afd_region_offset) : std::string());
     }
 
     static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
@@ -399,7 +406,8 @@ static void launch_dispatch_copy_epilogue(void* buffer, void* workspace,
                                           const int& num_channels,
                                           const bool& do_expand, const bool& cached_mode,
                                           const bool& read_device_count,
-                                          const at::cuda::CUDAStream& stream) {
+                                          const at::cuda::CUDAStream& stream,
+                                          const int& afd_region_offset = 0) {
     // Maximize shared memory utilization
     const auto token_layout = layout::TokenLayout(num_hidden_bytes, num_sf_packs * sizeof(sf_pack_t), num_topk, true);
     const auto num_warps = std::min(num_smem_bytes / token_layout.get_num_bytes<true>(), 32);
@@ -413,6 +421,7 @@ static void launch_dispatch_copy_epilogue(void* buffer, void* workspace,
         .num_hidden_bytes = num_hidden_bytes, .num_sf_packs = num_sf_packs,
         .num_max_tokens_per_rank = num_max_tokens_per_rank,
         .num_experts = num_experts, .num_topk = num_topk,
+        .afd_region_offset = afd_region_offset,
         .buffer = buffer, .workspace = workspace,
         .psum_num_recv_tokens_per_scaleup_rank = psum_num_recv_tokens_per_scaleup_rank,
         .psum_num_recv_tokens_per_expert = psum_num_recv_tokens_per_expert,

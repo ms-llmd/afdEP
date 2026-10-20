@@ -335,6 +335,9 @@ class ElasticBuffer:
                     use_fp8_dispatch,
                     allow_hybrid_mode,
                     True,
+                    # Role-sized inboxes: only sources write FFN dispatch regions
+                    # and only FFN ranks write Attention combine regions.
+                    ffn_ranks if role_aware else 0,
                 )
             )
             native_args = (

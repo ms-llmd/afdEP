@@ -58,6 +58,9 @@ def test_role_template_parameters_default_to_upstream_kernels():
     assert "bool kAfdSkipEntryBarrier = false," in dispatch
     assert "bool kAfdDirectionalNotify = false," in dispatch
     assert "bool kAfdDirectedExit = false," in dispatch
+    assert "bool kAfdRoleBuffers = false," in dispatch
+    epilogue = (impls / "dispatch_copy_epilogue.cuh").read_text()
+    assert "int kAfdRegionOffset = 0," in epilogue
 
 
 def test_runtime_header_contents_invalidate_build(tmp_path):
