@@ -1,4 +1,36 @@
-# Directional v2 · H100 experiments
+# Directional v2 experiments
+
+## H200 · fixed-capacity collector: near parity
+
+![All fixed-capacity collector comparisons](assets/directional-fixed-collector.png)
+
+The experimental [live-count collector](https://github.com/ms-llmd/afdEP/tree/84efdb4d703a9795ddad8f14ec93414e3d472e0c)
+skips inactive reply-collector blocks inside one 8,192-row graph. Against the
+published v2 baseline (D2), GPU latency is **0.25% lower** as an equal-cell
+descriptive geometric mean: **16/48 cells nominally faster, 5 slower, 27
+inconclusive**. The largest improvement, about 2%, is an empty-token control.
+This is not a meaningful overall performance improvement; the candidate stays
+experimental and this PR retains D2 runtime code.
+
+The complete 108-job stage uses eight H200s, 4 Attention + 4 FFN, direct GIN,
+H2048/E128/top-k 8, six fresh process pairs and five correlated blocks.
+The separate per-size confirmation stopped after 19/108 accepted jobs when a
+post-run GPU inventory query timed out; the next job's workers both exited 0.
+That allocation used different Attention GPUs/NIC locality. The full planned
+216-job comparison remains incomplete. No graph-policy causal, serving or
+universal non-degradation claim follows from this descriptive view.
+
+[All 288 comparisons, pairs and blocks](validation-gin-live-2026-10-20/fixed-stage-descriptive.json)
+· [CSV](validation-gin-live-2026-10-20/all-288-comparisons.csv)
+· [Exact measured harness and three source manifests](validation-gin-live-2026-10-20/reproduction-snapshot.tar.gz).
+
+Extract the reproduction snapshot, then run its harness from an immutable
+`git archive` of the chosen manifest's commit, with the harness, cache and output
+outside that source tree. Defaults
+match the fixed-stage capacity, live extents and transport settings; repeat
+BF16/FP8 × random/strided/skew in the six balanced arm orders.
+
+## H100 · directional v2 baseline
 
 **Independent communication tests:** four H100s, one NVLink domain,
 2 Attention + 2 FFN, 128 experts, top-k 8. Each width has 90 fresh processes:

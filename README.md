@@ -70,7 +70,7 @@ prequantized FP8 dispatch return BF16 combined outputs. See the
 | Architecture | Backend | Validated scope |
 |---|---|---|
 | Hopper (SM90) | V1 DeepEP reuse | H100/H200: BF16/FP8; eager/CUDA graphs; 2 Attention + 2 FFN, one NVLink domain |
-| Hopper (SM90) | V2 directional | BF16/FP8; eager/CUDA graphs; H100/H200: 2 + 2 NVLink; H100: 4 + 4 GIN across two domains |
+| Hopper (SM90) | V2 directional | BF16/FP8; eager/CUDA graphs; H100/H200: 2 + 2 NVLink; H100: 4 + 4 GIN; H200: 4 + 4 direct GIN |
 | Blackwell | V1 DeepEP reuse | Not validated |
 | Other architectures | V1 DeepEP reuse | Not validated |
 
