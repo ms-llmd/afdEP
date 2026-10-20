@@ -28,6 +28,10 @@ HIDDEN_ALIGNMENT = 256
 FP8_GROUP_SIZE = 128
 MIN_COMM_SMS = 4
 DEFAULT_COMM_SM_FRACTION = 24 / 132
+# Role-path automatic grid (num_sms=0): the full device grid is faster from
+# 512-token buckets; smaller buckets keep the partial share (H100 2A2F, BF16,
+# H2048/H4096 comm-only screens, 2026-10-20).
+FULL_GRID_MIN_BUCKET = 512
 HYBRID_DEFAULT_QPS = 129
 DIRECT_DEFAULT_QPS = 17
 INT32_MAX = (1 << 31) - 1
@@ -122,6 +126,15 @@ class Config:
             // self.expert_alignment
             * self.expert_alignment
         )
+
+
+def transport_sms(
+    bucket: int, *, configured: int, role_aware: bool, partial: int, device: int
+) -> int:
+    """DeepEP transport grid for one exchange; every rank shares the bucket."""
+    if configured:
+        return configured
+    return device if role_aware and bucket >= FULL_GRID_MIN_BUCKET else partial
 
 
 @dataclass(frozen=True)
@@ -300,9 +313,10 @@ class ElasticBuffer:
             if any(r[key] != records[0][key] for r in records):
                 raise ValueError(f"Every DeepEP rank must use the same {key}")
         self._module = module
+        self._configured_num_sms = num_sms
+        self._device_sms = min(r["sms"] for r in records)
         self._resolved_num_sms = num_sms or max(
-            MIN_COMM_SMS,
-            round(min(r["sms"] for r in records) * DEFAULT_COMM_SM_FRACTION),
+            MIN_COMM_SMS, round(self._device_sms * DEFAULT_COMM_SM_FRACTION)
         )
         self.num_allocated_qps = num_qps or (
             HYBRID_DEFAULT_QPS if allow_hybrid_mode else DIRECT_DEFAULT_QPS
@@ -381,8 +395,14 @@ class ElasticBuffer:
         if self._torch.cuda.current_device() != self.device:
             raise RuntimeError("DeepEP buffer used on a different CUDA device")
 
-    def _num_sms(self) -> int:
-        return self._resolved_num_sms
+    def _num_sms(self, bucket: int) -> int:
+        return transport_sms(
+            bucket,
+            configured=self._configured_num_sms,
+            role_aware=self.role_aware,
+            partial=self._resolved_num_sms,
+            device=self._device_sms,
+        )
 
     def _num_qps(self, num_sms: int) -> int:
         multiplier = 16 if self.allow_hybrid_mode else 1
@@ -417,7 +437,7 @@ class ElasticBuffer:
             raise ValueError("source input exceeds its bucket")
         if self.role_aware and self.rank < self.ffn_ranks and x.shape[0] != 0:
             raise ValueError("role-aware FFN ranks cannot originate tokens")
-        num_sms = self._num_sms()
+        num_sms = self._num_sms(bucket)
         result = self._runtime.dispatch(
             x.contiguous(),
             x_scale,
