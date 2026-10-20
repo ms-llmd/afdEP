@@ -29,6 +29,29 @@ capacity 8,192/source, it totals **386 vs 1,040 MiB** in BF16 and
 **324 vs 1,032 MiB** in FP8 across four ranks. This excludes expert/receive
 tensors, caller allocations and total VRAM.
 
+## Guarded wide replies · eight-pair confirmation
+
+This experimental NVLink path skips empty FFN reply stores when the Attention
+collector explicitly selects participating workers. Credits and lifetimes remain unchanged.
+Four H100s, hidden width 4,096, 2 Attention + 2 FFN: **192 fresh-process jobs**,
+eight paired repeats per configuration, five correlated timing blocks per process.
+
+![All 42 cells against each fixed control](assets/directional-wide-replies-confirmation.png)
+
+Against Masked132 and reuse132, **40/42 cells are nominally faster**. The two
+remaining Masked132 regressions are BF16 random/8,192 **+0.334%** and FP8
+strided/2,048 **+0.486%**. Against current directional D2, large strided cells
+improve **5.7–10.3%**; overall, 14 cells are nominally faster, 26 inconclusive
+and two slower. No universal non-degradation or serving claim follows.
+
+![Both residual cells and their intervals](assets/directional-wide-replies-residuals.png)
+
+[All 210 fixed contrasts, process medians, block timings and source hashes](validation-wide-replies-2026-10-20.json).
+Candidate `125778b`; D2 control `8262b20`. Route seed 20,420,903; earlier screens
+are not pooled. Per-extent graph replay is timed; capture/JIT/GEMMs are excluded.
+Intervals are nominal per-cell 95% paired-log bootstrap intervals, without a
+multiplicity adjustment. The published serving comparisons retain the D2 source.
+
 ## Two-node communication
 
 ![Two-node GIN latency by mode and routing](assets/directional-gin-latency.png)
