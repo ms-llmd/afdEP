@@ -48,6 +48,12 @@ It needs no RDMA; `EP_DISABLE_GIN=1` is supported. The hybrid flag and GIN tunin
 fields apply only to `transport="gin"`. Validate the four-GPU path with
 `torchrun --standalone --nproc-per-node=4 -m tests.gpu.nvlink --payload bf16 --graph --output /tmp/nvlink-check`.
 
+This experimental branch also accepts `nvlink_early_metadata=True` for NVLink
+capacity ≤128. FFNs prepare from published metadata, then wait for each source's
+payload during gathering. It defaults to false; the
+[focused readiness experiment](directional-performance.md#h100--early-nvlink-readiness)
+found overlap but no overall decode improvement.
+
 | `allow_hybrid_mode` | Dispatch / reply organization |
 |---|---|
 | `True` (default) | Rail-aligned GIN to an ingress worker; NVLink distribution and reduction on the FFN side |

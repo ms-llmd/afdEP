@@ -20,6 +20,8 @@ constexpr int kThreadsPerBlock = 256;
 constexpr int kPayloadVectorBytes = 16;
 constexpr int kNVLinkBulkGridMultiplier = 8;
 constexpr int kNVLinkFusedMetadataTokens = 32;
+constexpr int kNVLinkEarlyMetadataMaxTokens = 128;
+constexpr int kReadinessTraceSize = 12;
 constexpr int kNVLinkWarpMinTokens = 2048;
 constexpr int kNVLinkWarpHidden = 2048;
 constexpr int kNVLinkWideHidden = 4096;
@@ -51,6 +53,8 @@ struct NVLinkControl {
     // next request acknowledges its previous reply reads. Ordered full pairs
     // retain one logical credit per reader without separate credit stores.
     uint64_t reply_ready;
+    // Optional source publication: header/routes are immutable before payload.
+    uint64_t metadata_ready;
     // Current-epoch source capabilities, read after RequestReady acquisition.
     uint32_t sparse_collectors;
 };
@@ -180,6 +184,10 @@ struct DeviceArgs {
     int rank, bucket, tokens, stripes;
     int64_t scale_stride0, scale_stride1, recv_scale_stride1;
     uint64_t timeout_cycles;
+    bool nvlink_early_metadata;
+    bool readiness_force_payload_barrier;
+    uint64_t readiness_delay_cycles;
+    uint64_t* readiness_trace;
 };
 
 }  // namespace afdep

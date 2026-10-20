@@ -8,6 +8,7 @@ from typing import Literal
 
 RANKS_PER_DOMAIN = 4
 NVLINK_RANKS_PER_ROLE = 2
+NVLINK_EARLY_METADATA_MAX_TOKENS = 128
 FP8_BLOCK_SIZE = 128
 MAX_TOP_K = 32
 INT32_MAX = (1 << 31) - 1
@@ -32,10 +33,13 @@ class Config:
     rdma_traffic_class: int = 0
     allow_hybrid_mode: bool = True
     transport: Literal["gin", "nvlink"] = "gin"
+    nvlink_early_metadata: bool = False
 
     def __post_init__(self) -> None:
         if type(self.allow_hybrid_mode) is not bool:
             raise ValueError("allow_hybrid_mode must be a boolean")
+        if type(self.nvlink_early_metadata) is not bool:
+            raise ValueError("nvlink_early_metadata must be a boolean")
         positive_fields = (
             "capacity_tokens_per_rank",
             "hidden_size",
@@ -55,6 +59,14 @@ class Config:
                 raise ValueError(f"{name} must be a positive int32 integer")
         if self.transport not in ("gin", "nvlink"):
             raise ValueError("transport must be 'gin' or 'nvlink'")
+        if self.nvlink_early_metadata and (
+            self.transport != "nvlink"
+            or self.capacity_tokens_per_rank > NVLINK_EARLY_METADATA_MAX_TOKENS
+        ):
+            raise ValueError(
+                "nvlink_early_metadata is experimental and requires NVLink "
+                f"capacity <= {NVLINK_EARLY_METADATA_MAX_TOKENS}"
+            )
         expected_ranks = (
             RANKS_PER_DOMAIN if self.transport == "gin" else NVLINK_RANKS_PER_ROLE
         )

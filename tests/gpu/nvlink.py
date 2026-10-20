@@ -133,6 +133,7 @@ def main():
     parser.add_argument("--graph", action="store_true")
     parser.add_argument("--exact", action="store_true")
     parser.add_argument("--mixed-buffer", action="store_true")
+    parser.add_argument("--early-metadata", action="store_true")
     parser.add_argument("--capacity", type=int, default=CAPACITY)
     parser.add_argument("--bucket", type=int)
     parser.add_argument("--source0-tokens", type=int)
@@ -161,6 +162,7 @@ def main():
         attention_ranks=2,
         payload=args.payload,
         transport="nvlink",
+        nvlink_early_metadata=args.early_metadata,
     )
     buffer = Buffer(group=dist.group.WORLD, config=config)
     allocation_config = config

@@ -160,6 +160,7 @@ class Buffer:
                 config.num_sms,
                 config.allow_hybrid_mode,
                 config.transport == "nvlink",
+                config.nvlink_early_metadata,
             )
             self.num_buffer_bytes = int(self._runtime.num_buffer_bytes)
             torch.cuda.synchronize(self.device)

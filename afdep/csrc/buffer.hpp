@@ -29,6 +29,10 @@ class DirectionalM2NBuffer {
     uint64_t timeout_cycles;
     bool destroyed = false;
     bool nvlink_pair_pending = false;
+    bool nvlink_early_metadata;
+    bool readiness_force_payload_barrier = false;
+    uint64_t readiness_delay_cycles = 0;
+    std::optional<torch::Tensor> readiness_trace;
     int source_rows = 0;
     int worker_bucket = 0;
     int worker_rows = 0;
@@ -100,6 +104,11 @@ class DirectionalM2NBuffer {
         result.bucket = bucket;
         result.stripes = stripes;
         result.timeout_cycles = timeout_cycles;
+        result.nvlink_early_metadata = nvlink_early_metadata;
+        result.readiness_force_payload_barrier = readiness_force_payload_barrier;
+        result.readiness_delay_cycles = readiness_delay_cycles;
+        result.readiness_trace = readiness_trace.has_value() ?
+            reinterpret_cast<uint64_t*>(readiness_trace->data_ptr<int64_t>()) : nullptr;
         return result;
     }
 
@@ -216,13 +225,17 @@ class DirectionalM2NBuffer {
     DirectionalM2NBuffer(int64_t nccl_comm, int rank, int world, int ffn_size, int attn_size, int capacity,
                          int hidden, int topk, int real_experts, int expert_alignment, bool use_fp8,
                          int num_qps, int gpu_timeout_s, int traffic_class, int transport_stripes = 8,
-                         int num_sms = 132, bool allow_hybrid_mode = true, bool nvlink_only = false)
+                         int num_sms = 132, bool allow_hybrid_mode = true, bool nvlink_only = false,
+                         bool early_metadata = false)
         : layout(checked_layout(capacity, hidden, topk, real_experts, expert_alignment, use_fp8,
                                 allow_hybrid_mode, ffn_size, attn_size, nvlink_only)), rank(rank),
-          stripes(transport_stripes), num_sms(num_sms),
+          stripes(transport_stripes), num_sms(num_sms), nvlink_early_metadata(early_metadata),
           num_buffer_bytes(rank < ffn_size ? layout.worker_bytes : layout.source_bytes) {
         TORCH_CHECK(world == ffn_size + attn_size && rank >= 0 && rank < world,
                     "Directional world must contain FFN ranks followed by Attention ranks");
+        TORCH_CHECK(!early_metadata ||
+                        (nvlink_only && capacity <= kNVLinkEarlyMetadataMaxTokens),
+                    "Experimental early metadata requires NVLink capacity <= 128");
         TORCH_CHECK(expert_alignment > 0 && gpu_timeout_s > 0,
                     "Directional alignment and timeout settings must be positive");
         TORCH_CHECK(num_qps > 0 && stripes > 0 && stripes <= num_qps,
@@ -288,6 +301,32 @@ class DirectionalM2NBuffer {
     }
 
     int64_t registered_bytes() const { return num_buffer_bytes; }
+
+    // Private experiment probes. Set outside capture after a completed exchange;
+    // graph arguments retain their original values and tensor storage.
+    void set_readiness_debug(uint64_t delay_cycles, const std::optional<torch::Tensor>& trace,
+                             bool force_payload_barrier) {
+        check_live(rank < layout.workers);
+        TORCH_CHECK(layout.nvlink && layout.capacity <= kNVLinkEarlyMetadataMaxTokens,
+                    "Readiness diagnostics require NVLink capacity <= 128");
+        TORCH_CHECK(!nvlink_pair_pending, "Finish the current exchange before setting readiness probes");
+        cudaStreamCaptureStatus capture;
+        AFDEP_CUDA_CHECK(cudaStreamIsCapturing(at::cuda::getCurrentCUDAStream().stream(), &capture));
+        TORCH_CHECK(capture == cudaStreamCaptureStatusNone, "Set readiness probes outside capture");
+        TORCH_CHECK(delay_cycles < timeout_cycles / 2, "Readiness delay exceeds half the GPU timeout");
+        TORCH_CHECK(!force_payload_barrier || nvlink_early_metadata,
+                    "The payload-barrier control requires early metadata");
+        if (trace.has_value()) {
+            check_tensor(*trace, torch::kInt64, 1);
+            TORCH_CHECK(trace->numel() == kReadinessTraceSize,
+                        "Readiness trace must have twelve int64 entries");
+        }
+        // Old graph captures can hold the previous raw tensor pointer. Tests
+        // must keep their trace tensors alive for the lifetime of those graphs.
+        readiness_trace = trace;
+        readiness_delay_cycles = delay_cycles;
+        readiness_force_payload_barrier = force_payload_barrier;
+    }
 
     void source_dispatch(const torch::Tensor &x, const std::optional<torch::Tensor> &scale,
                          const torch::Tensor &ids, const torch::Tensor &weights, int bucket,
@@ -469,15 +508,18 @@ class DirectionalM2NBuffer {
 inline void register_apis(pybind11::module_ &m) {
     namespace py = pybind11;
     py::class_<DirectionalM2NBuffer>(m, "DirectionalM2NBuffer", py::module_local())
-        .def(py::init<int64_t, int, int, int, int, int, int, int, int, int, bool, int, int, int, int, int, bool, bool>(),
+        .def(py::init<int64_t, int, int, int, int, int, int, int, int, int, bool, int, int, int, int, int, bool, bool, bool>(),
              py::arg("nccl_comm"), py::arg("rank"), py::arg("world"), py::arg("ffn_size"),
              py::arg("attn_size"), py::arg("capacity"), py::arg("hidden"), py::arg("top_k"),
              py::arg("real_experts"), py::arg("expert_alignment"), py::arg("use_fp8"), py::arg("num_qps"),
              py::arg("gpu_timeout_s"), py::arg("traffic_class"), py::arg("transport_stripes") = 8,
              py::arg("num_sms") = 132, py::arg("allow_hybrid_mode") = true,
-             py::arg("nvlink_only") = false)
+             py::arg("nvlink_only") = false, py::arg("early_metadata") = false)
         .def_readonly("num_buffer_bytes", &DirectionalM2NBuffer::num_buffer_bytes)
         .def("registered_bytes", &DirectionalM2NBuffer::registered_bytes)
+        .def("_set_readiness_debug", &DirectionalM2NBuffer::set_readiness_debug,
+             py::arg("delay_cycles") = 0, py::arg("trace") = py::none(),
+             py::arg("force_payload_barrier") = false)
         .def("source_dispatch", &DirectionalM2NBuffer::source_dispatch, py::arg("x"),
              py::arg("scale"), py::arg("ids"), py::arg("weights"), py::arg("bucket"),
              py::arg("live_tokens") = py::none())

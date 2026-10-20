@@ -1,5 +1,38 @@
 # Directional v2 experiments
 
+## H100 · early NVLink readiness
+
+![Three readiness modes](assets/nvlink-readiness.png)
+
+Publishing routing metadata before activations lets FFNs prepare expert offsets
+and gather each source independently. In the injected-delay diagnostic, both FFNs
+gathered **32/32 fast-source tokens before the other source was marked ready**;
+the original-ordering and restored-barrier controls gathered **0/32**. BF16/FP8
+and both delayed-source positions passed.
+
+Removing the barrier from the modified path reduces latency **5.56–7.47%**
+across the eight measured cells. The complete prototype is nevertheless
+**1.54–9.61% slower in six cells**, and approximately tied at eight tokens
+(0.60–0.78% lower). Added preparation/readiness work outweighs the recovered
+overlap here; the option remains disabled by default.
+
+Four H100s, 2A/2F, H2048/E128/K8, BF16/FP8, 1/8/32/128 tokens.
+Three balanced in-process repeats, 200 warmups and 1,000 graph replays each;
+the chart shows max-rank round-trip duration. All arms use the same experimental
+binary: `early_gated` retains the new metadata preparation and restores the
+all-payload barrier, isolating that dependency from other changes. This is a
+communication-only test with one graph per extent; replay is included.
+Injected delays and probes are excluded from timing. No serving or significance
+claim follows.
+
+Six existing eager/graph correctness jobs, the delay diagnostic and the timing
+job passed. The existing suite covers changing counts/routes, empty and skewed
+sources, and delayed reuse. [Raw measurements and source digest](validation-nvlink-readiness-2026-10-20.json).
+
+Run `torchrun --standalone --nproc-per-node=4 -m tests.gpu.readiness
+--stage diagnostic --output results/diagnostic`; use `--stage timing` for the
+uninstrumented comparison.
+
 ## H200 · fixed-capacity collector: near parity
 
 ![All fixed-capacity collector comparisons](assets/directional-fixed-collector.png)
@@ -9,8 +42,8 @@ skips inactive reply-collector blocks inside one 8,192-row graph. Against the
 published v2 baseline (D2), GPU latency is **0.25% lower** as an equal-cell
 descriptive geometric mean: **16/48 cells nominally faster, 5 slower, 27
 inconclusive**. The largest improvement, about 2%, is an empty-token control.
-This is not a meaningful overall performance improvement; the candidate stays
-experimental and this PR retains D2 runtime code.
+This is not a meaningful overall performance improvement; the collector candidate
+stays experimental.
 
 The complete 108-job stage uses eight H200s, 4 Attention + 4 FFN, direct GIN,
 H2048/E128/top-k 8, six fresh process pairs and five correlated blocks.

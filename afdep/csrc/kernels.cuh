@@ -67,6 +67,19 @@ __device__ __forceinline__ uint4 load_remote_vector(const void* pointer) {
     return value;
 }
 
+// One device-wide nanosecond clock for diagnostic comparisons across FFN CTAs.
+// No timestamps are compared across GPUs, and probes are absent from timed runs.
+__device__ __forceinline__ uint64_t readiness_timestamp() {
+    uint64_t value;
+    asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(value));
+    return value;
+}
+__device__ __forceinline__ void readiness_first(uint64_t* slot, uint64_t value) {
+    auto* target = reinterpret_cast<unsigned long long*>(slot);
+    const auto previous = atomicCAS(target, 0ull, static_cast<unsigned long long>(value));
+    if (previous != 0) atomicMin(target, static_cast<unsigned long long>(value));
+}
+
 // A token may select several experts on this worker. Read each activation
 // vector once (over NVLink in hybrid mode), then fan it out to all local rows.
 template <bool kRemote>
@@ -414,6 +427,40 @@ __device__ __forceinline__ NVLinkControl* nvlink_control(uint8_t* base) {
     return reinterpret_cast<NVLinkControl*>(base);
 }
 
+// Decode experiment: keep metadata in the existing packet, but publish it from
+// the single BeginSource CTA before the multi-CTA activation/scales copy.
+__device__ __forceinline__ void publish_nvlink_metadata(const DeviceArgs& a) {
+    const Layout l = a.layout;
+    const int tokens = control(a.base)->source_tokens;
+    uint8_t* packet = a.base + l.request;
+    if (threadIdx.x == 0) {
+        reinterpret_cast<Packet*>(packet)->tokens = tokens;
+        reinterpret_cast<Packet*>(packet)->reserved =
+            static_cast<uint64_t>(NVLinkReplyMode::AllWorkerPartials);
+    }
+    auto* histogram = reinterpret_cast<int*>(packet + l.packet_histogram(tokens));
+    if (a.bucket > kNVLinkFusedMetadataTokens)
+        for (int e = threadIdx.x; e < l.experts; e += blockDim.x) histogram[e] = 0;
+    __syncthreads();
+    for (int i = threadIdx.x; i < tokens * l.topk; i += blockDim.x) {
+        const int64_t expert = a.ids[i];
+        if (expert < -1 || expert >= l.experts) fail("invalid real expert", a);
+        for (int previous = 0; expert >= 0 && previous < i % l.topk; ++previous)
+            if (a.ids[i - i % l.topk + previous] == expert)
+                fail("duplicate expert for one token", a);
+        reinterpret_cast<int64_t*>(packet + l.packet_ids(tokens))[i] = expert;
+        reinterpret_cast<float*>(packet + l.packet_weights(tokens))[i] = a.weights[i];
+        if (a.bucket > kNVLinkFusedMetadataTokens && expert >= 0)
+            atomicAdd(histogram + expert, 1);
+    }
+    // Every writing lane makes its metadata visible at system scope before
+    // thread zero advertises completion to the peer GPUs.
+    __threadfence_system();
+    __syncthreads();
+    if (threadIdx.x == 0)
+        release(&nvlink_control(a.base)->metadata_ready, control(a.base)->epoch);
+}
+
 // Shared-domain directional protocol. The role-specific peer array maps a
 // worker to source packets, and a source to worker-local reply partials.
 // Kernel boundaries complete all copy/reduction CTAs before publishing credits.
@@ -434,7 +481,10 @@ __device__ __forceinline__ void nvlink_operation(const DeviceArgs& a) {
             state->epoch = next;
             state->source_tokens = live_source_tokens(a);
         }
-        if (a.bucket > kNVLinkFusedMetadataTokens) {
+        if (a.nvlink_early_metadata) {
+            __syncthreads();
+            publish_nvlink_metadata(a);
+        } else if (a.bucket > kNVLinkFusedMetadataTokens) {
             __syncthreads();
             auto* histogram = reinterpret_cast<int*>(a.base + l.request +
                                                      l.packet_histogram(state->source_tokens));
@@ -457,9 +507,13 @@ __device__ __forceinline__ void nvlink_operation(const DeviceArgs& a) {
             ++state->epoch;
             local->sparse_collectors = 0;
             for (int source = 0; source < l.sources; ++source) {
-                // Request N from EVERY source follows its entire collect N-1
-                // on an ordered stream, acknowledging all previous reply reads.
-                wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
+                // Metadata N, like the original full Request N, follows that
+                // source's entire collect N-1 on its ordered stream. It thus
+                // acknowledges every previous reply read before reply reuse.
+                const uint64_t* ready = a.nvlink_early_metadata ?
+                    &nvlink_control(a.peers[source])->metadata_ready :
+                    &control(a.peers[source])->request_ready;
+                wait_local(ready, state->epoch, a);
                 // One aligned volatile read obtains the immutable current
                 // packet header after its RequestReady publication.
                 static_assert(sizeof(Packet) == sizeof(uint4));
@@ -473,6 +527,11 @@ __device__ __forceinline__ void nvlink_operation(const DeviceArgs& a) {
                 if (mode == static_cast<uint64_t>(NVLinkReplyMode::SelectedWorkerPartials))
                     local->sparse_collectors |= 1u << source;
             }
+            // Matched experimental control: keep early source metadata packing
+            // but restore the original all-payload gate before preparation.
+            if (a.readiness_force_payload_barrier)
+                for (int source = 0; source < l.sources; ++source)
+                    wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
         }
         __syncthreads();
         if (a.bucket <= kNVLinkFusedMetadataTokens) {
@@ -490,6 +549,10 @@ __device__ __forceinline__ void nvlink_operation(const DeviceArgs& a) {
         }
         __syncthreads();
         prefix_nvlink(a);
+        if (tid == 0 && a.readiness_trace != nullptr) {
+            a.readiness_trace[0] = readiness_timestamp();
+            a.readiness_trace[11] = state->epoch;
+        }
     } else if constexpr (kOperation == MakePartials) {
         make_partial_vectors<false>(a);
     } else if constexpr (kOperation == SendReply) {
@@ -739,6 +802,27 @@ __device__ __forceinline__ void pack_source_packet(const DeviceArgs& a) {
     const int stride = gridDim.x * blockDim.x;
     const int tokens = state->source_tokens;
     uint8_t* packet = a.base + l.request;
+    if (a.readiness_delay_cycles != 0) {
+        if (threadIdx.x == 0) {
+            const uint64_t start = clock64();
+            while (clock64() - start < a.readiness_delay_cycles) {}
+        }
+        __syncthreads();
+    }
+    if (a.nvlink_early_metadata) {
+        // Header, routing IDs/weights and counts were published by BeginSource.
+        // Only this payload remains unavailable until SendRequest completes.
+        const size_t xbytes = size_t(tokens) * l.hidden * l.element_bytes();
+        for (size_t i = tid; i < xbytes / 16; i += stride)
+            reinterpret_cast<uint4*>(packet + l.packet_x())[i] =
+                reinterpret_cast<const uint4*>(a.x)[i];
+        for (int i = tid; i < tokens * l.scale_groups(); i += stride) {
+            const int token = i / l.scale_groups(), group = i % l.scale_groups();
+            reinterpret_cast<float*>(packet + l.packet_scales(tokens))[i] =
+                a.scales[token * a.scale_stride0 + group * a.scale_stride1];
+        }
+        return;
+    }
     if (tid == 0) {
         reinterpret_cast<Packet*>(packet)->tokens = tokens;
         // Captured storage extent chooses the collector, independently of
@@ -879,6 +963,20 @@ __global__ void directional_kernel(DeviceArgs a) {
             const int n = state->received_tokens[source];
             const uint8_t* packet = a.peers[source] + l.request;
             const int extent = l.nvlink ? a.bucket : n;
+            // Only CTAs that own live rows poll this source. Other sources may
+            // already gather while this source's payload is still being copied.
+            if (token < n && (a.nvlink_early_metadata || a.readiness_trace != nullptr)) {
+                if (threadIdx.x == 0) {
+                    wait_local(&control(a.peers[source])->request_ready, state->epoch, a);
+                    if (a.readiness_trace != nullptr) {
+                        const uint64_t now = readiness_timestamp();
+                        readiness_first(a.readiness_trace + 1 + 3 * source, now);
+                        readiness_first(a.readiness_trace + 2 + 3 * source, now);
+                    }
+                }
+                __syncthreads();
+            }
+            const bool live_chunk = token < n;
             for (; token < extent; token += gridDim.x) {
                 if (threadIdx.x < l.topk) {
                     const int k = threadIdx.x;
@@ -900,6 +998,13 @@ __global__ void directional_kernel(DeviceArgs a) {
                 __syncthreads();
                 if (token < n) copy_expert_rows<true>(a, packet, n, token, slots);
                 __syncthreads();
+            }
+            if (live_chunk && a.readiness_trace != nullptr && threadIdx.x == 0) {
+                atomicMax(reinterpret_cast<unsigned long long*>(a.readiness_trace + 3 + 3 * source),
+                          static_cast<unsigned long long>(readiness_timestamp()));
+                atomicAdd(reinterpret_cast<unsigned long long*>(a.readiness_trace + 7 + 2 * source), 1ull);
+                if (acquire(&control(a.peers[1 - source])->request_ready) < state->epoch)
+                    atomicAdd(reinterpret_cast<unsigned long long*>(a.readiness_trace + 8 + 2 * source), 1ull);
             }
             token -= extent;
         }

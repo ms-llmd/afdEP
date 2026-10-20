@@ -1,0 +1,2468 @@
+{
+  "experiment": "NVLink metadata/payload readiness",
+  "date": "2026-10-20",
+  "base_commit": "973a13e3107153ed389f7eb8f60029ad199494e7",
+  "hardware": {
+    "gpus": 4,
+    "model": "NVIDIA H100 80GB HBM3",
+    "topology": "one NV18 domain, 2 Attention + 2 FFN"
+  },
+  "nccl_runtime": 23007,
+  "protocol_version": 4,
+  "summary": {
+    "native_source_digest": "c8159be4a3ac5ac23f33bfc6b8484e5a11ea942756c2d6d5f1dc26360de4c00a",
+    "scope": "4 H100, 2A2F NVLink, H2048/E128/K8; communication only, graph per token extent.",
+    "interpretation": "Descriptive three paired in-process repeats. Negative latency change is faster. early/early_gated isolates readiness; baseline is original ordering in the same experimental build.",
+    "cells": [
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "median_roundtrip_us": {
+          "baseline": 30.080032348632812,
+          "early_gated": 34.82992172241211,
+          "early": 33.01318359375
+        },
+        "comparisons": {
+          "baseline": {
+            "paired_latency_changes_percent": [
+              9.306848567197656,
+              9.744156682585148,
+              9.772969956754984
+            ],
+            "geomean_latency_change_percent": 9.60778407180456,
+            "all_three_faster": false,
+            "all_three_slower": true
+          },
+          "early_gated": {
+            "paired_latency_changes_percent": [
+              -5.83976373576125,
+              -5.769061788813879,
+              -5.055173976652771
+            ],
+            "geomean_latency_change_percent": -5.5553301906388075,
+            "all_three_faster": true,
+            "all_three_slower": false
+          }
+        }
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "median_roundtrip_us": {
+          "baseline": 30.91971206665039,
+          "early_gated": 33.03260803222656,
+          "early": 30.678016662597656
+        },
+        "comparisons": {
+          "baseline": {
+            "paired_latency_changes_percent": [
+              -0.315757967788699,
+              -0.8117217436388269,
+              -1.2008154498106993
+            ],
+            "geomean_latency_change_percent": -0.7767592311154425,
+            "all_three_faster": true,
+            "all_three_slower": false
+          },
+          "early_gated": {
+            "paired_latency_changes_percent": [
+              -6.683452847724047,
+              -7.252762925409673,
+              -7.583595045771762
+            ],
+            "geomean_latency_change_percent": -7.174014070406809,
+            "all_three_faster": true,
+            "all_three_slower": false
+          }
+        }
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "median_roundtrip_us": {
+          "baseline": 32.28668975830078,
+          "early_gated": 35.178016662597656,
+          "early": 32.98380661010742
+        },
+        "comparisons": {
+          "baseline": {
+            "paired_latency_changes_percent": [
+              1.9775233657759461,
+              2.1911543294964364,
+              2.2342783268244126
+            ],
+            "geomean_latency_change_percent": 2.134256950640956,
+            "all_three_faster": false,
+            "all_three_slower": true
+          },
+          "early_gated": {
+            "paired_latency_changes_percent": [
+              -6.260913110871247,
+              -6.2044209341279295,
+              -6.741870692416496
+            ],
+            "geomean_latency_change_percent": -6.402712588498316,
+            "all_three_faster": true,
+            "all_three_slower": false
+          }
+        }
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "median_roundtrip_us": {
+          "baseline": 39.95212936401367,
+          "early_gated": 44.84483337402344,
+          "early": 41.8419189453125
+        },
+        "comparisons": {
+          "baseline": {
+            "paired_latency_changes_percent": [
+              4.681413806903767,
+              4.8375421826219345,
+              4.80829162685692
+            ],
+            "geomean_latency_change_percent": 4.775727285355846,
+            "all_three_faster": false,
+            "all_three_slower": true
+          },
+          "early_gated": {
+            "paired_latency_changes_percent": [
+              -6.727910740941246,
+              -6.211037140058817,
+              -6.80349457326982
+            ],
+            "geomean_latency_change_percent": -6.5811847043732445,
+            "all_three_faster": true,
+            "all_three_slower": false
+          }
+        }
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "median_roundtrip_us": {
+          "baseline": 31.696575164794922,
+          "early_gated": 35.777984619140625,
+          "early": 33.64166259765625
+        },
+        "comparisons": {
+          "baseline": {
+            "paired_latency_changes_percent": [
+              6.53425950230031,
+              6.287669079994629,
+              5.123152126064556
+            ],
+            "geomean_latency_change_percent": 5.97990269094526,
+            "all_three_faster": false,
+            "all_three_slower": true
+          },
+          "early_gated": {
+            "paired_latency_changes_percent": [
+              -6.036175847738745,
+              -5.971051875128475,
+              -6.223377519062989
+            ],
+            "geomean_latency_change_percent": -6.076929335068892,
+            "all_three_faster": true,
+            "all_three_slower": false
+          }
+        }
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "median_roundtrip_us": {
+          "baseline": 32.09926223754883,
+          "early_gated": 34.43843078613281,
+          "early": 31.870208740234375
+        },
+        "comparisons": {
+          "baseline": {
+            "paired_latency_changes_percent": [
+              -0.10397861332405167,
+              -0.7135786972901625,
+              -0.9755140640350657
+            ],
+            "geomean_latency_change_percent": -0.5983602949210964,
+            "all_three_faster": true,
+            "all_three_slower": false
+          },
+          "early_gated": {
+            "paired_latency_changes_percent": [
+              -7.348095875707383,
+              -7.560162742047039,
+              -7.488373726216313
+            ],
+            "geomean_latency_change_percent": -7.4655860134494105,
+            "all_three_faster": true,
+            "all_three_slower": false
+          }
+        }
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "median_roundtrip_us": {
+          "baseline": 33.377601623535156,
+          "early_gated": 36.1907844543457,
+          "early": 33.88435363769531
+        },
+        "comparisons": {
+          "baseline": {
+            "paired_latency_changes_percent": [
+              1.3251573885344259,
+              1.7369283684556036,
+              1.5700012960388143
+            ],
+            "geomean_latency_change_percent": 1.5438881736399734,
+            "all_three_faster": false,
+            "all_three_slower": true
+          },
+          "early_gated": {
+            "paired_latency_changes_percent": [
+              -6.230512789627385,
+              -6.372978235826665,
+              -6.810567617032726
+            ],
+            "geomean_latency_change_percent": -6.471678842730444,
+            "all_three_faster": true,
+            "all_three_slower": false
+          }
+        }
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "median_roundtrip_us": {
+          "baseline": 39.054046630859375,
+          "early_gated": 44.415870666503906,
+          "early": 41.5937614440918
+        },
+        "comparisons": {
+          "baseline": {
+            "paired_latency_changes_percent": [
+              6.503077228431464,
+              6.688171161313328,
+              6.194928490613205
+            ],
+            "geomean_latency_change_percent": 6.461864501665793,
+            "all_three_faster": false,
+            "all_three_slower": true
+          },
+          "early_gated": {
+            "paired_latency_changes_percent": [
+              -6.362942394971971,
+              -6.579556028271583,
+              -6.255798965970005
+            ],
+            "geomean_latency_change_percent": -6.399529376361435,
+            "all_three_faster": true,
+            "all_three_slower": false
+          }
+        }
+      }
+    ],
+    "causal_diagnostic": [
+      {
+        "payload": "bf16",
+        "arm": "baseline",
+        "delayed_source": 0,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "bf16",
+        "arm": "baseline",
+        "delayed_source": 0,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "bf16",
+        "arm": "early_gated",
+        "delayed_source": 0,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "bf16",
+        "arm": "early_gated",
+        "delayed_source": 0,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "bf16",
+        "arm": "early",
+        "delayed_source": 0,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 32
+      },
+      {
+        "payload": "bf16",
+        "arm": "early",
+        "delayed_source": 0,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 32
+      },
+      {
+        "payload": "bf16",
+        "arm": "baseline",
+        "delayed_source": 1,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "bf16",
+        "arm": "baseline",
+        "delayed_source": 1,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "bf16",
+        "arm": "early_gated",
+        "delayed_source": 1,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "bf16",
+        "arm": "early_gated",
+        "delayed_source": 1,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "bf16",
+        "arm": "early",
+        "delayed_source": 1,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 32
+      },
+      {
+        "payload": "bf16",
+        "arm": "early",
+        "delayed_source": 1,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 32
+      },
+      {
+        "payload": "fp8",
+        "arm": "baseline",
+        "delayed_source": 0,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "fp8",
+        "arm": "baseline",
+        "delayed_source": 0,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "fp8",
+        "arm": "early_gated",
+        "delayed_source": 0,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "fp8",
+        "arm": "early_gated",
+        "delayed_source": 0,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "fp8",
+        "arm": "early",
+        "delayed_source": 0,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 32
+      },
+      {
+        "payload": "fp8",
+        "arm": "early",
+        "delayed_source": 0,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 32
+      },
+      {
+        "payload": "fp8",
+        "arm": "baseline",
+        "delayed_source": 1,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "fp8",
+        "arm": "baseline",
+        "delayed_source": 1,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "fp8",
+        "arm": "early_gated",
+        "delayed_source": 1,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "fp8",
+        "arm": "early_gated",
+        "delayed_source": 1,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 0
+      },
+      {
+        "payload": "fp8",
+        "arm": "early",
+        "delayed_source": 1,
+        "worker": 0,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 32
+      },
+      {
+        "payload": "fp8",
+        "arm": "early",
+        "delayed_source": 1,
+        "worker": 1,
+        "fast_chunks": 32,
+        "fast_chunks_before_peer_ready": 32
+      }
+    ],
+    "all_eight_jobs_passed": true
+  },
+  "timing": {
+    "complete": true,
+    "stage": "timing",
+    "source_digest": "c8159be4a3ac5ac23f33bfc6b8484e5a11ea942756c2d6d5f1dc26360de4c00a",
+    "torch": "2.13.0+cu130",
+    "cuda": "13.0",
+    "seed": 20261020,
+    "warmup": 200,
+    "iterations": 1000,
+    "repeats": 3,
+    "arms": {
+      "baseline": "early metadata disabled in the same native build",
+      "early_gated": "early metadata enabled; preparation still waits for every payload",
+      "early": "early metadata enabled; each gather waits on its own source"
+    },
+    "timing_scope": "Communication only, preallocated zero expert outputs, graph replay launches included, constructor/JIT/capture excluded.",
+    "configs": {
+      "bf16": {
+        "baseline": {
+          "capacity_tokens_per_rank": 128,
+          "hidden_size": 2048,
+          "num_experts": 128,
+          "top_k": 8,
+          "ffn_ranks": 2,
+          "attention_ranks": 2,
+          "expert_alignment": 128,
+          "payload": "bf16",
+          "num_gin_contexts": 8,
+          "transport_stripes": 8,
+          "num_sms": 132,
+          "gpu_timeout_s": 60,
+          "rdma_traffic_class": 0,
+          "allow_hybrid_mode": true,
+          "transport": "nvlink",
+          "nvlink_early_metadata": false
+        },
+        "early_gated": {
+          "capacity_tokens_per_rank": 128,
+          "hidden_size": 2048,
+          "num_experts": 128,
+          "top_k": 8,
+          "ffn_ranks": 2,
+          "attention_ranks": 2,
+          "expert_alignment": 128,
+          "payload": "bf16",
+          "num_gin_contexts": 8,
+          "transport_stripes": 8,
+          "num_sms": 132,
+          "gpu_timeout_s": 60,
+          "rdma_traffic_class": 0,
+          "allow_hybrid_mode": true,
+          "transport": "nvlink",
+          "nvlink_early_metadata": true
+        },
+        "early": {
+          "capacity_tokens_per_rank": 128,
+          "hidden_size": 2048,
+          "num_experts": 128,
+          "top_k": 8,
+          "ffn_ranks": 2,
+          "attention_ranks": 2,
+          "expert_alignment": 128,
+          "payload": "bf16",
+          "num_gin_contexts": 8,
+          "transport_stripes": 8,
+          "num_sms": 132,
+          "gpu_timeout_s": 60,
+          "rdma_traffic_class": 0,
+          "allow_hybrid_mode": true,
+          "transport": "nvlink",
+          "nvlink_early_metadata": true
+        }
+      },
+      "fp8": {
+        "baseline": {
+          "capacity_tokens_per_rank": 128,
+          "hidden_size": 2048,
+          "num_experts": 128,
+          "top_k": 8,
+          "ffn_ranks": 2,
+          "attention_ranks": 2,
+          "expert_alignment": 128,
+          "payload": "fp8",
+          "num_gin_contexts": 8,
+          "transport_stripes": 8,
+          "num_sms": 132,
+          "gpu_timeout_s": 60,
+          "rdma_traffic_class": 0,
+          "allow_hybrid_mode": true,
+          "transport": "nvlink",
+          "nvlink_early_metadata": false
+        },
+        "early_gated": {
+          "capacity_tokens_per_rank": 128,
+          "hidden_size": 2048,
+          "num_experts": 128,
+          "top_k": 8,
+          "ffn_ranks": 2,
+          "attention_ranks": 2,
+          "expert_alignment": 128,
+          "payload": "fp8",
+          "num_gin_contexts": 8,
+          "transport_stripes": 8,
+          "num_sms": 132,
+          "gpu_timeout_s": 60,
+          "rdma_traffic_class": 0,
+          "allow_hybrid_mode": true,
+          "transport": "nvlink",
+          "nvlink_early_metadata": true
+        },
+        "early": {
+          "capacity_tokens_per_rank": 128,
+          "hidden_size": 2048,
+          "num_experts": 128,
+          "top_k": 8,
+          "ffn_ranks": 2,
+          "attention_ranks": 2,
+          "expert_alignment": 128,
+          "payload": "fp8",
+          "num_gin_contexts": 8,
+          "transport_stripes": 8,
+          "num_sms": 132,
+          "gpu_timeout_s": 60,
+          "rdma_traffic_class": 0,
+          "allow_hybrid_mode": true,
+          "transport": "nvlink",
+          "nvlink_early_metadata": true
+        }
+      }
+    },
+    "records": [
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "repeat": 0,
+        "position": 0,
+        "arm": "baseline",
+        "rank_microseconds": [
+          29.977088928222656,
+          29.98784065246582,
+          30.000320434570312,
+          30.003551483154297
+        ],
+        "critical_rank_microseconds": 30.003551483154297
+      },
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "repeat": 0,
+        "position": 1,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          34.80518341064453,
+          34.82992172241211,
+          34.76713562011719,
+          34.8287353515625
+        ],
+        "critical_rank_microseconds": 34.82992172241211
+      },
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "repeat": 0,
+        "position": 2,
+        "arm": "early",
+        "rank_microseconds": [
+          32.75065612792969,
+          32.781150817871094,
+          32.76134490966797,
+          32.795936584472656
+        ],
+        "critical_rank_microseconds": 32.795936584472656
+      },
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "repeat": 1,
+        "position": 0,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          34.80031967163086,
+          35.00688171386719,
+          34.78054428100586,
+          35.03433609008789
+        ],
+        "critical_rank_microseconds": 35.03433609008789
+      },
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "repeat": 1,
+        "position": 1,
+        "arm": "early",
+        "rank_microseconds": [
+          32.73283386230469,
+          33.01136016845703,
+          32.758209228515625,
+          33.01318359375
+        ],
+        "critical_rank_microseconds": 33.01318359375
+      },
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "repeat": 1,
+        "position": 2,
+        "arm": "baseline",
+        "rank_microseconds": [
+          30.05388832092285,
+          30.081951141357422,
+          30.041759490966797,
+          30.07916831970215
+        ],
+        "critical_rank_microseconds": 30.081951141357422
+      },
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "repeat": 2,
+        "position": 0,
+        "arm": "early",
+        "rank_microseconds": [
+          33.004608154296875,
+          32.740543365478516,
+          33.019744873046875,
+          32.784671783447266
+        ],
+        "critical_rank_microseconds": 33.019744873046875
+      },
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "repeat": 2,
+        "position": 1,
+        "arm": "baseline",
+        "rank_microseconds": [
+          30.05344009399414,
+          30.067136764526367,
+          30.043968200683594,
+          30.080032348632812
+        ],
+        "critical_rank_microseconds": 30.080032348632812
+      },
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "repeat": 2,
+        "position": 2,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          34.77036666870117,
+          34.760128021240234,
+          34.77113723754883,
+          34.77782440185547
+        ],
+        "critical_rank_microseconds": 34.77782440185547
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "repeat": 0,
+        "position": 0,
+        "arm": "baseline",
+        "rank_microseconds": [
+          30.913055419921875,
+          30.91971206665039,
+          30.910432815551758,
+          30.913951873779297
+        ],
+        "critical_rank_microseconds": 30.91971206665039
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "repeat": 0,
+        "position": 1,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          33.012481689453125,
+          32.99824142456055,
+          33.01871871948242,
+          33.029598236083984
+        ],
+        "critical_rank_microseconds": 33.029598236083984
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "repeat": 0,
+        "position": 2,
+        "arm": "early",
+        "rank_microseconds": [
+          30.81939125061035,
+          30.822080612182617,
+          30.81292724609375,
+          30.642080307006836
+        ],
+        "critical_rank_microseconds": 30.822080612182617
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "repeat": 1,
+        "position": 0,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          33.014305114746094,
+          33.005889892578125,
+          33.03260803222656,
+          33.011070251464844
+        ],
+        "critical_rank_microseconds": 33.03260803222656
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "repeat": 1,
+        "position": 1,
+        "arm": "early",
+        "rank_microseconds": [
+          30.61414337158203,
+          30.61190414428711,
+          30.626144409179688,
+          30.636831283569336
+        ],
+        "critical_rank_microseconds": 30.636831283569336
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "repeat": 1,
+        "position": 2,
+        "arm": "baseline",
+        "rank_microseconds": [
+          30.872352600097656,
+          30.864864349365234,
+          30.885791778564453,
+          30.88755226135254
+        ],
+        "critical_rank_microseconds": 30.88755226135254
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "repeat": 2,
+        "position": 0,
+        "arm": "early",
+        "rank_microseconds": [
+          30.654176712036133,
+          30.654144287109375,
+          30.649280548095703,
+          30.678016662597656
+        ],
+        "critical_rank_microseconds": 30.678016662597656
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "repeat": 2,
+        "position": 1,
+        "arm": "baseline",
+        "rank_microseconds": [
+          31.050880432128906,
+          30.874143600463867,
+          31.04275131225586,
+          30.861055374145508
+        ],
+        "critical_rank_microseconds": 31.050880432128906
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "repeat": 2,
+        "position": 2,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          32.99776077270508,
+          33.1715202331543,
+          33.19331359863281,
+          33.1954231262207
+        ],
+        "critical_rank_microseconds": 33.1954231262207
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "repeat": 0,
+        "position": 0,
+        "arm": "baseline",
+        "rank_microseconds": [
+          32.29702377319336,
+          32.3243522644043,
+          32.299903869628906,
+          32.336097717285156
+        ],
+        "critical_rank_microseconds": 32.336097717285156
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "repeat": 0,
+        "position": 1,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          35.15363311767578,
+          35.14963150024414,
+          35.178016662597656,
+          35.17756652832031
+        ],
+        "critical_rank_microseconds": 35.178016662597656
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "repeat": 0,
+        "position": 2,
+        "arm": "early",
+        "rank_microseconds": [
+          32.97555160522461,
+          32.96566390991211,
+          32.96575927734375,
+          32.95859146118164
+        ],
+        "critical_rank_microseconds": 32.97555160522461
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "repeat": 1,
+        "position": 0,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          35.15705490112305,
+          35.13862228393555,
+          35.16563034057617,
+          35.15465545654297
+        ],
+        "critical_rank_microseconds": 35.16563034057617
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "repeat": 1,
+        "position": 1,
+        "arm": "early",
+        "rank_microseconds": [
+          32.951744079589844,
+          32.96227264404297,
+          32.967777252197266,
+          32.98380661010742
+        ],
+        "critical_rank_microseconds": 32.98380661010742
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "repeat": 1,
+        "position": 2,
+        "arm": "baseline",
+        "rank_microseconds": [
+          32.273441314697266,
+          32.2591667175293,
+          32.27657699584961,
+          32.266944885253906
+        ],
+        "critical_rank_microseconds": 32.27657699584961
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "repeat": 2,
+        "position": 0,
+        "arm": "early",
+        "rank_microseconds": [
+          32.988224029541016,
+          32.961952209472656,
+          32.98438262939453,
+          33.00806427001953
+        ],
+        "critical_rank_microseconds": 33.00806427001953
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "repeat": 2,
+        "position": 1,
+        "arm": "baseline",
+        "rank_microseconds": [
+          32.26348876953125,
+          32.25263977050781,
+          32.28668975830078,
+          32.26591873168945
+        ],
+        "critical_rank_microseconds": 32.28668975830078
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "repeat": 2,
+        "position": 2,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          35.38079833984375,
+          35.16147232055664,
+          35.39430236816406,
+          35.163551330566406
+        ],
+        "critical_rank_microseconds": 35.39430236816406
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "repeat": 0,
+        "position": 0,
+        "arm": "baseline",
+        "rank_microseconds": [
+          39.93519973754883,
+          39.95292663574219,
+          39.942752838134766,
+          39.9571533203125
+        ],
+        "critical_rank_microseconds": 39.9571533203125
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "repeat": 0,
+        "position": 1,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          44.84483337402344,
+          44.840641021728516,
+          44.77439880371094,
+          44.67046356201172
+        ],
+        "critical_rank_microseconds": 44.84483337402344
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "repeat": 0,
+        "position": 2,
+        "arm": "early",
+        "rank_microseconds": [
+          41.799617767333984,
+          41.79619216918945,
+          41.79420852661133,
+          41.82771301269531
+        ],
+        "critical_rank_microseconds": 41.82771301269531
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "repeat": 1,
+        "position": 0,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          44.658592224121094,
+          44.60153579711914,
+          44.65657424926758,
+          44.613121032714844
+        ],
+        "critical_rank_microseconds": 44.658592224121094
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "repeat": 1,
+        "position": 1,
+        "arm": "early",
+        "rank_microseconds": [
+          41.81459045410156,
+          41.86860656738281,
+          41.80489730834961,
+          41.884830474853516
+        ],
+        "critical_rank_microseconds": 41.884830474853516
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "repeat": 1,
+        "position": 2,
+        "arm": "baseline",
+        "rank_microseconds": [
+          39.942623138427734,
+          39.91164779663086,
+          39.95212936401367,
+          39.930816650390625
+        ],
+        "critical_rank_microseconds": 39.95212936401367
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "repeat": 2,
+        "position": 0,
+        "arm": "early",
+        "rank_microseconds": [
+          41.80886459350586,
+          41.823265075683594,
+          41.84035110473633,
+          41.8419189453125
+        ],
+        "critical_rank_microseconds": 41.8419189453125
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "repeat": 2,
+        "position": 1,
+        "arm": "baseline",
+        "rank_microseconds": [
+          39.91603088378906,
+          39.91059112548828,
+          39.92233657836914,
+          39.91993713378906
+        ],
+        "critical_rank_microseconds": 39.92233657836914
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "repeat": 2,
+        "position": 2,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          44.79715347290039,
+          44.896446228027344,
+          44.654720306396484,
+          44.67747116088867
+        ],
+        "critical_rank_microseconds": 44.896446228027344
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "repeat": 0,
+        "position": 0,
+        "arm": "baseline",
+        "rank_microseconds": [
+          31.66409683227539,
+          31.62041664123535,
+          31.696575164794922,
+          31.63747215270996
+        ],
+        "critical_rank_microseconds": 31.696575164794922
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "repeat": 0,
+        "position": 1,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          35.88576126098633,
+          35.75040054321289,
+          35.936927795410156,
+          35.911582946777344
+        ],
+        "critical_rank_microseconds": 35.936927795410156
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "repeat": 0,
+        "position": 2,
+        "arm": "early",
+        "rank_microseconds": [
+          33.52348709106445,
+          33.7677116394043,
+          33.521568298339844,
+          33.765953063964844
+        ],
+        "critical_rank_microseconds": 33.7677116394043
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "repeat": 1,
+        "position": 0,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          35.74959945678711,
+          35.777984619140625,
+          35.77782440185547,
+          35.77417755126953
+        ],
+        "critical_rank_microseconds": 35.777984619140625
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "repeat": 1,
+        "position": 1,
+        "arm": "early",
+        "rank_microseconds": [
+          33.52732849121094,
+          33.638912200927734,
+          33.64166259765625,
+          33.63702392578125
+        ],
+        "critical_rank_microseconds": 33.64166259765625
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "repeat": 1,
+        "position": 2,
+        "arm": "baseline",
+        "rank_microseconds": [
+          31.62860870361328,
+          31.645856857299805,
+          31.64784049987793,
+          31.651519775390625
+        ],
+        "critical_rank_microseconds": 31.651519775390625
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "repeat": 2,
+        "position": 0,
+        "arm": "early",
+        "rank_microseconds": [
+          33.509185791015625,
+          33.51225662231445,
+          33.52262496948242,
+          33.52812957763672
+        ],
+        "critical_rank_microseconds": 33.52812957763672
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "repeat": 2,
+        "position": 1,
+        "arm": "baseline",
+        "rank_microseconds": [
+          31.89414405822754,
+          31.876319885253906,
+          31.658687591552734,
+          31.886432647705078
+        ],
+        "critical_rank_microseconds": 31.89414405822754
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "repeat": 2,
+        "position": 2,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          35.7531852722168,
+          35.738529205322266,
+          35.75049591064453,
+          35.734622955322266
+        ],
+        "critical_rank_microseconds": 35.7531852722168
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "repeat": 0,
+        "position": 0,
+        "arm": "baseline",
+        "rank_microseconds": [
+          31.897632598876953,
+          31.914304733276367,
+          31.90492820739746,
+          31.898208618164062
+        ],
+        "critical_rank_microseconds": 31.914304733276367
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "repeat": 0,
+        "position": 1,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          34.389984130859375,
+          34.4015998840332,
+          34.409568786621094,
+          34.407745361328125
+        ],
+        "critical_rank_microseconds": 34.409568786621094
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "repeat": 0,
+        "position": 2,
+        "arm": "early",
+        "rank_microseconds": [
+          31.841279983520508,
+          31.86844825744629,
+          31.865407943725586,
+          31.881120681762695
+        ],
+        "critical_rank_microseconds": 31.881120681762695
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "repeat": 1,
+        "position": 0,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          34.43171310424805,
+          34.47670364379883,
+          34.459007263183594,
+          34.465694427490234
+        ],
+        "critical_rank_microseconds": 34.47670364379883
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "repeat": 1,
+        "position": 1,
+        "arm": "early",
+        "rank_microseconds": [
+          31.83807945251465,
+          31.856351852416992,
+          31.851903915405273,
+          31.870208740234375
+        ],
+        "critical_rank_microseconds": 31.870208740234375
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "repeat": 1,
+        "position": 2,
+        "arm": "baseline",
+        "rank_microseconds": [
+          32.07059097290039,
+          32.08806228637695,
+          31.9005126953125,
+          32.09926223754883
+        ],
+        "critical_rank_microseconds": 32.09926223754883
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "repeat": 2,
+        "position": 0,
+        "arm": "early",
+        "rank_microseconds": [
+          31.83184051513672,
+          31.842912673950195,
+          31.851776123046875,
+          31.85955238342285
+        ],
+        "critical_rank_microseconds": 31.85955238342285
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "repeat": 2,
+        "position": 1,
+        "arm": "baseline",
+        "rank_microseconds": [
+          31.908191680908203,
+          32.15542221069336,
+          31.913728713989258,
+          32.17340850830078
+        ],
+        "critical_rank_microseconds": 32.17340850830078
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "repeat": 2,
+        "position": 2,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          34.41708755493164,
+          34.4219856262207,
+          34.43609619140625,
+          34.43843078613281
+        ],
+        "critical_rank_microseconds": 34.43843078613281
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "repeat": 0,
+        "position": 0,
+        "arm": "baseline",
+        "rank_microseconds": [
+          33.26015853881836,
+          33.43971252441406,
+          33.29536056518555,
+          33.44041442871094
+        ],
+        "critical_rank_microseconds": 33.44041442871094
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "repeat": 0,
+        "position": 1,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          36.1148796081543,
+          36.12739181518555,
+          36.13264083862305,
+          36.134944915771484
+        ],
+        "critical_rank_microseconds": 36.134944915771484
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "repeat": 0,
+        "position": 2,
+        "arm": "early",
+        "rank_microseconds": [
+          33.86057662963867,
+          33.86729431152344,
+          33.878944396972656,
+          33.88355255126953
+        ],
+        "critical_rank_microseconds": 33.88355255126953
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "repeat": 1,
+        "position": 0,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          36.115936279296875,
+          36.1907844543457,
+          36.182464599609375,
+          36.181983947753906
+        ],
+        "critical_rank_microseconds": 36.1907844543457
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "repeat": 1,
+        "position": 1,
+        "arm": "early",
+        "rank_microseconds": [
+          33.86163330078125,
+          33.85603332519531,
+          33.88435363769531,
+          33.87638473510742
+        ],
+        "critical_rank_microseconds": 33.88435363769531
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "repeat": 1,
+        "position": 2,
+        "arm": "baseline",
+        "rank_microseconds": [
+          33.283199310302734,
+          33.30585479736328,
+          33.30249786376953,
+          33.301055908203125
+        ],
+        "critical_rank_microseconds": 33.30585479736328
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "repeat": 2,
+        "position": 0,
+        "arm": "early",
+        "rank_microseconds": [
+          33.88819122314453,
+          33.86383819580078,
+          33.90163040161133,
+          33.88361740112305
+        ],
+        "critical_rank_microseconds": 33.90163040161133
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "repeat": 2,
+        "position": 1,
+        "arm": "baseline",
+        "rank_microseconds": [
+          33.3072624206543,
+          33.282718658447266,
+          33.33977508544922,
+          33.377601623535156
+        ],
+        "critical_rank_microseconds": 33.377601623535156
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "repeat": 2,
+        "position": 2,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          36.3724479675293,
+          36.37926483154297,
+          36.12284851074219,
+          36.21993637084961
+        ],
+        "critical_rank_microseconds": 36.37926483154297
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "repeat": 0,
+        "position": 0,
+        "arm": "baseline",
+        "rank_microseconds": [
+          38.84908676147461,
+          39.054046630859375,
+          38.83961486816406,
+          39.03635025024414
+        ],
+        "critical_rank_microseconds": 39.054046630859375
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "repeat": 0,
+        "position": 1,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          44.16511917114258,
+          44.416385650634766,
+          44.40879821777344,
+          44.42019271850586
+        ],
+        "critical_rank_microseconds": 44.42019271850586
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "repeat": 0,
+        "position": 2,
+        "arm": "early",
+        "rank_microseconds": [
+          41.5937614440918,
+          41.49440002441406,
+          41.58854293823242,
+          41.50851058959961
+        ],
+        "critical_rank_microseconds": 41.5937614440918
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "repeat": 1,
+        "position": 0,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          44.365089416503906,
+          44.41203308105469,
+          44.1802864074707,
+          44.415870666503906
+        ],
+        "critical_rank_microseconds": 44.415870666503906
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "repeat": 1,
+        "position": 1,
+        "arm": "early",
+        "rank_microseconds": [
+          41.48044967651367,
+          41.48019027709961,
+          41.48115158081055,
+          41.49350357055664
+        ],
+        "critical_rank_microseconds": 41.49350357055664
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "repeat": 1,
+        "position": 2,
+        "arm": "baseline",
+        "rank_microseconds": [
+          38.874305725097656,
+          38.846656799316406,
+          38.87420654296875,
+          38.89231872558594
+        ],
+        "critical_rank_microseconds": 38.89231872558594
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "repeat": 2,
+        "position": 0,
+        "arm": "early",
+        "rank_microseconds": [
+          41.59449768066406,
+          41.43747329711914,
+          41.58687973022461,
+          41.47071838378906
+        ],
+        "critical_rank_microseconds": 41.59449768066406
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "repeat": 2,
+        "position": 1,
+        "arm": "baseline",
+        "rank_microseconds": [
+          38.83456039428711,
+          39.16806411743164,
+          38.87788772583008,
+          39.16041564941406
+        ],
+        "critical_rank_microseconds": 39.16806411743164
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "repeat": 2,
+        "position": 2,
+        "arm": "early_gated",
+        "rank_microseconds": [
+          44.36435317993164,
+          44.24643325805664,
+          44.20134353637695,
+          44.370208740234375
+        ],
+        "critical_rank_microseconds": 44.370208740234375
+      }
+    ],
+    "descriptive_summary": [
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "arm": "early_gated",
+        "paired_ratios_to_baseline": [
+          1.160859964926739,
+          1.164629778349776,
+          1.1561764295587993
+        ],
+        "geomean_latency_change_percent": 16.055023849467066
+      },
+      {
+        "payload": "bf16",
+        "tokens": 1,
+        "arm": "early",
+        "paired_ratios_to_baseline": [
+          1.0930684856719766,
+          1.0974415668258515,
+          1.0977296995675498
+        ],
+        "geomean_latency_change_percent": 9.60778407180456
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "arm": "early_gated",
+        "paired_ratios_to_baseline": [
+          1.0682375749452495,
+          1.069447256704701,
+          1.0690654391839016
+        ],
+        "geomean_latency_change_percent": 6.891663767669076
+      },
+      {
+        "payload": "bf16",
+        "tokens": 8,
+        "arm": "early",
+        "paired_ratios_to_baseline": [
+          0.996842420322113,
+          0.9918827825636117,
+          0.987991845501893
+        ],
+        "geomean_latency_change_percent": -0.7767592311154425
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "arm": "early_gated",
+        "paired_ratios_to_baseline": [
+          1.0878868863571427,
+          1.089509285482722,
+          1.0962505798249054
+        ],
+        "geomean_latency_change_percent": 9.120958283338254
+      },
+      {
+        "payload": "bf16",
+        "tokens": 32,
+        "arm": "early",
+        "paired_ratios_to_baseline": [
+          1.0197752336577595,
+          1.0219115432949644,
+          1.0223427832682441
+        ],
+        "geomean_latency_change_percent": 2.134256950640956
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "arm": "early_gated",
+        "paired_ratios_to_baseline": [
+          1.1223230297346096,
+          1.1178025535817049,
+          1.1245946524170454
+        ],
+        "geomean_latency_change_percent": 12.156985671237418
+      },
+      {
+        "payload": "bf16",
+        "tokens": 128,
+        "arm": "early",
+        "paired_ratios_to_baseline": [
+          1.0468141380690377,
+          1.0483754218262193,
+          1.0480829162685692
+        ],
+        "geomean_latency_change_percent": 4.775727285355846
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "arm": "early_gated",
+        "paired_ratios_to_baseline": [
+          1.1337795206128438,
+          1.130371775922064,
+          1.1209952901367723
+        ],
+        "geomean_latency_change_percent": 12.836922750350332
+      },
+      {
+        "payload": "fp8",
+        "tokens": 1,
+        "arm": "early",
+        "paired_ratios_to_baseline": [
+          1.065342595023003,
+          1.0628766907999463,
+          1.0512315212606456
+        ],
+        "geomean_latency_change_percent": 5.979902690945238
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "arm": "early_gated",
+        "paired_ratios_to_baseline": [
+          1.078186383009089,
+          1.0740652974718197,
+          1.0704004450522442
+        ],
+        "geomean_latency_change_percent": 7.421266772734358
+      },
+      {
+        "payload": "fp8",
+        "tokens": 8,
+        "arm": "early",
+        "paired_ratios_to_baseline": [
+          0.9989602138667595,
+          0.9928642130270984,
+          0.9902448593596493
+        ],
+        "geomean_latency_change_percent": -0.5983602949210964
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "arm": "early_gated",
+        "paired_ratios_to_baseline": [
+          1.0805770661964973,
+          1.0866192948517512,
+          1.0899304642036138
+        ],
+        "geomean_latency_change_percent": 8.570203032824764
+      },
+      {
+        "payload": "fp8",
+        "tokens": 32,
+        "arm": "early",
+        "paired_ratios_to_baseline": [
+          1.0132515738853443,
+          1.017369283684556,
+          1.0157000129603881
+        ],
+        "geomean_latency_change_percent": 1.5438881736399734
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "arm": "early_gated",
+        "paired_ratios_to_baseline": [
+          1.1374030747278903,
+          1.1420216670518082,
+          1.132815974953624
+        ],
+        "geomean_latency_change_percent": 13.740736336403758
+      },
+      {
+        "payload": "fp8",
+        "tokens": 128,
+        "arm": "early",
+        "paired_ratios_to_baseline": [
+          1.0650307722843146,
+          1.0668817116131333,
+          1.061949284906132
+        ],
+        "geomean_latency_change_percent": 6.461864501665793
+      }
+    ],
+    "inference": "Three paired in-process repeats; no significance claim."
+  },
+  "diagnostic": {
+    "complete": true,
+    "stage": "diagnostic",
+    "source_digest": "c8159be4a3ac5ac23f33bfc6b8484e5a11ea942756c2d6d5f1dc26360de4c00a",
+    "torch": "2.13.0+cu130",
+    "cuda": "13.0",
+    "seed": 20261020,
+    "warmup": 200,
+    "iterations": 1000,
+    "repeats": 3,
+    "arms": {
+      "baseline": "early metadata disabled in the same native build",
+      "early_gated": "early metadata enabled; preparation still waits for every payload",
+      "early": "early metadata enabled; each gather waits on its own source"
+    },
+    "timing_scope": "Communication only, preallocated zero expert outputs, graph replay launches included, constructor/JIT/capture excluded.",
+    "configs": {},
+    "records": [
+      {
+        "payload": "bf16",
+        "arm": "baseline",
+        "delayed_source": 0,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494018583316608,
+              "source0_observed_ns": 1792494018583319104,
+              "source0_pack_start_ns": 1792494018583319104,
+              "source0_pack_end_ns": 1792494018583446016,
+              "source1_observed_ns": 1792494018583319328,
+              "source1_pack_start_ns": 1792494018583319328,
+              "source1_pack_end_ns": 1792494018583451456,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493959665602528,
+              "source0_observed_ns": 1792493959665604928,
+              "source0_pack_start_ns": 1792493959665604928,
+              "source0_pack_end_ns": 1792493959665747296,
+              "source1_observed_ns": 1792493959665605120,
+              "source1_pack_start_ns": 1792493959665605120,
+              "source1_pack_end_ns": 1792493959665752800,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "bf16",
+        "arm": "early_gated",
+        "delayed_source": 0,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494019428904416,
+              "source0_observed_ns": 1792494019428906848,
+              "source0_pack_start_ns": 1792494019428906848,
+              "source0_pack_end_ns": 1792494019428911360,
+              "source1_observed_ns": 1792494019428907008,
+              "source1_pack_start_ns": 1792494019428907008,
+              "source1_pack_end_ns": 1792494019428911552,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493960511198720,
+              "source0_observed_ns": 1792493960511201120,
+              "source0_pack_start_ns": 1792493960511201120,
+              "source0_pack_end_ns": 1792493960511205664,
+              "source1_observed_ns": 1792493960511201376,
+              "source1_pack_start_ns": 1792493960511201376,
+              "source1_pack_end_ns": 1792493960511205984,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "bf16",
+        "arm": "early",
+        "delayed_source": 0,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494022754961120,
+              "source0_observed_ns": 1792494022757445856,
+              "source0_pack_start_ns": 1792494022757445856,
+              "source0_pack_end_ns": 1792494022757450848,
+              "source1_observed_ns": 1792494022754963744,
+              "source1_pack_start_ns": 1792494022754963744,
+              "source1_pack_end_ns": 1792494022754968192,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 32,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": true,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493963837228128,
+              "source0_observed_ns": 1792493963839714688,
+              "source0_pack_start_ns": 1792493963839714688,
+              "source0_pack_end_ns": 1792493963839719648,
+              "source1_observed_ns": 1792493963837230720,
+              "source1_pack_start_ns": 1792493963837230720,
+              "source1_pack_end_ns": 1792493963837235136,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 32,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": true,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "bf16",
+        "arm": "baseline",
+        "delayed_source": 1,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494024097422496,
+              "source0_observed_ns": 1792494024097424960,
+              "source0_pack_start_ns": 1792494024097424960,
+              "source0_pack_end_ns": 1792494024097429536,
+              "source1_observed_ns": 1792494024097425152,
+              "source1_pack_start_ns": 1792494024097425152,
+              "source1_pack_end_ns": 1792494024097429728,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493965179680800,
+              "source0_observed_ns": 1792493965179683200,
+              "source0_pack_start_ns": 1792493965179683200,
+              "source0_pack_end_ns": 1792493965179687680,
+              "source1_observed_ns": 1792493965179683392,
+              "source1_pack_start_ns": 1792493965179683392,
+              "source1_pack_end_ns": 1792493965179688000,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "bf16",
+        "arm": "early_gated",
+        "delayed_source": 1,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494025422264608,
+              "source0_observed_ns": 1792494025422267040,
+              "source0_pack_start_ns": 1792494025422267040,
+              "source0_pack_end_ns": 1792494025422271648,
+              "source1_observed_ns": 1792494025422267232,
+              "source1_pack_start_ns": 1792494025422267232,
+              "source1_pack_end_ns": 1792494025422271776,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493966504512704,
+              "source0_observed_ns": 1792493966504515104,
+              "source0_pack_start_ns": 1792493966504515104,
+              "source0_pack_end_ns": 1792493966504519744,
+              "source1_observed_ns": 1792493966504515328,
+              "source1_pack_start_ns": 1792493966504515328,
+              "source1_pack_end_ns": 1792493966504519840,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "bf16",
+        "arm": "early",
+        "delayed_source": 1,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494026251874176,
+              "source0_observed_ns": 1792494026251876608,
+              "source0_pack_start_ns": 1792494026251876608,
+              "source0_pack_end_ns": 1792494026251881088,
+              "source1_observed_ns": 1792494026254364800,
+              "source1_pack_start_ns": 1792494026254364800,
+              "source1_pack_end_ns": 1792494026254369952,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 32,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": true,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493967334100064,
+              "source0_observed_ns": 1792493967334102464,
+              "source0_pack_start_ns": 1792493967334102464,
+              "source0_pack_end_ns": 1792493967334106848,
+              "source1_observed_ns": 1792493967336606368,
+              "source1_pack_start_ns": 1792493967336606368,
+              "source1_pack_end_ns": 1792493967336611520,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 32,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": true,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "fp8",
+        "arm": "baseline",
+        "delayed_source": 0,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494027139384128,
+              "source0_observed_ns": 1792494027139386592,
+              "source0_pack_start_ns": 1792494027139386592,
+              "source0_pack_end_ns": 1792494027139392000,
+              "source1_observed_ns": 1792494027139386752,
+              "source1_pack_start_ns": 1792494027139386752,
+              "source1_pack_end_ns": 1792494027139392096,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493968221619552,
+              "source0_observed_ns": 1792493968221621952,
+              "source0_pack_start_ns": 1792493968221621952,
+              "source0_pack_end_ns": 1792493968221627456,
+              "source1_observed_ns": 1792493968221622208,
+              "source1_pack_start_ns": 1792493968221622208,
+              "source1_pack_end_ns": 1792493968221627648,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "fp8",
+        "arm": "early_gated",
+        "delayed_source": 0,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494028465480288,
+              "source0_observed_ns": 1792494028465482816,
+              "source0_pack_start_ns": 1792494028465482816,
+              "source0_pack_end_ns": 1792494028465488576,
+              "source1_observed_ns": 1792494028465483008,
+              "source1_pack_start_ns": 1792494028465483008,
+              "source1_pack_end_ns": 1792494028465488576,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493969547705056,
+              "source0_observed_ns": 1792493969547707488,
+              "source0_pack_start_ns": 1792493969547707488,
+              "source0_pack_end_ns": 1792493969547712800,
+              "source1_observed_ns": 1792493969547707680,
+              "source1_pack_start_ns": 1792493969547707680,
+              "source1_pack_end_ns": 1792493969547713120,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "fp8",
+        "arm": "early",
+        "delayed_source": 0,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494029291191392,
+              "source0_observed_ns": 1792494029293678336,
+              "source0_pack_start_ns": 1792494029293678336,
+              "source0_pack_end_ns": 1792494029293684128,
+              "source1_observed_ns": 1792494029291194016,
+              "source1_pack_start_ns": 1792494029291194016,
+              "source1_pack_end_ns": 1792494029291199328,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 32,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": true,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493970373391968,
+              "source0_observed_ns": 1792493970375896064,
+              "source0_pack_start_ns": 1792493970375896064,
+              "source0_pack_end_ns": 1792493970375901984,
+              "source1_observed_ns": 1792493970373394560,
+              "source1_pack_start_ns": 1792493970373394560,
+              "source1_pack_end_ns": 1792493970373399808,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 32,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": true,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "fp8",
+        "arm": "baseline",
+        "delayed_source": 1,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494030610704736,
+              "source0_observed_ns": 1792494030610707168,
+              "source0_pack_start_ns": 1792494030610707168,
+              "source0_pack_end_ns": 1792494030610712640,
+              "source1_observed_ns": 1792494030610707360,
+              "source1_pack_start_ns": 1792494030610707360,
+              "source1_pack_end_ns": 1792494030610712928,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493971692911552,
+              "source0_observed_ns": 1792493971692913984,
+              "source0_pack_start_ns": 1792493971692913984,
+              "source0_pack_end_ns": 1792493971692919424,
+              "source1_observed_ns": 1792493971692914144,
+              "source1_pack_start_ns": 1792493971692914144,
+              "source1_pack_end_ns": 1792493971692919648,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "fp8",
+        "arm": "early_gated",
+        "delayed_source": 1,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494031443689152,
+              "source0_observed_ns": 1792494031443691584,
+              "source0_pack_start_ns": 1792494031443691584,
+              "source0_pack_end_ns": 1792494031443696928,
+              "source1_observed_ns": 1792494031443691776,
+              "source1_pack_start_ns": 1792494031443691776,
+              "source1_pack_end_ns": 1792494031443697120,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493972525890336,
+              "source0_observed_ns": 1792493972525892768,
+              "source0_pack_start_ns": 1792493972525892768,
+              "source0_pack_end_ns": 1792493972525898240,
+              "source1_observed_ns": 1792493972525892928,
+              "source1_pack_start_ns": 1792493972525892928,
+              "source1_pack_end_ns": 1792493972525898240,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 0,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": false,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      },
+      {
+        "payload": "fp8",
+        "arm": "early",
+        "delayed_source": 1,
+        "delay_cycles": 5000000,
+        "tokens": 32,
+        "workers": [
+          {
+            "worker": 0,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792494032754141856,
+              "source0_observed_ns": 1792494032754144320,
+              "source0_pack_start_ns": 1792494032754144320,
+              "source0_pack_end_ns": 1792494032754149792,
+              "source1_observed_ns": 1792494032756577152,
+              "source1_pack_start_ns": 1792494032756577152,
+              "source1_pack_end_ns": 1792494032756583232,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 32,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": true,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          },
+          {
+            "worker": 1,
+            "clock_scope": "single worker GPU globaltimer",
+            "clock_semantics": "Observed/start timestamps coincide after payload acquire; they do not measure separate wait stages.",
+            "trace": {
+              "prepare_done_ns": 1792493973836261696,
+              "source0_observed_ns": 1792493973836264096,
+              "source0_pack_start_ns": 1792493973836264096,
+              "source0_pack_end_ns": 1792493973836269536,
+              "source1_observed_ns": 1792493973838767936,
+              "source1_pack_start_ns": 1792493973838767936,
+              "source1_pack_end_ns": 1792493973838774144,
+              "source0_completed_chunks": 32,
+              "source0_chunks_before_peer_ready": 32,
+              "source1_completed_chunks": 32,
+              "source1_chunks_before_peer_ready": 0,
+              "epoch": 2
+            },
+            "all_fast_chunks_before_delayed_payload_ready": true,
+            "overlap_evidence": "Every completed fast-source CTA observed the other source's request_ready below this epoch."
+          }
+        ],
+        "correct": true
+      }
+    ]
+  },
+  "jobs": [
+    {
+      "name": "early-bf16-graph",
+      "seconds": 12.091315984725952,
+      "returncode": 0
+    },
+    {
+      "name": "early-bf16-eager",
+      "seconds": 11.48935866355896,
+      "returncode": 0
+    },
+    {
+      "name": "early-fp8-graph",
+      "seconds": 11.938045024871826,
+      "returncode": 0
+    },
+    {
+      "name": "early-fp8-eager",
+      "seconds": 12.08799695968628,
+      "returncode": 0
+    },
+    {
+      "name": "baseline-bf16-graph",
+      "seconds": 12.037952184677124,
+      "returncode": 0
+    },
+    {
+      "name": "baseline-fp8-graph",
+      "seconds": 11.688043117523193,
+      "returncode": 0
+    },
+    {
+      "name": "diagnostic",
+      "seconds": 26.017927885055542,
+      "returncode": 0
+    },
+    {
+      "name": "timing",
+      "seconds": 23.365169048309326,
+      "returncode": 0
+    }
+  ]
+}
