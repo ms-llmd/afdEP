@@ -42,7 +42,7 @@ DELAYED_EPOCH = 8
 DELAY_SECONDS = 0.02
 DELAYED_READER = FFN_RANKS + 1
 READER_DELAY_CYCLES = 20_000_000
-LIVE_COLLECT_COUNTS = (1, 8, 32, 131, 132, 133)
+LIVE_COLLECT_COUNTS = (1, 2, 8, 23, 24, 25, 32, 131, 132, 133)
 
 
 def check_received(exchange: Exchange, epoch: int, *, exact_rows: bool = False) -> None:
@@ -583,6 +583,7 @@ def main() -> None:
     parser.add_argument("--mode", choices=("hybrid", "direct"), default="hybrid")
     parser.add_argument("--capacity", type=int, default=DEFAULT_CAPACITY)
     parser.add_argument("--epochs", type=int, default=DEFAULT_GRAPH_EPOCHS)
+    parser.add_argument("--sms", type=int, default=132)
     parser.add_argument("--rdma-traffic-class", type=int, default=0)
     args = parser.parse_args()
     if args.capacity < 1 or args.epochs <= DELAYED_EPOCH:
@@ -597,6 +598,7 @@ def main() -> None:
         num_experts=NUM_EXPERTS,
         top_k=TOP_K,
         payload=args.payload,
+        num_sms=args.sms,
         allow_hybrid_mode=args.mode == "hybrid",
         rdma_traffic_class=args.rdma_traffic_class,
     )
