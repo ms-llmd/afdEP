@@ -20,20 +20,18 @@ import torch.distributed as dist
 from afdep import Buffer, Config
 
 DEFAULT_HIDDEN = 256
-EXPERTS = 8
+EXPERTS_PER_FFN = 4
 DEFAULT_TOP_K = 2
-FFN_RANKS = 2
-ATTENTION_RANKS = 2
+DEFAULT_FFN_RANKS = 2
 GRAPH_STEPS = 26
 DELAY_CYCLES = 2_000_000
-# FFN rank 0 delays replies; this Attention rank delays its next dispatch.
-DELAYED_SOURCE = 1
+# FFN rank 0 delays replies; the last Attention rank delays its next dispatch.
 
 
 @dataclass(frozen=True)
 class Case:
     name: str
-    counts: tuple[int, int]
+    counts: tuple[int, ...]
     epoch: int
     routing: str = "mixed"
 
@@ -50,7 +48,7 @@ def inputs(case: Case, source: int, rows: int, config: Config):
         ids = (tokens[:, None] + slots) % config.experts_per_rank
         ids = torch.where(slots < config.experts_per_rank, ids, -1)
     else:
-        ids = (tokens[:, None] + slots + source + case.epoch) % EXPERTS
+        ids = (tokens[:, None] + slots + source + case.epoch) % config.num_experts
     weights = (
         torch.tensor(
             [0.25, 0.5] if config.top_k == 2 else [1 / 8] * config.top_k,
@@ -148,7 +146,7 @@ class Exchange:
             if alternate:
                 self.input.neg_()
                 self._quantize()
-            if delay and self.buffer.role_rank == DELAYED_SOURCE:
+            if delay and self.buffer.role_rank == self.config.attention_ranks - 1:
                 # A lagging source must not let peers overwrite its prior-exchange
                 # inputs or receive before every source has published.
                 torch.cuda._sleep(DELAY_CYCLES)
@@ -192,7 +190,7 @@ def verify(snapshot, case: Case, buffer: Buffer, rows: int, *, sign=1) -> None:
         return
     first = buffer.role_rank * config.experts_per_rank
     counts = torch.zeros(config.experts_per_rank, dtype=torch.int64, device="cuda")
-    for source in range(ATTENTION_RANKS):
+    for source in range(config.attention_ranks):
         _, ids, _ = inputs(case, source, case.counts[source], config)
         selected = ids[(ids >= first) & (ids < first + config.experts_per_rank)] - first
         counts += torch.bincount(selected, minlength=config.experts_per_rank)
@@ -247,7 +245,9 @@ def graph_checks(buffer, cases, steps, *, delayed):
 def invalid_route_check(buffer, kind, execution):
     """Destructive device-assert test; run in its own torchrun process."""
     exchange = Exchange(buffer, buffer.config.capacity_tokens_per_rank)
-    exchange.update(Case("valid_before_invalid", (8, 8), 1))
+    exchange.update(
+        Case("valid_before_invalid", (8,) * buffer.config.attention_ranks, 1)
+    )
     exchange.run()
     torch.cuda.synchronize()
     dist.barrier()
@@ -264,7 +264,7 @@ def invalid_route_check(buffer, kind, execution):
             exchange.ids[0, 1].copy_(exchange.ids[0, 0])
         else:
             exchange.ids[0, 0] = {
-                "dummy": EXPERTS,
+                "dummy": buffer.config.num_experts,
                 "negative": -2,
                 "wide": 1 << 32,
             }[kind]
@@ -319,6 +319,8 @@ def main() -> None:
         "--hidden-size", type=int, choices=(256, 2048), default=DEFAULT_HIDDEN
     )
     parser.add_argument("--top-k", type=int, choices=(2, 8), default=DEFAULT_TOP_K)
+    parser.add_argument("--ffn-ranks", type=int, default=DEFAULT_FFN_RANKS)
+    parser.add_argument("--experts-per-ffn", type=int, default=EXPERTS_PER_FFN)
     parser.add_argument(
         "--invalid-route", choices=("dummy", "duplicate", "negative", "wide")
     )
@@ -332,13 +334,16 @@ def main() -> None:
         parser.error("invalid-route requires role specialization and capacity>=8")
     torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
     dist.init_process_group("gloo", timeout=timedelta(seconds=300))
+    world = dist.get_world_size()
+    if not 0 < args.ffn_ranks < world:
+        parser.error("ffn-ranks must leave at least one Attention rank")
     config = Config(
         args.capacity,
         args.hidden_size,
-        EXPERTS,
+        args.experts_per_ffn * args.ffn_ranks,
         args.top_k,
-        FFN_RANKS,
-        ATTENTION_RANKS,
+        args.ffn_ranks,
+        world - args.ffn_ranks,
         payload=args.payload,
         num_sms=args.num_sms,
         allow_hybrid_mode=args.hybrid == "on",
@@ -361,15 +366,19 @@ def main() -> None:
         buffer.transport.dispatch = checked_source_host_counts
     if args.invalid_route:
         invalid_route_check(buffer, args.invalid_route, args.invalid_execution)
-    n = args.capacity
+    n, sources = args.capacity, config.attention_ranks
+    full, empty = (n,) * sources, (0,) * sources
+    # Source 1 (or the only source) is inactive; prefixes differ per source.
+    inactive = tuple(0 if i == min(1, sources - 1) else n for i in range(sources))
+    prefix = tuple(min((3, 1, 2)[i % 3], n) for i in range(sources))
     cases = [
-        Case("mixed", (n, n), 1),
-        Case("changed_routes", (n, n), 2),
-        Case("skew", (n, n), 3, "skew"),
-        Case("inactive_source", (n, 0), 4),
-        Case("all_skipped", (n, n), 5, "skip"),
-        Case("all_empty", (0, 0), 6),
-        Case("partial_prefix", (min(3, n), min(1, n)), 7),
+        Case("mixed", full, 1),
+        Case("changed_routes", full, 2),
+        Case("skew", full, 3, "skew"),
+        Case("inactive_source", inactive, 4),
+        Case("all_skipped", full, 5, "skip"),
+        Case("all_empty", empty, 6),
+        Case("partial_prefix", prefix, 7),
     ]
     for host_counts in (False, True):
         for case in cases:
