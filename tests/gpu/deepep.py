@@ -359,6 +359,14 @@ def main() -> None:
         action="store_true",
         help="Attention collects through source_collect(view=True)",
     )
+    parser.add_argument(
+        "--role-env",
+        action="append",
+        default=[],
+        metavar="ROLE:KEY=VALUE",
+        help="Set an environment variable on one role's ranks (ffn or attention), "
+        "e.g. to run a control on one role only",
+    )
     args = parser.parse_args()
     global COLLECT_VIEW
     COLLECT_VIEW = args.collect_view
@@ -371,6 +379,14 @@ def main() -> None:
     world = dist.get_world_size()
     if not 0 < args.ffn_ranks < world:
         parser.error("ffn-ranks must leave at least one Attention rank")
+    for setting in args.role_env:
+        role, _, assignment = setting.partition(":")
+        key, _, value = assignment.partition("=")
+        if role not in ("ffn", "attention") or not key:
+            parser.error("role-env must be ROLE:KEY=VALUE with ROLE ffn or attention")
+        # FFN ranks are [0, ffn_ranks); transport controls are read on every call.
+        if (dist.get_rank() < args.ffn_ranks) == (role == "ffn"):
+            os.environ[key] = value
     config = Config(
         args.capacity,
         args.hidden_size,
