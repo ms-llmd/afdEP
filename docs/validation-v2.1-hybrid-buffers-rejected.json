@@ -1,0 +1,408 @@
+{
+ "date": "2026-10-21",
+ "decision": "rejected",
+ "change": "hybrid role-sized registered buffers with the directional protocol: dispatch scale-up/scale-out inboxes and combine scale-up inboxes and staging sized for Attention source domains, combine scale-out inbox for FFN domains",
+ "native_source_sha256": "aee39731eab027357d0643adbb09c49319e8641d7c3d58cc4a3ae1c81331e2ec",
+ "registered_transport_bytes": {
+  "union small": 1431808,
+  "role small": 715904,
+  "union large (capacity 2048, H2048, top-k 8)": 78840320,
+  "role large": 40026624
+ },
+ "correctness": {
+  "cross_node": "14/14 pass",
+  "single_domain": "full matrix, 8 invalid-route assertions and both ratios pass",
+  "logs": [
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-bf16-direct-large-n0.log",
+    "log_sha256": "83e5c2803c55429098a76057d4bb379ed3bf4756da24ce86bd904b011c9bf660"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-bf16-direct-small-n0.log",
+    "log_sha256": "e94f40ecd84cfd63153ac5c0219c1d864b259790222c0484941de02aaba55de1"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-bf16-generic-n0.log",
+    "log_sha256": "d0f6dd5e5d04965c9e0824b34f894261d24df458e306405dbcdbe295a7c22073"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-bf16-hyb-large-n0.log",
+    "log_sha256": "527b7216ece1180e549d9e3285af4ee53cac9910625e954a7d0f9170bd561026"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-bf16-hyb-small-n0.log",
+    "log_sha256": "5810c9a63b7071289a7bad64809d277ac1054e4dfcb74c1579042863f64a7893"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-f1-hyb-large-n0.log",
+    "log_sha256": "4ce1e7172d0ad4553e12c9af0b922602a2991b8a20a111e4d83595273d0b61f3"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-f1-hyb-small-n0.log",
+    "log_sha256": "6bcdf045265cc7043fd94b1e419a81e7c43160bdf9735236ecc9740f6be1d83e"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-f3-hyb-large-n0.log",
+    "log_sha256": "9777317877f3fecc8e57034edde65fba4568cb66a186d32d3e18979bfcab7f2f"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-f3-hyb-small-n0.log",
+    "log_sha256": "1af315839775f72be1d8f0bc6d856ce6a1636b2a3a6a9813e0ebcc3250a5d8fc"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-fp8-direct-large-n0.log",
+    "log_sha256": "70c9ef0ca8bdaa78df61c5cfa677e051fba96896f48c80a00e3d4b68962ef3c0"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-fp8-direct-small-n0.log",
+    "log_sha256": "b7ec1843e08efe1777a2ec3d6a773eb0ae5f211e6487aa75281cc200d847b858"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-fp8-generic-n0.log",
+    "log_sha256": "3770229dbea00cf7acd0b861e9ac31ac392a6d172d25d5ec5728da657bf99ec3"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-fp8-hyb-large-n0.log",
+    "log_sha256": "a295fdc858dede00802597f44feefdbfac4a910d1277ad0d59d7212927dc34d5"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xqm-fp8-hyb-small-n0.log",
+    "log_sha256": "a08d7b5f7077d64c511d6b77557ad5924f6358b45f918e66822ed27ea7e8054f"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-bf16-direct-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-bf16-direct-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-bf16-generic-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-bf16-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-bf16-hyb-small-n1.log",
+    "log_sha256": "25a8f43309f777dda1eaf81e4396c6a827c9662ea2730f0aff707ae64814d291"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-f1-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-f1-hyb-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-f3-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-f3-hyb-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-fp8-direct-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-fp8-direct-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-fp8-generic-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-fp8-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xqm-fp8-hyb-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  ]
+ },
+ "screen": {
+  "arms": {
+   "afd": {
+    "_label": "xq"
+   },
+   "union_buffers": {
+    "_label": "xq",
+    "_env": {
+     "AFDEP_UNION_BUFFERS": "1"
+    }
+   },
+   "masked": {
+    "_label": "xq",
+    "role_aware": false
+   }
+  },
+  "passthrough": [
+   "--payload",
+   "bf16",
+   "--routing",
+   "random",
+   "--hidden",
+   "2048",
+   "--tokens",
+   "1",
+   "8",
+   "32",
+   "128",
+   "512",
+   "2048",
+   "--capacity",
+   "2048",
+   "--blocks",
+   "6",
+   "--hybrid",
+   "on"
+  ],
+  "processes": [
+   {
+    "order": [
+     "afd",
+     "union_buffers",
+     "masked"
+    ],
+    "median_us": {
+     "afd": {
+      "1": 74.10056114196777,
+      "8": 81.6759204864502,
+      "32": 84.09832000732422,
+      "128": 104.36783790588379,
+      "512": 203.31103324890137,
+      "2048": 542.7996063232422
+     },
+     "union_buffers": {
+      "1": 72.92936086654663,
+      "8": 80.26000022888184,
+      "32": 82.9363203048706,
+      "128": 104.1972017288208,
+      "512": 201.62952423095703,
+      "2048": 542.6430511474609
+     },
+     "masked": {
+      "1": 87.75951862335205,
+      "8": 98.26632022857666,
+      "32": 103.9353609085083,
+      "128": 121.11464023590088,
+      "512": 216.10872268676758,
+      "2048": 551.4215850830078
+     }
+    }
+   },
+   {
+    "order": [
+     "union_buffers",
+     "masked",
+     "afd"
+    ],
+    "median_us": {
+     "union_buffers": {
+      "1": 73.19632053375244,
+      "8": 80.38911819458008,
+      "32": 83.32064151763916,
+      "128": 103.89951705932617,
+      "512": 201.85392379760742,
+      "2048": 542.5040054321289
+     },
+     "masked": {
+      "1": 88.32024097442627,
+      "8": 98.22984218597412,
+      "32": 104.26679611206055,
+      "128": 121.08176231384277,
+      "512": 216.46832466125488,
+      "2048": 550.8209419250488
+     },
+     "afd": {
+      "1": 74.19287919998169,
+      "8": 82.02239990234375,
+      "32": 84.36343669891357,
+      "128": 105.43352127075195,
+      "512": 203.0448818206787,
+      "2048": 543.6327362060547
+     }
+    }
+   },
+   {
+    "order": [
+     "masked",
+     "afd",
+     "union_buffers"
+    ],
+    "median_us": {
+     "masked": {
+      "1": 88.49679946899414,
+      "8": 98.2103967666626,
+      "32": 104.37088012695312,
+      "128": 121.2611198425293,
+      "512": 216.3768768310547,
+      "2048": 550.0921630859375
+     },
+     "afd": {
+      "1": 73.94160032272339,
+      "8": 82.0082426071167,
+      "32": 84.3608808517456,
+      "128": 104.72224235534668,
+      "512": 203.61160278320312,
+      "2048": 542.7112770080566
+     },
+     "union_buffers": {
+      "1": 73.0738377571106,
+      "8": 80.43240070343018,
+      "32": 82.94623851776123,
+      "128": 104.25063610076904,
+      "512": 201.2614345550537,
+      "2048": 542.9543876647949
+     }
+    }
+   }
+  ],
+  "table": [
+   {
+    "tokens": 1,
+    "afd": {
+     "median_us": 74.101,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_buffers": {
+     "median_us": 73.074,
+     "geomean_change_pct": -1.366,
+     "repeats_faster": 3
+    },
+    "masked": {
+     "median_us": 88.32,
+     "geomean_change_pct": 19.052,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 8,
+    "afd": {
+     "median_us": 82.008,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_buffers": {
+     "median_us": 80.389,
+     "geomean_change_pct": -1.882,
+     "repeats_faster": 3
+    },
+    "masked": {
+     "median_us": 98.23,
+     "geomean_change_pct": 19.943,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 32,
+    "afd": {
+     "median_us": 84.361,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_buffers": {
+     "median_us": 82.946,
+     "geomean_change_pct": -1.432,
+     "repeats_faster": 3
+    },
+    "masked": {
+     "median_us": 104.267,
+     "geomean_change_pct": 23.633,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 128,
+    "afd": {
+     "median_us": 104.722,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_buffers": {
+     "median_us": 104.197,
+     "geomean_change_pct": -0.691,
+     "repeats_faster": 3
+    },
+    "masked": {
+     "median_us": 121.115,
+     "geomean_change_pct": 15.559,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 512,
+    "afd": {
+     "median_us": 203.311,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_buffers": {
+     "median_us": 201.63,
+     "geomean_change_pct": -0.856,
+     "repeats_faster": 3
+    },
+    "masked": {
+     "median_us": 216.377,
+     "geomean_change_pct": 6.392,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 2048,
+    "afd": {
+     "median_us": 542.8,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_buffers": {
+     "median_us": 542.643,
+     "geomean_change_pct": -0.064,
+     "repeats_faster": 2
+    },
+    "masked": {
+     "median_us": 550.821,
+     "geomean_change_pct": 1.423,
+     "repeats_faster": 0
+    }
+   }
+  ]
+ },
+ "conclusion": "Registered memory -49%, but the union-buffer control was faster in every repeat up to 512 tokens (one token: 73.07 vs 74.10 us, -1.4%). Latency is the primary objective and the saving is about 39 MB per rank at this capacity, so the change is not shipped."
+}
