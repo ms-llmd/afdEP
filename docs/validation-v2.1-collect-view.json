@@ -1,0 +1,869 @@
+{
+ "date": "2026-10-21",
+ "change": "source_collect(view=True): with one FFN rank in one NVLink domain (rank layout) the Attention result is a strided view of combine inbox region 0 and the reduce epilogue is skipped; the source dispatch zeroes unrouted tokens' rows",
+ "commit": "783009f",
+ "native_source_sha256": "8205d02bfc622ba98c680c977d8cfef4e47f9394afea26fc5828d29e3589b879",
+ "afd_basis": "With one FFN rank each Attention token has exactly one reply row, already its final sum; only that FFN writes the Attention inbox, and it writes exchange N+1 only after the source's next dispatch. Symmetric EP with two or more ranks always reduces several partials.",
+ "screens": {
+  "note": "tree 89568785 (the view change on 05c550b, before the GIN route-check commit, which does not touch the direct NVLink path); pokprod 4 x H100; 3 fresh-process repeats; arms view (AFDEP_BENCH_COLLECT_VIEW=1), copy, Masked",
+  "3A1F_H2048": {
+   "arms": {
+    "view": {
+     "_env": {
+      "AFDEP_BENCH_COLLECT_VIEW": "1"
+     }
+    },
+    "copy": {},
+    "masked": {
+     "role_aware": false
+    }
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--ffn-ranks",
+    "1",
+    "--attention-ranks",
+    "3",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--capacity",
+    "2048",
+    "--warmup",
+    "50",
+    "--iterations",
+    "200",
+    "--blocks",
+    "2"
+   ],
+   "processes": [
+    {
+     "order": [
+      "view",
+      "copy",
+      "masked"
+     ],
+     "median_us": {
+      "view": {
+       "1": 20.651360750198364,
+       "8": 21.504720449447632,
+       "32": 25.485039949417114,
+       "128": 37.796000242233276,
+       "512": 102.66192436218262,
+       "2048": 348.59567642211914
+      },
+      "copy": {
+       "1": 21.071040630340576,
+       "8": 23.373759984970093,
+       "32": 27.66327977180481,
+       "128": 40.05847930908203,
+       "512": 104.89895820617676,
+       "2048": 353.9810371398926
+      },
+      "masked": {
+       "1": 36.903759241104126,
+       "8": 38.17744016647339,
+       "32": 44.76919889450073,
+       "128": 55.7426381111145,
+       "512": 118.88671875,
+       "2048": 370.9636878967285
+      }
+     }
+    },
+    {
+     "order": [
+      "copy",
+      "masked",
+      "view"
+     ],
+     "median_us": {
+      "copy": {
+       "1": 21.748720407485962,
+       "8": 23.23751926422119,
+       "32": 27.184319496154785,
+       "128": 39.69591975212097,
+       "512": 104.6780776977539,
+       "2048": 353.8201713562012
+      },
+      "masked": {
+       "1": 36.59664034843445,
+       "8": 38.39592099189758,
+       "32": 44.0887188911438,
+       "128": 55.532639026641846,
+       "512": 118.80807876586914,
+       "2048": 370.46255111694336
+      },
+      "view": {
+       "1": 20.168960094451904,
+       "8": 21.632879972457886,
+       "32": 25.363919734954834,
+       "128": 37.731759548187256,
+       "512": 103.31287860870361,
+       "2048": 349.05839920043945
+      }
+     }
+    },
+    {
+     "order": [
+      "masked",
+      "view",
+      "copy"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 36.97695970535278,
+       "8": 38.99839997291565,
+       "32": 44.3176794052124,
+       "128": 56.03447914123535,
+       "512": 119.52055931091309,
+       "2048": 371.1244773864746
+      },
+      "view": {
+       "1": 20.203200578689575,
+       "8": 21.524879932403564,
+       "32": 25.64743995666504,
+       "128": 37.44839906692505,
+       "512": 102.6423978805542,
+       "2048": 349.29304122924805
+      },
+      "copy": {
+       "1": 21.234959363937378,
+       "8": 23.419599533081055,
+       "32": 27.897920608520508,
+       "128": 40.27088165283203,
+       "512": 104.81032371520996,
+       "2048": 354.52640533447266
+      }
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "view": {
+      "median_us": 20.203200578689575,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 21.234959363937378,
+      "paired_change_pct": [
+       2.03221417328725,
+       7.832631457625916,
+       5.106907597284893
+      ],
+      "geomean_change_pct": 4.9638111384698425,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 36.903759241104126,
+      "paired_change_pct": [
+       78.69892297895989,
+       81.45030867754797,
+       83.02525662372646
+      ],
+      "geomean_change_pct": 81.04931678005616,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 8,
+     "view": {
+      "median_us": 21.524879932403564,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 23.373759984970093,
+      "paired_change_pct": [
+       8.691298916980195,
+       7.417594392453841,
+       8.802463041037356
+      ],
+      "geomean_change_pct": 8.30195823936215,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 38.39592099189758,
+      "paired_change_pct": [
+       77.53051129503991,
+       77.48871643896574,
+       81.17824626843766
+      ],
+      "geomean_change_pct": 78.72416142647486,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "view": {
+      "median_us": 25.485039949417114,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 27.66327977180481,
+      "paired_change_pct": [
+       8.547131284514675,
+       7.177123174267108,
+       8.774679483246572
+      ],
+      "geomean_change_pct": 8.164003296794164,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 44.3176794052124,
+      "paired_change_pct": [
+       75.66854508903636,
+       73.82454822384459,
+       72.79572339419983
+      ],
+      "geomean_change_pct": 74.09222177694399,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "view": {
+      "median_us": 37.731759548187256,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 40.05847930908203,
+      "paired_change_pct": [
+       5.986027760473611,
+       5.205588680340467,
+       7.536991316672426
+      ],
+      "geomean_change_pct": 6.2384606480155425,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 55.7426381111145,
+      "paired_change_pct": [
+       47.48290230146532,
+       47.17744333052127,
+       49.6311739284091
+      ],
+      "geomean_change_pct": 48.09316142587725,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "view": {
+      "median_us": 102.66192436218262,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 104.81032371520996,
+      "paired_change_pct": [
+       2.179029720991865,
+       1.3214219828497464,
+       2.1121153435820883
+      ],
+      "geomean_change_pct": 1.8701098685877326,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 118.88671875,
+      "paired_change_pct": [
+       15.804101168586794,
+       14.998323893242226,
+       16.443654648442774
+      ],
+      "geomean_change_pct": 15.747181904341412,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 2048,
+     "view": {
+      "median_us": 349.05839920043945,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 353.9810371398926,
+      "paired_change_pct": [
+       1.544873067000463,
+       1.3641763575003907,
+       1.4982732226233697
+      ],
+      "geomean_change_pct": 1.469078630255316,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 370.9636878967285,
+      "paired_change_pct": [
+       6.416606110605816,
+       6.131968738048621,
+       6.25017781069912
+      ],
+      "geomean_change_pct": 6.266186754064673,
+      "repeats_faster": 0
+     }
+    }
+   ],
+   "pod": "afdep-v21-h100-c",
+   "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  },
+  "2A1F_H2048": {
+   "arms": {
+    "view": {
+     "_env": {
+      "AFDEP_BENCH_COLLECT_VIEW": "1"
+     }
+    },
+    "copy": {},
+    "masked": {
+     "role_aware": false
+    }
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--ffn-ranks",
+    "1",
+    "--attention-ranks",
+    "2",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--capacity",
+    "2048",
+    "--warmup",
+    "50",
+    "--iterations",
+    "200",
+    "--blocks",
+    "2"
+   ],
+   "processes": [
+    {
+     "order": [
+      "view",
+      "copy",
+      "masked"
+     ],
+     "median_us": {
+      "view": {
+       "1": 19.50760006904602,
+       "8": 20.500959157943726,
+       "32": 23.400479555130005,
+       "128": 31.613759994506836,
+       "512": 73.1500792503357,
+       "2048": 241.03888511657715
+      },
+      "copy": {
+       "1": 20.659680366516113,
+       "8": 23.055360317230225,
+       "32": 25.232319831848145,
+       "128": 33.85151982307434,
+       "512": 75.00080108642578,
+       "2048": 245.13551712036133
+      },
+      "masked": {
+       "1": 35.35928010940552,
+       "8": 38.4827196598053,
+       "32": 41.81312084197998,
+       "128": 50.79047918319702,
+       "512": 96.46376132965088,
+       "2048": 268.63975524902344
+      }
+     }
+    },
+    {
+     "order": [
+      "copy",
+      "masked",
+      "view"
+     ],
+     "median_us": {
+      "copy": {
+       "1": 20.52608013153076,
+       "8": 22.81928062438965,
+       "32": 25.078879594802856,
+       "128": 33.727920055389404,
+       "512": 75.09479999542236,
+       "2048": 245.59328079223633
+      },
+      "masked": {
+       "1": 34.92784023284912,
+       "8": 38.40583920478821,
+       "32": 42.06255912780762,
+       "128": 50.57855844497681,
+       "512": 97.57311820983887,
+       "2048": 268.38879585266113
+      },
+      "view": {
+       "1": 18.97823989391327,
+       "8": 21.30511999130249,
+       "32": 24.170159101486206,
+       "128": 31.896719932556152,
+       "512": 73.49128007888794,
+       "2048": 240.4960060119629
+      }
+     }
+    },
+    {
+     "order": [
+      "masked",
+      "view",
+      "copy"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 35.27143955230713,
+       "8": 38.20263981819153,
+       "32": 41.627678871154785,
+       "128": 50.47231912612915,
+       "512": 95.83072185516357,
+       "2048": 267.7359962463379
+      },
+      "view": {
+       "1": 19.200080037117004,
+       "8": 20.83392024040222,
+       "32": 23.831520080566406,
+       "128": 31.564639806747437,
+       "512": 72.94608116149902,
+       "2048": 240.38776397705078
+      },
+      "copy": {
+       "1": 21.17695927619934,
+       "8": 22.93951988220215,
+       "32": 25.42359948158264,
+       "128": 33.80295991897583,
+       "512": 75.30240058898926,
+       "2048": 245.51048278808594
+      }
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "view": {
+      "median_us": 19.200080037117004,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 20.659680366516113,
+      "paired_change_pct": [
+       5.905802320082287,
+       8.155868227347662,
+       10.29620311613646
+      ],
+      "geomean_change_pct": 8.104424304841885,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 35.27143955230713,
+      "paired_change_pct": [
+       81.25899641295389,
+       84.04151506194857,
+       83.70464854376371
+      ],
+      "geomean_change_pct": 82.9975065712659,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 8,
+     "view": {
+      "median_us": 20.83392024040222,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 22.93951988220215,
+      "paired_change_pct": [
+       12.459910483245462,
+       7.1070270137191915,
+       10.106593562341848
+      ],
+      "geomean_change_pct": 9.869295981438553,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 38.40583920478821,
+      "paired_change_pct": [
+       87.71180101051021,
+       80.26577283050666,
+       83.36750538243389
+      ],
+      "geomean_change_pct": 83.75637267192258,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "view": {
+      "median_us": 23.831520080566406,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 25.232319831848145,
+      "paired_change_pct": [
+       7.828216820952072,
+       3.759679402610039,
+       6.680561691549447
+      ],
+      "geomean_change_pct": 6.0755875599119324,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 41.81312084197998,
+      "paired_change_pct": [
+       78.68488867277694,
+       74.02681939822737,
+       74.67487902754635
+      ],
+      "geomean_change_pct": 75.7835185838305,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "view": {
+      "median_us": 31.613759994506836,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 33.80295991897583,
+      "paired_change_pct": [
+       7.078436190305526,
+       5.741029568887401,
+       7.091226530485928
+      ],
+      "geomean_change_pct": 6.635010430464883,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 50.57855844497681,
+      "paired_change_pct": [
+       60.6594065116655,
+       58.56977943789319,
+       59.90145756499303
+      ],
+      "geomean_change_pct": 59.70787614809243,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "view": {
+      "median_us": 73.1500792503357,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 75.09479999542236,
+      "paired_change_pct": [
+       2.530033945358423,
+       2.18191860968151,
+       3.2302207191548193
+      ],
+      "geomean_change_pct": 2.646466384506052,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 96.46376132965088,
+      "paired_change_pct": [
+       31.87102778047666,
+       32.7682931976429,
+       31.37199466959586
+      ],
+      "geomean_change_pct": 32.00250892065195,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 2048,
+     "view": {
+      "median_us": 240.4960060119629,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "copy": {
+      "median_us": 245.51048278808594,
+      "paired_change_pct": [
+       1.699573080004435,
+       2.1194841714002877,
+       2.1310231129418877
+      ],
+      "geomean_change_pct": 1.9831624073287202,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 268.38879585266113,
+      "paired_change_pct": [
+       11.450795633699219,
+       11.598026222236225,
+       11.376715610158094
+      ],
+      "geomean_change_pct": 11.475141216059836,
+      "repeats_faster": 0
+     }
+    }
+   ],
+   "pod": "afdep-v21-h100-c",
+   "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  }
+ },
+ "correctness": {
+  "topology": "pokprod 4 x NVIDIA H100 80GB HBM3",
+  "result": "on native digest 8205d02b: GPU matrix 10/10, invalid-route 8/8, 3A:1F and 1A:3F small/large, and the view at 3A:1F (4 GPUs) and 2A1F (3 GPUs), BF16/FP8, small/large",
+  "summary": [
+   "bf16-direct-small exit=0 bf16-hybrid-small exit=0 bf16-generic-control exit=0 bf16-off-large exit=0 bf16-on-large exit=0 fp8-direct-small exit=0 fp8-hybrid-small exit=0 fp8-generic-control exit=0 fp8-off-large exit=0 fp8-on-large exit=0 invalid-eager-dummy exit=1 assertion=yes invalid-eager-duplicate exit=1 assertion=yes invalid-eager-negative exit=1 assertion=yes invalid-eager-wide exit=1 assertion=yes invalid-graph-dummy exit=1 assertion=yes invalid-graph-duplicate exit=1 assertion=yes invalid-graph-negative exit=1 assertion=yes invalid-graph-wide exit=1 assertion=yes done ",
+   "f1-small exit=0",
+   "f1-large exit=0",
+   "f3-small exit=0",
+   "f3-large exit=0",
+   "view-n4-bf16-small exit=0",
+   "view-n4-bf16-large exit=0",
+   "view-n4-fp8-small exit=0",
+   "view-n4-fp8-large exit=0",
+   "view-n3-bf16-small exit=0",
+   "view-n3-bf16-large exit=0",
+   "view-n3-fp8-small exit=0",
+   "view-n3-fp8-large exit=0"
+  ],
+  "logs": [
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "bf16-direct-small.log",
+    "log_sha256": "e56809a08453bdbfcdce31c71623d97d011a32cc69a24f2576813908980cf405"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "bf16-generic-control.log",
+    "log_sha256": "fa2e1fd2168f0b2a01cdbac2b0ddf22bf4f754f5a4d1b99e92b96efaa8eb95aa"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "bf16-hybrid-small.log",
+    "log_sha256": "4dca56574a4f30a5902525f27f4ba47410ad59ab3da0ee9123e418fadefec108"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "bf16-off-large.log",
+    "log_sha256": "08bf9b987f8fd5e9069c0b466ceb9ba4fd688b760027b9d6ace8121a5a7fb029"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "bf16-on-large.log",
+    "log_sha256": "2c1e9a2bec82923411743d77b4c0c4c57aff0b75010eaf4d4da6bc6b0cfd26e4"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "f1-large.log",
+    "log_sha256": "cf3f60bc462b20f4e4f28f344ce96457c71444da37b8d2aca92f113448475c7b"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "f1-small.log",
+    "log_sha256": "c8681009edbe0ccefe83fb76c819ad9d4175e9e8858032c345f15107b0a876e7"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "f3-large.log",
+    "log_sha256": "d12f554c5f6f0262a23486a0cca949c738b5287eb4eb237bc457657ef8336ada"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "f3-small.log",
+    "log_sha256": "1668b97d179f92febe712e2e708b12088a309ee82c5153db35015324f89acf7c"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "fp8-direct-small.log",
+    "log_sha256": "aab1b759ccece5d6d1b3b8ea2fb47c83a2fca4ceafeaedea75b9acf3e369c826"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "fp8-generic-control.log",
+    "log_sha256": "0ec3d7596a0e1bd27db48a41dd032678bf165c1287a8e160590ac626f4b66296"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "fp8-hybrid-small.log",
+    "log_sha256": "82f8cfc6dcb36473e80f81fe99fee9ea39ad4727e12440ea099bb7fbf4e391f2"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "fp8-off-large.log",
+    "log_sha256": "e140990c819d2e8c6ecfdad712b237c628823f834399ad5c5dc548bd06e1d44c"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "fp8-on-large.log",
+    "log_sha256": "e9929119f584cfb1f2b750396650886957e0b8672bf379b05fd3f808f3c93f40"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "invalid-eager-dummy.log",
+    "log_sha256": "058631e89d1a91c281fa2fe29778606fe69104ee50c625d4dbbe64226f6870e0"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "invalid-eager-duplicate.log",
+    "log_sha256": "5d523f6e44aeedb87a98dd361fadbd1eeb905d6add4352c10f0fd3550378396d"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "invalid-eager-negative.log",
+    "log_sha256": "e8f344ed00976309abe62fafc5b3e05a0cb3cf9449f5324798d5aaa7a69965ec"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "invalid-eager-wide.log",
+    "log_sha256": "f813422c367e4abded69ade68cba7b08c4d8c162982544e59c1797dfe6c424bb"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "invalid-graph-dummy.log",
+    "log_sha256": "b2c188caec5e33e797a3a5d4b30be3f9405607423103c2b6f782b88d1803d48f"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "invalid-graph-duplicate.log",
+    "log_sha256": "deba2210f92ab988e18110502a1f7e483682c424536c2806c64827a01e2b276f"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "invalid-graph-negative.log",
+    "log_sha256": "e31929a05d5757a4472bc82d5f4d7bb918c654b54e9addd025f57f7b620644a1"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "invalid-graph-wide.log",
+    "log_sha256": "75aaf0c314cfd91712e38d4626ef046119e77a2a040a87d59205124285b4c3eb"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "view-n3-bf16-large.log",
+    "log_sha256": "b9655d9cebe2e73a6c3a55cb89fd607169508a5fe4f73644f6ede39291280e35"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "view-n3-bf16-small.log",
+    "log_sha256": "29c078be938bf1b766f2842088939435d8a25f1899f562be817b9a95716a66b1"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "view-n3-fp8-large.log",
+    "log_sha256": "f8ea1f04a19a43b09a10f83d94e5bfb7bbcd4a0d8ec3a9c573f516a8e8fe1efc"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "view-n3-fp8-small.log",
+    "log_sha256": "8966a01dd421c8f2dbbf67595f92c205a5fd8c695440d3e2f23fea91ae94cd5d"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "view-n4-bf16-large.log",
+    "log_sha256": "cf3f60bc462b20f4e4f28f344ce96457c71444da37b8d2aca92f113448475c7b"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "view-n4-bf16-small.log",
+    "log_sha256": "c8681009edbe0ccefe83fb76c819ad9d4175e9e8858032c345f15107b0a876e7"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "view-n4-fp8-large.log",
+    "log_sha256": "c2ecbe40a08bcb2ae365ad6f579faec199dc4c686d7367cba45b8a3fc3104426"
+   },
+   {
+    "pod": "afdep-v21-h100-c",
+    "log": "view-n4-fp8-small.log",
+    "log_sha256": "89719f31a5ed4c1e700388d7173098e6771fca84a48418f462319cb6976d8ff4"
+   }
+  ]
+ },
+ "contract": "docs/api.md: the view is read-only and valid until the next source_dispatch on the same Buffer is enqueued",
+ "scope": "communication only; no serving claim"
+}
