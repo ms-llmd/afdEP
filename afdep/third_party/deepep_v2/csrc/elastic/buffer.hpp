@@ -723,6 +723,10 @@ public:
         const bool afd_direct_nvlink = afd_role_aware and
             nccl_context->num_scaleout_ranks == 1 and nccl_context->is_scaleup_nvlink and
             not deterministic;
+        // Direct dispatch over GIN (hybrid off across NVLink domains): only the in-kernel route
+        // checks apply so far; the barrier, count and exit protocol stays union.
+        const bool afd_direct_gin_routes = afd_role_aware and nccl_context->num_scaleout_ranks == 1 and
+            not nccl_context->is_scaleup_nvlink and not deterministic and afdep_hybrid_routes_in_kernel();
         if (afd_role_aware) {
             // Only expanded inference dispatch is currently exposed by afdEP.
             // Roles are immutable constructor geometry, never token-count guesses.
@@ -785,7 +789,7 @@ public:
             afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
                                      nccl_context->num_scaleup_ranks) : 0;
         const bool afd_hybrid_routes_in_kernel = afd_ffn_scaleout_ranks > 0 and afdep_hybrid_routes_in_kernel();
-        if (afd_source and not afd_direct_nvlink and not afd_hybrid_routes_in_kernel)
+        if (afd_source and not afd_direct_nvlink and not afd_hybrid_routes_in_kernel and not afd_direct_gin_routes)
             launch_afdep_route_guard(topk_idx.data_ptr<topk_idx_t>(), num_tokens,
                                     afd_ffn_ranks * num_local_experts, num_topk,
                                     num_sms, comm_stream);
@@ -1003,7 +1007,7 @@ public:
                         num_smem_bytes,
                         num_qps, num_gpu_timeout_cycles,
                         cached_mode, deterministic, do_cpu_sync,
-                        comm_stream, afd_direct_nvlink ? afd_ffn_ranks : 0,
+                        comm_stream, afd_direct_nvlink or afd_direct_gin_routes ? afd_ffn_ranks : 0,
                         afd_direct_nvlink and afdep_skip_entry_barriers(),
                         afd_direct_nvlink and afdep_directional_notify(),
                         afd_direct_nvlink and afdep_directed_exit(),
