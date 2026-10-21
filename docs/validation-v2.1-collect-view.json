@@ -865,5 +865,273 @@
   ]
  },
  "contract": "docs/api.md: the view is read-only and valid until the next source_dispatch on the same Buffer is enqueued",
- "scope": "communication only; no serving claim"
+ "scope": "communication only; no serving claim",
+ "cross_node_correctness": {
+  "topology": "waldorf afdep-v21-xa, -xb, -xc (2 x H200 each, InfiniBand GIN)",
+  "native_source_sha256": "8205d02bfc622ba98c680c977d8cfef4e47f9394afea26fc5828d29e3589b879",
+  "result": "two-node matrix 14/14 (BF16/FP8 hybrid and direct small/large, generic control, 1A:3F and 3A:1F hybrid small/large); three pods with two FFN domains and with two Attention domains, BF16/FP8 large and BF16 small; direct-path invalid dummy route stops at afdep_roles.cuh:89 eager and graph",
+  "summary": [
+   "bf16-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  bf16-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  bf16-direct-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  bf16-direct-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  bf16-generic: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-direct-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-direct-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-generic: afdep-v21-xb exit=0 afdep-v21-xa exit=0  f1-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  f3-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  f1-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  f3-hyb-large: afdep-v21-xa exit=0 afdep-v21-xb exit=0  done ",
+   "f2dom-large-bf16: afdep-v21-xa exit=0 afdep-v21-xb exit=0 afdep-v21-xc exit=0 ",
+   "a2dom-large-bf16: afdep-v21-xb exit=0 afdep-v21-xc exit=0 afdep-v21-xa exit=0 ",
+   "f2dom-large-fp8: afdep-v21-xb exit=0 afdep-v21-xa exit=0 afdep-v21-xc exit=0 ",
+   "a2dom-large-fp8: afdep-v21-xa exit=0 afdep-v21-xc exit=0 afdep-v21-xb exit=0 ",
+   "f2dom-small-bf16: afdep-v21-xa exit=0 afdep-v21-xb exit=0 afdep-v21-xc exit=0 ",
+   "a2dom-small-bf16: afdep-v21-xa exit=0 afdep-v21-xb exit=0 afdep-v21-xc exit=0 ",
+   "inv-direct-eager-dummy: afdep-v21-xb exit=1 afdep-v21-xa exit=1 ",
+   "inv-direct-graph-dummy: afdep-v21-xb exit=1 afdep-v21-xa exit=1 "
+  ],
+  "logs": [
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-bf16-direct-large-n0.log",
+    "log_sha256": "83e5c2803c55429098a76057d4bb379ed3bf4756da24ce86bd904b011c9bf660"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-bf16-direct-small-n0.log",
+    "log_sha256": "e94f40ecd84cfd63153ac5c0219c1d864b259790222c0484941de02aaba55de1"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-bf16-generic-n0.log",
+    "log_sha256": "d0f6dd5e5d04965c9e0824b34f894261d24df458e306405dbcdbe295a7c22073"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-bf16-hyb-large-n0.log",
+    "log_sha256": "e246bc5259385dd4dc9ad01f0e57e636dc7889b948b6a872b4bf0da21ceff425"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-bf16-hyb-small-n0.log",
+    "log_sha256": "d6dc863b909dc827e65d016a3f12d88cc65b496d6d61c06829d45129d027a52a"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-f1-hyb-large-n0.log",
+    "log_sha256": "4ce1e7172d0ad4553e12c9af0b922602a2991b8a20a111e4d83595273d0b61f3"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-f1-hyb-small-n0.log",
+    "log_sha256": "6bcdf045265cc7043fd94b1e419a81e7c43160bdf9735236ecc9740f6be1d83e"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-f3-hyb-large-n0.log",
+    "log_sha256": "9777317877f3fecc8e57034edde65fba4568cb66a186d32d3e18979bfcab7f2f"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-f3-hyb-small-n0.log",
+    "log_sha256": "1af315839775f72be1d8f0bc6d856ce6a1636b2a3a6a9813e0ebcc3250a5d8fc"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-fp8-direct-large-n0.log",
+    "log_sha256": "70c9ef0ca8bdaa78df61c5cfa677e051fba96896f48c80a00e3d4b68962ef3c0"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-fp8-direct-small-n0.log",
+    "log_sha256": "b7ec1843e08efe1777a2ec3d6a773eb0ae5f211e6487aa75281cc200d847b858"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-fp8-generic-n0.log",
+    "log_sha256": "3770229dbea00cf7acd0b861e9ac31ac392a6d172d25d5ec5728da657bf99ec3"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-fp8-hyb-large-n0.log",
+    "log_sha256": "379fcc50d0b1e4d73c5acbcf816da45f688ea73cce14ce623402fc22f2e558f8"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fnm-fp8-hyb-small-n0.log",
+    "log_sha256": "044225a4ac6aa9c88f1997adf1e146d4fff7eb33bcdcff4d4cde7da74594da08"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fn3-a2dom-large-bf16-n0.log",
+    "log_sha256": "00d22b3c72356d8f9addd54251e2f852b69d033d03aef593de7e3660c060593b"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fn3-a2dom-large-fp8-n0.log",
+    "log_sha256": "6de8eae5d803fcfa6e442148420ce0f1c802daaa0eda2d3b55627e0aa0e83e12"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fn3-a2dom-small-bf16-n0.log",
+    "log_sha256": "b9862b1af903eb2b6f9ee3ce776cd777ad362a1ea122565a4123b8ba3239398b"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fn3-f2dom-large-bf16-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fn3-f2dom-large-fp8-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fn3-f2dom-small-bf16-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fninv-eager-n0.log",
+    "log_sha256": "38036f17cdeeaa64f443b107d0c2fe22e63ba84d5245b5cdd52b1ad6e3e5ddab"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "fninv-graph-n0.log",
+    "log_sha256": "068298b126898a173064d0bec38c1dd1129201e583a4e242549fe9d8159637b4"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-bf16-direct-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-bf16-direct-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-bf16-generic-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-bf16-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-bf16-hyb-small-n1.log",
+    "log_sha256": "3c90c467604518a78a516e5d5405110250f3fffb8d1452d82e201fe3bb8e30c6"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-f1-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-f1-hyb-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-f3-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-f3-hyb-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-fp8-direct-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-fp8-direct-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-fp8-generic-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-fp8-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fnm-fp8-hyb-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fn3-a2dom-large-bf16-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fn3-a2dom-large-fp8-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fn3-a2dom-small-bf16-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fn3-f2dom-large-bf16-n0.log",
+    "log_sha256": "25b8382edbac8f2a512c7fb10a3a0a1b773af179fb22ce20ec024627a4345f78"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fn3-f2dom-large-fp8-n0.log",
+    "log_sha256": "4824bc23535f5f394c8e7515d112c8cc8bab756bc0ec8cbc92c186cd2a46bab6"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fn3-f2dom-small-bf16-n0.log",
+    "log_sha256": "04f8031315fe62717ca41789e2b3c9b8ff21fb222188adec566760631151c18e"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fninv-eager-n1.log",
+    "log_sha256": "aa3673483c1d949df4c478da8df315078fc7590d6c655693a46b06e4c394ad5e"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "fninv-graph-n1.log",
+    "log_sha256": "da39d04caf9eb8aaee1c489bfbf94ffca1f05b22298e49918583680aa60618e3"
+   },
+   {
+    "pod": "afdep-v21-xc",
+    "log": "fn3-a2dom-large-bf16-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xc",
+    "log": "fn3-a2dom-large-fp8-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xc",
+    "log": "fn3-a2dom-small-bf16-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xc",
+    "log": "fn3-f2dom-large-bf16-n1.log",
+    "log_sha256": "4e2945a1b23b292779bc6a14a66d99dd42485e6a63dadf7c57e6c8084573829a"
+   },
+   {
+    "pod": "afdep-v21-xc",
+    "log": "fn3-f2dom-large-fp8-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xc",
+    "log": "fn3-f2dom-small-bf16-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  ]
+ }
 }
