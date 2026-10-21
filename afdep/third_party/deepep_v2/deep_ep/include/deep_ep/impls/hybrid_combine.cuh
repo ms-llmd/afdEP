@@ -42,7 +42,8 @@ hybrid_combine_impl(nv_bfloat16* x,
                     const ncclDevComm_t nccl_dev_comm, const ncclWindow_t nccl_window,
                     void* buffer, void* workspace,
                     const int scaleout_rank_idx, const int scaleup_rank_idx,
-                    int num_reduced_tokens) {
+                    int num_reduced_tokens,
+                    void* afd_scaleout_send_base) {
     // Utils
     const auto sm_idx = static_cast<int>(blockIdx.x);
     const auto thread_idx = static_cast<int>(threadIdx.x);
@@ -98,6 +99,16 @@ hybrid_combine_impl(nv_bfloat16* x,
     // afdEP directional: only the scale-up half remains (ordering in afdep_roles.hpp).
     constexpr bool kAfdDirectional = kAfdFfnScaleoutRanks > 0;
     const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;
+    // afdEP directional: an FFN domain's staging would otherwise overlap its dispatch scale-out inbox,
+    // which an Attention domain writes for exchange N+1 as soon as its own combine-N signals arrive,
+    // possibly while this NIC is still reading staging for another Attention domain. It lives in a
+    // slice reserved past every dispatch region instead (sized in calculate_buffer_size).
+    if (kAfdDirectional and afd_ffn_domain) {
+        EP_DEVICE_ASSERT(afd_scaleout_send_base != nullptr);
+        scaleout_send_buffer = layout::BufferLayout<false>(
+            token_layout, kAllowMultipleReduction ? 1 : kNumTopk, kNumChannels * (kNumScaleoutRanks * kNumMaxTokensPerChannel),
+            afd_scaleout_send_base);
+    }
     comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,
                       kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kHybridCombineTag0, false, true, true>(
         gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, not kAfdDirectional,

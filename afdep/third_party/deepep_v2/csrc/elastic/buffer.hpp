@@ -606,6 +606,15 @@ public:
         }
     }
 
+    // afdEP directional hybrid: the FFN combine staging slice reserved at the window end.
+    static int64_t get_hybrid_combine_send_bytes(const int& num_max_tokens_per_rank, const int& hidden, const int& num_topk,
+                                                 const int& num_scaleout_ranks, const bool& allow_multiple_reduction) {
+        const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
+        return layout::BufferLayout<false>(
+            token_layout, allow_multiple_reduction ? 1 : num_topk,
+            num_scaleout_ranks * (num_max_tokens_per_rank + kNumMaxChannels)).get_num_bytes();
+    }
+
     static int64_t calculate_buffer_size(const int64_t& nccl_comm,
                                          const int& num_max_tokens_per_rank, const int& hidden,
                                          int num_topk, const bool& use_fp8_dispatch,
@@ -640,6 +649,15 @@ public:
             num_max_tokens_per_rank, hidden, num_topk,
             num_scaleout_ranks, num_scaleup_ranks,
             is_scaleup_nvlink, allow_multiple_reduction, afd_role_ffn_ranks);
+
+        // afdEP directional hybrid: FFN combine staging must not overlap any inbox another role or
+        // domain writes (the dispatch inboxes), so it gets its own slice past both layouts.
+        if (afd_ffn_ranks > 0 and num_scaleout_ranks > 1 and
+            afdep_directional_hybrid(afd_ffn_ranks, num_scaleout_ranks, num_scaleup_ranks) > 0) {
+            const auto num_send_bytes = get_hybrid_combine_send_bytes(
+                num_max_tokens_per_rank, hidden, num_topk, num_scaleout_ranks, allow_multiple_reduction);
+            return std::max(num_dispatch_bytes, num_combine_bytes - num_send_bytes) + num_send_bytes;
+        }
 
         // Return the maximum of those layouts
         return std::max(num_dispatch_bytes, num_combine_bytes);
@@ -1301,6 +1319,18 @@ public:
         // receive allocation as the live row count (including on a source).
         const int transport_reduced_tokens = afd_ffn_ranks > 0 ?
             num_max_tokens_per_rank * nccl_context->num_ranks : num_reduced_tokens;
+        // afdEP directional hybrid: FFN combine staging uses the slice reserved at the window end.
+        const int afd_ffn_scaleout_ranks = afd_ffn_ranks > 0 and not deterministic ?
+            afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
+                                     nccl_context->num_scaleup_ranks) : 0;
+        void* afd_scaleout_send_base = nullptr;
+        if (afd_ffn_scaleout_ranks > 0) {
+            const auto num_send_bytes = get_hybrid_combine_send_bytes(
+                num_max_tokens_per_rank, hidden, num_topk, nccl_context->num_scaleout_ranks, allow_multiple_reduction);
+            // calculate_buffer_size reserved this slice past both layouts (sized for top-k 32).
+            EP_HOST_ASSERT(num_send_bytes <= num_buffer_bytes);
+            afd_scaleout_send_base = math::advance_ptr(buffer, num_buffer_bytes - num_send_bytes);
+        }
         const auto reduce_buffer = launch_combine(
             x.data_ptr(),
             topk_weights.has_value() ? topk_weights->data_ptr() : nullptr,
@@ -1323,10 +1353,9 @@ public:
             afd_direct and afdep_skip_entry_barriers(),
             afd_direct and afdep_directed_exit() ? afd_ffn_ranks : 0,
             afd_direct and afdep_directed_exit() and afdep_per_cta_exit(),
-            afd_ffn_ranks > 0 and not deterministic ?
-                afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
-                                         nccl_context->num_scaleup_ranks) : 0,
-            afd_direct and afd_ffn_ranks == 1 and afdep_single_ffn_reduce());
+            afd_ffn_scaleout_ranks,
+            afd_direct and afd_ffn_ranks == 1 and afdep_single_ffn_reduce(),
+            afd_scaleout_send_base);
 
         // Allocate output tensors
         auto combined_x = torch::empty({num_combined_tokens, hidden}, x.options());

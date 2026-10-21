@@ -4,11 +4,11 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "2e05ebbe7f7c8f615f17c588fc3a78a666e48954a047a988a7d9fd5e30e809c2"
+      "sha256": "12babb364d62760302f5e84af818e93a593e3506107182072561ac59a4c492d5"
     },
     "csrc/kernels/elastic/combine.hpp": {
       "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
-      "sha256": "570620e1df425ef24e269908a11a8f5bd105c48f6173ab692409b97dd7b7ed23"
+      "sha256": "ce290278f37a22a6a3d9a97afc0d6e3a6e500d232f6c345a8b35e809a94a68dc"
     },
     "csrc/kernels/elastic/dispatch.hpp": {
       "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
@@ -32,11 +32,11 @@
     },
     "deep_ep/include/deep_ep/impls/hybrid_combine.cuh": {
       "upstream_sha256": "c9c628569eb49edbaabf1364a0ae8f0436b76cd6f9be4ab02daf5e4a8c2ae3b3",
-      "sha256": "19685317cbef9f9ecbfa1ed9d9b70751e7746d9801ee0891935676722b699e87"
+      "sha256": "198baf68b9cf2b1a96d42c02d3a897c98f9aa1c294e9b6a1c0add688695ee489"
     },
     "deep_ep/include/deep_ep/impls/hybrid_dispatch.cuh": {
       "upstream_sha256": "87ff341af541de4b11f88237b688705a35762229ae2f37ae488c7e3bfda949ac",
-      "sha256": "a3e5729c735dbaf6c69f02887a24e09d730f09006a2fd420e518c19a613e5367"
+      "sha256": "69aa938543ce00274de92ea9a20025d2ca4c8656c1fc16bce2327c4ab6c02d36"
     }
   },
   "added_files": {
@@ -64,7 +64,8 @@
     "v2.1: directional hybrid protocol when every scale-out (NVLink) domain holds one role: Attention domains send counts, payloads and finish tails to FFN domains only and skip forwarding and combine reduction; FFN domains skip scale-out sends, wait only for Attention domains, and signal combine arrival to Attention domains only. Both hybrid entry barriers keep only their scale-up half, and Attention domains (which then share no state) skip their scale-up barriers too. AFDEP_UNION_HYBRID=1 keeps the union hybrid protocol as a measurement control.",
     "v2.1: directional hybrid dispatch validates full-width real expert IDs and duplicates in its notify and scale-out warps before route-derived indexing, stores or puts, as the direct path does, and drops the separate route-guard kernel ahead of each source dispatch; mixed-role (union hybrid) layouts keep the guard. AFDEP_HYBRID_ROUTE_GUARD=1 keeps the guard kernel as a measurement control.",
     "v2.1: directional hybrid dispatch skips the entry grid sync on Attention domains, which run neither barrier half there; it guarded no cross-CTA state. AFDEP_ATTENTION_GRID_SYNC=1 keeps it as a measurement control.",
-    "v2.1: single-FFN reduction. With one FFN rank on the direct-NVLink role path every token's top-k rows are local, so the FFN combine's branch-free reduction prefix covers all top_k slots instead of ceil(top_k / union ranks), which counts the expert-free Attention ranks. AFDEP_UNION_REDUCE_PREFIX=1 keeps the union prefix as a measurement control."
+    "v2.1: single-FFN reduction. With one FFN rank on the direct-NVLink role path every token's top-k rows are local, so the FFN combine's branch-free reduction prefix covers all top_k slots instead of ceil(top_k / union ranks), which counts the expert-free Attention ranks. AFDEP_UNION_REDUCE_PREFIX=1 keeps the union prefix as a measurement control.",
+    "v2.1 fix: directional hybrid staging no longer overlaps remotely written inboxes. Attention domains stage dispatch tokens at window offset 0 (their scale-up inboxes, unused in both phases in this mode) instead of over their combine scale-out inbox; FFN domains stage combine replies in a slice reserved at the window end (calculate_buffer_size adds it for role-pure hybrid layouts) instead of over their dispatch scale-out inbox. Without it, a destination that finished early could overwrite staging the NIC had not yet read for another domain."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",
