@@ -479,6 +479,335 @@
     }
    }
   ],
-  "note": "A second screen with 2 FFN domains + 1 Attention domain was interrupted when two pods were preempted by higher-priority workloads."
+  "note": "The two-FFN-domain screen interrupted by preemption was repeated on a new pod set (two_ffn_domains)."
+ },
+ "two_ffn_domains": {
+  "layout": "2 FFN domains (gf41fb2, gf48cf2) + 1 Attention domain (gf49e9c), 2 x H200 each, 6 ranks",
+  "correctness": {
+   "cases": "BF16 small/large, FP8 large, generic control (large)",
+   "result": "4/4 pass",
+   "logs": [
+    {
+     "pod": "afdep-v21-xa",
+     "log": "f4w-bf16-generic-n0.log",
+     "log_sha256": "fbe1afc85d526d1a72d5ca329de9a4ee97ed95db30a2a1cc54555d2681054aa6"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "f4w-bf16-large-n0.log",
+     "log_sha256": "adbc5c0c7c74c1ddb7c2aa77935f2cc533fa1eae2b6940077026f20fa5496a1d"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "f4w-bf16-small-n0.log",
+     "log_sha256": "719b489bc6310223d282ab32980d5dad244098e6a9d1577c531a58ba71127358"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "f4w-fp8-large-n0.log",
+     "log_sha256": "93dfa8fc3d6b40a6ec84476045f8d50134745d108e2ad1c399ee1cc0293bd8e6"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "f4w-bf16-generic-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "f4w-bf16-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "f4w-bf16-small-n1.log",
+     "log_sha256": "d2484259f401ea9ac31aeeaceed58e8efeb4a044418719eeeb3ef94208264dc9"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "f4w-fp8-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "f4w-bf16-generic-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "f4w-bf16-large-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "f4w-bf16-small-n2.log",
+     "log_sha256": "7a0124812d52c25087f76c62f05fd282ca3c4623f85c13a02d00c311c93168eb"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "f4w-fp8-large-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+   ]
+  },
+  "screen": {
+   "native_source_sha256": {
+    "afd": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee",
+    "union_hybrid": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee",
+    "masked": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee"
+   },
+   "arms": {
+    "afd": {
+     "_label": "xh"
+    },
+    "union_hybrid": {
+     "_label": "xh",
+     "_env": {
+      "AFDEP_UNION_HYBRID": "1"
+     }
+    },
+    "masked": {
+     "_label": "xh",
+     "role_aware": false
+    }
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--ffn-ranks",
+    "4",
+    "--attention-ranks",
+    "2",
+    "--experts",
+    "128",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--capacity",
+    "2048",
+    "--blocks",
+    "6",
+    "--hybrid",
+    "on"
+   ],
+   "processes": [
+    {
+     "order": [
+      "afd",
+      "union_hybrid",
+      "masked"
+     ],
+     "median_us": {
+      "afd": {
+       "1": 74.71160173416138,
+       "8": 82.22184181213379,
+       "32": 89.67647552490234,
+       "128": 120.08791923522949,
+       "512": 276.7252826690674,
+       "2048": 844.6083068847656
+      },
+      "union_hybrid": {
+       "1": 105.85063934326172,
+       "8": 112.40640163421631,
+       "32": 115.55271625518799,
+       "128": 143.80568027496338,
+       "512": 294.88247871398926,
+       "2048": 876.1551284790039
+      },
+      "masked": {
+       "1": 104.01991844177246,
+       "8": 110.58223724365234,
+       "32": 114.58296298980713,
+       "128": 143.1997585296631,
+       "512": 293.8373565673828,
+       "2048": 871.8756484985352
+      }
+     }
+    },
+    {
+     "order": [
+      "union_hybrid",
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "union_hybrid": {
+       "1": 105.62056064605713,
+       "8": 112.51352310180664,
+       "32": 115.51511764526367,
+       "128": 143.91719818115234,
+       "512": 294.2895984649658,
+       "2048": 876.943359375
+      },
+      "masked": {
+       "1": 104.38216209411621,
+       "8": 110.5020809173584,
+       "32": 114.37983989715576,
+       "128": 142.3901605606079,
+       "512": 292.4512004852295,
+       "2048": 870.5628967285156
+      },
+      "afd": {
+       "1": 74.90375995635986,
+       "8": 82.94415950775146,
+       "32": 89.56720352172852,
+       "128": 120.5564832687378,
+       "512": 277.9336738586426,
+       "2048": 845.4157638549805
+      }
+     }
+    },
+    {
+     "order": [
+      "masked",
+      "afd",
+      "union_hybrid"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 104.6451187133789,
+       "8": 111.38407707214355,
+       "32": 114.62800025939941,
+       "128": 143.15199851989746,
+       "512": 293.8224792480469,
+       "2048": 874.4039916992188
+      },
+      "afd": {
+       "1": 74.11424160003662,
+       "8": 83.21343898773193,
+       "32": 89.88359928131104,
+       "128": 120.18896102905273,
+       "512": 277.56080627441406,
+       "2048": 844.9631500244141
+      },
+      "union_hybrid": {
+       "1": 105.7195234298706,
+       "8": 112.5216007232666,
+       "32": 115.62103748321533,
+       "128": 144.0001630783081,
+       "512": 294.0950393676758,
+       "2048": 879.7408294677734
+      }
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "afd": {
+      "median_us": 74.712,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "union_hybrid": {
+      "median_us": 105.72,
+      "geomean_change_pct": 41.776,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 104.382,
+      "geomean_change_pct": 39.923,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 8,
+     "afd": {
+      "median_us": 82.944,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "union_hybrid": {
+      "median_us": 112.514,
+      "geomean_change_pct": 35.859,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 110.582,
+      "geomean_change_pct": 33.856,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "afd": {
+      "median_us": 89.676,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "union_hybrid": {
+      "median_us": 115.553,
+      "geomean_change_pct": 28.82,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 114.583,
+      "geomean_change_pct": 27.669,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "afd": {
+      "median_us": 120.189,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "union_hybrid": {
+      "median_us": 143.917,
+      "geomean_change_pct": 19.646,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 143.152,
+      "geomean_change_pct": 18.82,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "afd": {
+      "median_us": 277.561,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "union_hybrid": {
+      "median_us": 294.29,
+      "geomean_change_pct": 6.134,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 293.822,
+      "geomean_change_pct": 5.755,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 2048,
+     "afd": {
+      "median_us": 844.963,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "union_hybrid": {
+      "median_us": 876.943,
+      "geomean_change_pct": 3.86,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 871.876,
+      "geomean_change_pct": 3.229,
+      "repeats_faster": 0
+     }
+    }
+   ]
+  }
  }
 }
