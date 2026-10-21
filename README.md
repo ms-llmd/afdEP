@@ -71,10 +71,11 @@ role path is also validated with 3 Attention + 1 FFN and 1 Attention + 3 FFN in
 one four-GPU NVLink domain ([evidence](docs/validation-v2.1-clean.json)), and
 across two NVLink domains of two H200 GPUs joined by InfiniBand GIN (FFN domain +
 Attention domain, plus 3:1 and 1:3 layouts that mix roles in a domain;
-[evidence](docs/validation-v2.1-cross-node.json)). Across domains the role path
-uses DeepEP's hybrid kernels and measures at Masked parity; the v2.1 AFD
-optimizations are single-domain. Other group layouts and larger multi-domain
-worlds require validation.
+[evidence](docs/validation-v2.1-cross-node.json)). When each domain holds a single
+role, a directional hybrid protocol is 15% faster than Masked at one token
+([evidence](docs/validation-v2.1-directional-hybrid.json)); mixed-role domains keep
+DeepEP's hybrid protocol. Other group layouts and larger multi-domain worlds
+require validation.
 `allow_hybrid_mode` retains DeepEP's meaning; it does not enable an unvalidated
 topology.
 

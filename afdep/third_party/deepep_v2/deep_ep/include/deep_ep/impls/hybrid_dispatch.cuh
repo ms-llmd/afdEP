@@ -19,6 +19,9 @@ template <bool kDoCPUSync,
           int kNumMaxTokensPerRank,
           int kNumExperts, int kNumTopk, int kExpertAlignment,
           int kNumQPs, int64_t kNumTimeoutCycles,
+          // afdEP: scale-out domains [0, kAfdFfnScaleoutRanks) hold only FFN ranks and the rest only
+          // Attention ranks; dispatch traffic then flows Attention -> FFN only. 0 keeps the union protocol.
+          int kAfdFfnScaleoutRanks = 0,
           int kNumScaleupRanksPerLane = math::constexpr_ceil_div(kNumScaleupRanks, 32),
           int kNumChannelsPerSM = kNumScaleoutWarps,
           int kNumChannels = kNumScaleoutWarps * kNumSMs,
@@ -78,9 +81,15 @@ hybrid_dispatch_impl(
     const auto gin = handle::NCCLGin(nccl_dev_comm, nccl_window, qp_idx, sharing_mode);
 
     // Global parallel barriers for scale-out subteam and scale-up subteam
+    // afdEP directional: cross-domain writes of exchange N+1 follow their readers' exchange-N
+    // consumption through the dispatch -> combine round trip (csrc/kernels/elastic/afdep_roles.hpp),
+    // so only the scale-up half of the barrier remains.
+    constexpr bool kAfdDirectional = kAfdFfnScaleoutRanks > 0;
+    EP_STATIC_ASSERT(not kAfdDirectional or (kAfdFfnScaleoutRanks < kNumScaleoutRanks), "Need both roles");
+    const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;
     comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,
                       kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kHybridDispatchTag0, false, false, true>(
-        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx);
+        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, not kAfdDirectional, true);
 
     // The golden layout during the whole process for both scale-out and forward warps
     const auto token_layout = layout::TokenLayout(kNumHiddenBytes, kNumSFPacks * sizeof(sf_pack_t), kNumTopk, true);
@@ -173,7 +182,9 @@ hybrid_dispatch_impl(
             // Issue scaleout writes to peers
             EP_STATIC_ASSERT(kReuseSlotIndices or kNumScaleoutRanks <= kNumNotifyThreads,
                              "kNumScaleoutRanks must be less than kNumNotifyThreads");
-            if (thread_idx < kNumScaleoutRanks) {
+            // afdEP directional: Attention domains send counts to FFN domains only.
+            if (thread_idx < kNumScaleoutRanks and
+                (not kAfdDirectional or (not afd_ffn_domain and thread_idx < kAfdFfnScaleoutRanks))) {
                 const auto dst_scaleout_rank_idx = thread_idx;
                 gin.put<ncclTeamTagRail>(
                     workspace_layout.get_scaleout_rank_count_ptr<false>(scaleout_rank_idx),
@@ -192,7 +203,7 @@ hybrid_dispatch_impl(
             const auto recv_and_reduce = [=](const auto& get_ptr_func, const bool& is_expert_reduction = false) -> int {
                 int count = 0;
                 #pragma unroll
-                for (int j = 0; j < kNumScaleoutRanks; ++ j) {
+                for (int j = kAfdFfnScaleoutRanks; j < kNumScaleoutRanks; ++ j) {
                     const auto ptr = get_ptr_func(j);
                     int decoded;
                     comm::timeout_while<kNumTimeoutCycles>([&](const bool& is_last_check){
@@ -217,9 +228,12 @@ hybrid_dispatch_impl(
                 return count;
             };
 
+            // afdEP directional: Attention domains receive no tokens; they publish zero counts locally.
+            const bool afd_skip_receive = kAfdDirectional and not afd_ffn_domain;
+
             // Write into all scale-up peers' rank-level counters
             #pragma unroll
-            for (int i = thread_idx; i < kNumScaleupRanks; i += kNumNotifyThreads) {
+            for (int i = thread_idx; not afd_skip_receive and i < kNumScaleupRanks; i += kNumNotifyThreads) {
                 // Wait scale-out arrival and reduce
                 const auto count = recv_and_reduce([=](const int& scaleout_peer_idx) {
                     return workspace_layout.get_scaleout_rank_count_ptr<false>(scaleout_peer_idx, i);
@@ -235,7 +249,7 @@ hybrid_dispatch_impl(
 
             // Atomic add into all scale-up peers' expert-level counters
             #pragma unroll
-            for (int i = thread_idx; i < kNumExpertsPerScaleout; i += kNumNotifyThreads) {
+            for (int i = thread_idx; not afd_skip_receive and i < kNumExpertsPerScaleout; i += kNumNotifyThreads) {
                 // Wait scale-out arrival and reduce
                 const auto count = recv_and_reduce([=](const int& scaleout_peer_idx) {
                     return workspace_layout.get_scaleout_expert_count_ptr<false>(scaleout_peer_idx, i);
@@ -259,7 +273,13 @@ hybrid_dispatch_impl(
             // NOTES: here we only care the prefix sum by scale-up peers (used for later epilogue), not all ranks
             EP_STATIC_ASSERT(kNumNotifyWarps == 0 or kNumScaleupRanks + kNumExpertsPerRank <= kNumNotifyWarps * 32,
                              "Insufficient notify threads");
-            comm::timeout_while<kNumTimeoutCycles>(thread_idx < kNumScaleupRanks + kNumExpertsPerRank,
+            if (afd_skip_receive and thread_idx < kNumScaleupRanks + kNumExpertsPerRank) {
+                rank_expert_count[thread_idx] = 0;
+                if constexpr (kDoCPUSync)
+                    host_workspace_layout.get_scaleup_rank_expert_count_ptr<false>()[thread_idx] =
+                        math::encode_decode_positive(0);
+            }
+            comm::timeout_while<kNumTimeoutCycles>(not afd_skip_receive and thread_idx < kNumScaleupRanks + kNumExpertsPerRank,
                 [&](const bool& is_last_check) {
                 const auto status = ptx::ld_volatile<int64_t>(workspace_layout.get_scaleup_rank_expert_count_ptr<false>() + thread_idx);
                 if ((status >> 32ull) == kNumScaleupRanks) {
@@ -321,6 +341,8 @@ hybrid_dispatch_impl(
                 do_psum(expert_count, psum_num_recv_tokens_per_expert, kNumExpertsPerRank, 1);
             }
         }
+    } else if (warp_idx < kNumNotifyWarps + kNumScaleoutWarps and (kAfdDirectional and afd_ffn_domain)) {
+        // afdEP directional: FFN domains originate no tokens and signal no tails.
     } else if (warp_idx < kNumNotifyWarps + kNumScaleoutWarps) {
         const int scaleout_warp_idx = warp_idx - kNumNotifyWarps;
         const int channel_idx = sm_idx * kNumChannelsPerSM + scaleout_warp_idx;
@@ -331,7 +353,7 @@ hybrid_dispatch_impl(
         EP_STATIC_ASSERT(kNumScaleoutRanks <= 32, "Invalid number of scale-out ranks");
         int stored_scaleout_tail = 0, stored_old_scaleout_tail = 0;
         const auto update_scaleout_tail = [&](const bool& finish_flag = false) {
-            if (lane_idx < kNumScaleoutRanks and
+            if (lane_idx < kNumScaleoutRanks and (not kAfdDirectional or lane_idx < kAfdFfnScaleoutRanks) and
                 (stored_scaleout_tail >= stored_old_scaleout_tail + kScaleoutUpdateInterval or finish_flag)) {
                 const auto signaled_tail = math::pack2<int, int64_t>(finish_flag, stored_scaleout_tail);
                 const auto ptr = workspace_layout.get_scaleout_channel_signaled_tail_ptr(channel_idx, scaleout_rank_idx);
@@ -456,6 +478,9 @@ hybrid_dispatch_impl(
 
         // Flush unflushed tails
         update_scaleout_tail(true);
+    } else if (kAfdDirectional and not afd_ffn_domain) {
+        // afdEP directional: Attention domains receive and forward nothing; the source
+        // finalize kernel ends their (empty) linked lists.
     } else {
         const int forward_warp_idx = warp_idx - (kNumNotifyWarps + kNumScaleoutWarps);
         const int channel_idx = sm_idx * kNumChannelsPerSM + forward_warp_idx;
@@ -481,7 +506,8 @@ hybrid_dispatch_impl(
         int num_tokens_processed = 0;
         int stored_scaleout_old_tail_idx = 0;
         int stored_scaleup_send_counters[kNumScaleupRanksPerLane] = {};
-        int stored_finish_flag = lane_idx >= kNumScaleoutRanks;
+        // afdEP directional: FFN domains send no tails, so they count as finished.
+        int stored_finish_flag = lane_idx >= kNumScaleoutRanks or lane_idx < kAfdFfnScaleoutRanks;
         int stored_scaleout_tail_idx = 0;
         int recv_scaleout_rank_idx = channel_idx % kNumScaleoutRanks;
         uint32_t wip_mask;
@@ -510,8 +536,8 @@ hybrid_dispatch_impl(
                     return false;
                 }
 
-                // Read new signaled tails
-                if (lane_idx < kNumScaleoutRanks) {
+                // Read new signaled tails (afdEP directional: FFN-domain lanes stay finished)
+                if (lane_idx < kNumScaleoutRanks and lane_idx >= kAfdFfnScaleoutRanks) {
                     const auto signaled_tail = ptx::ld_acquire_sys<int64_t>(
                         workspace_layout.get_scaleout_channel_signaled_tail_ptr(channel_idx, lane_idx));
                     math::unpack2<int, int64_t>(signaled_tail, stored_finish_flag, stored_scaleout_tail_idx);

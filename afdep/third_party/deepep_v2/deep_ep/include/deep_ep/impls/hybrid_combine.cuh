@@ -16,6 +16,9 @@ template <bool kUseExpandedLayout, bool kAllowMultipleReduction,
           int kNumMaxTokensPerRank,
           int kNumExperts, int kNumTopk,
           int kNumQPs, int64_t kNumTimeoutCycles,
+          // afdEP: scale-out domains [0, kAfdFfnScaleoutRanks) hold only FFN ranks and the rest only
+          // Attention ranks; combine traffic then flows FFN -> Attention only. 0 keeps the union protocol.
+          int kAfdFfnScaleoutRanks = 0,
           int kNumScaleupRanksPerLane = math::constexpr_ceil_div(kNumScaleupRanks, 32),
           int kNumScaleupUpdateInterval = 3,
           int kNumChannelsPerSM = kNumForwardWarps,
@@ -92,9 +95,12 @@ hybrid_combine_impl(nv_bfloat16* x,
 
     // Global parallel barriers for scale-out subteam and scale-up subteam
     // NOTES: this barrier needs a grid sync, as there are channel scale-up tail cleaning before
+    // afdEP directional: only the scale-up half remains (ordering in afdep_roles.hpp).
+    constexpr bool kAfdDirectional = kAfdFfnScaleoutRanks > 0;
+    const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;
     comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,
                       kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kHybridCombineTag0, false, true, true>(
-        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx);
+        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, not kAfdDirectional, true);
 
     // Adjust register count at certain cases
     // TODO: support more cases, or try to make channel count more aligned
@@ -103,7 +109,11 @@ hybrid_combine_impl(nv_bfloat16* x,
     constexpr int kNumRegistersForForwardWarps = 256 - kNumRegistersForScaleupWarps;
 
     // Different warp roles
-    if (warp_idx < kNumScaleupWarps) {
+    if (warp_idx < kNumScaleupWarps and kAfdDirectional and not afd_ffn_domain) {
+        // afdEP directional: Attention domains hold no expert outputs to reduce or send.
+        if constexpr (kAdjustRegisters)
+            ptx::warpgroup_reg_dealloc<kNumRegistersForScaleupWarps>();
+    } else if (warp_idx < kNumScaleupWarps) {
         const auto channel_idx = sm_idx * kNumChannelsPerSM + warp_idx;
 
         // Adjust registers
@@ -381,8 +391,9 @@ hybrid_combine_impl(nv_bfloat16* x,
         };
 
         // Replay the dispatch
+        // afdEP directional: Attention domains forwarded nothing in dispatch (no metadata to replay).
         int stored_num_tokens_recv[kNumScaleupRanksPerLane] = {}, stored_cached_scaleup_tail[kNumScaleupRanksPerLane] = {};
-        for (int i = 0; ; ++ i) {
+        for (int i = 0; not (kAfdDirectional and not afd_ffn_domain); ++ i) {
             const auto src_token_global_idx = __ldg(token_metadata_at_forward + i * kNumForwardMetadataDims);
             const auto is_token_last_in_chunk = __ldg(token_metadata_at_forward + i * kNumForwardMetadataDims + 1);
             const auto src_rank_idx = src_token_global_idx / kNumMaxTokensPerRank;
@@ -580,16 +591,22 @@ hybrid_combine_impl(nv_bfloat16* x,
 
         // Update, wait and clean
         EP_STATIC_ASSERT(kNumScaleoutRanks <= 32, "Invalid ranks");
+        // afdEP directional: FFN domains signal Attention domains only, and only Attention
+        // domains wait (for FFN signals).
+        const bool afd_signal = not kAfdDirectional or (afd_ffn_domain and lane_idx >= kAfdFfnScaleoutRanks);
+        const bool afd_wait = not kAfdDirectional or (not afd_ffn_domain and lane_idx < kAfdFfnScaleoutRanks);
         if (lane_idx < kNumScaleoutRanks) {
             // Update remote tails
             const auto expected_signal = math::pack2<int, int64_t>(1, 0);
-            gin.red_add_rel<ncclTeamTagRail>(
-                workspace_layout.get_scaleout_channel_signaled_tail_ptr(channel_idx, scaleout_rank_idx),
-                expected_signal, lane_idx);
+            if (afd_signal) {
+                gin.red_add_rel<ncclTeamTagRail>(
+                    workspace_layout.get_scaleout_channel_signaled_tail_ptr(channel_idx, scaleout_rank_idx),
+                    expected_signal, lane_idx);
+            }
 
             // Wait tail arrival
             const auto wait_ptr = workspace_layout.get_scaleout_channel_signaled_tail_ptr(channel_idx, lane_idx);
-            comm::timeout_while<kNumTimeoutCycles>([=](const bool& is_last_check) {
+            comm::timeout_while<kNumTimeoutCycles>(afd_wait, [=](const bool& is_last_check) {
                 const auto signal = ptx::ld_acquire_sys<int64_t>(wait_ptr);
                 if (signal == expected_signal) {
                     // Clean for next usages

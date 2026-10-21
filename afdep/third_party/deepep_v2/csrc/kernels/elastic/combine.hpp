@@ -28,6 +28,7 @@ public:
         bool afd_skip_entry_barrier;
         int afd_directed_ffn_ranks;
         bool afd_per_cta_exit;
+        int afd_ffn_scaleout_ranks;
 
         // Parameters
         nv_bfloat16* x;
@@ -67,7 +68,7 @@ public:
                                     afdep_args);
         } else {
             header_name = "hybrid_combine";
-            func_name = fmt::format("hybrid_combine_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}>",
+            func_name = fmt::format("hybrid_combine_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>",
                                     args.use_expanded_layout, args.allow_multiple_reduction,
                                     args.launch_args.grid_dim.first,
                                     args.num_scaleup_warps, args.num_forward_warps,
@@ -77,7 +78,9 @@ public:
                                     args.num_experts,
                                     args.num_topk,
                                     args.num_qps,
-                                    args.num_timeout_cycles);
+                                    args.num_timeout_cycles,
+                                    args.afd_ffn_scaleout_ranks > 0 ?
+                                        fmt::format(", {}", args.afd_ffn_scaleout_ranks) : std::string());
         }
         return fmt::format(R"(
 #include <deep_ep/impls/{}.cuh>
@@ -140,7 +143,8 @@ static void* launch_combine(void* x,
                             const at::cuda::CUDAStream& stream,
                             const bool& afd_skip_entry_barrier = false,
                             const int& afd_directed_ffn_ranks = 0,
-                            const bool& afd_per_cta_exit = false) {
+                            const bool& afd_per_cta_exit = false,
+                            const int& afd_ffn_scaleout_ranks = 0) {
     // Maximize shared memory utilization
     const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
     auto num_warps = std::min(num_smem_bytes / token_layout.get_num_bytes<true>(), 32);
@@ -175,6 +179,7 @@ static void* launch_combine(void* x,
         .afd_directed_ffn_ranks = num_scaleout_ranks == 1 and is_scaleup_nvlink ? afd_directed_ffn_ranks : 0,
         .afd_per_cta_exit = num_scaleout_ranks == 1 and is_scaleup_nvlink and afd_directed_ffn_ranks > 0 and
                             afd_per_cta_exit,
+        .afd_ffn_scaleout_ranks = num_scaleout_ranks > 1 ? afd_ffn_scaleout_ranks : 0,
         .x = static_cast<nv_bfloat16*>(x),
         .topk_weights = static_cast<float*>(topk_weights),
         .src_metadata = src_metadata,

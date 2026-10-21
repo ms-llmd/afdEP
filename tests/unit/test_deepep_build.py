@@ -34,11 +34,11 @@ def test_pinned_origin_and_declared_role_specialization():
     assert actual == expected
     assert all(name in expected for name in SOURCE_NAMES)
     assert "MIT License" in (VENDOR_ROOT / "LICENSE").read_text()
-    # Direct dispatch/combine add opt-in role specializations. Hybrid transport
-    # and credit kernels remain the pinned input, independently reviewable here.
-    for name in ("hybrid_dispatch", "hybrid_combine", "barrier"):
-        path = f"deep_ep/include/deep_ep/impls/{name}.cuh"
-        assert expected[path] == provenance["file_sha256"][path]
+    # Direct and hybrid dispatch/combine add opt-in role specializations whose
+    # defaults keep upstream kernels (see the template-default test). The
+    # credit/barrier kernel remains the pinned input, independently reviewable here.
+    path = "deep_ep/include/deep_ep/impls/barrier.cuh"
+    assert expected[path] == provenance["file_sha256"][path]
 
 
 def test_role_template_parameters_default_to_upstream_kernels():
@@ -57,6 +57,8 @@ def test_role_template_parameters_default_to_upstream_kernels():
     assert "bool kAfdPerCtaExit = false," in dispatch
     epilogue = (impls / "dispatch_copy_epilogue.cuh").read_text()
     assert "int kAfdRegionOffset = 0," in epilogue
+    for hybrid in ("hybrid_dispatch.cuh", "hybrid_combine.cuh"):
+        assert "int kAfdFfnScaleoutRanks = 0," in (impls / hybrid).read_text()
 
 
 def test_runtime_header_contents_invalidate_build(tmp_path):

@@ -41,6 +41,28 @@ static bool afdep_directed_exit() {
 // without the sender grid sync; receivers wait for round x sender CTAs (every
 // rank uses the same transport SM count). The last source CTA resets the slot
 // counters. AFDEP_GRID_SYNC_EXIT=1 keeps the grid-synced release as a control.
+// Directional hybrid protocol: when every scale-out (NVLink) domain holds a single
+// role, dispatch traffic (counts, payloads, finish tails) flows Attention -> FFN
+// and combine traffic (payloads, finish signals) FFN -> Attention only; FFN
+// domains skip scale-out sends, Attention domains skip forwarding and combine
+// reduction. Every exchange-(N+1) cross-domain write then follows its reader's
+// exchange-N consumption: Attention writes into an FFN domain only after its
+// combine-N wait received that FFN rank's per-channel signals, sent after the
+// FFN's dispatch-N forwarders cleaned their tails and the notify cleaned its
+// counts; an FFN rank writes into an Attention domain only after its dispatch-
+// (N+1) forwarders saw that source's finish tails, sent after the source's
+// combine-N wait and reduce epilogue. The cross-domain half of both entry
+// barriers is dropped; the scale-up half still orders reuse inside a domain.
+// Returns the FFN scale-out domain count, or 0 (union protocol).
+// AFDEP_UNION_HYBRID=1 keeps the union protocol as a measurement control.
+static int afdep_directional_hybrid(const int afd_ffn_ranks, const int num_scaleout_ranks,
+                                    const int num_scaleup_ranks) {
+    if (afd_ffn_ranks <= 0 or num_scaleout_ranks <= 1 or afd_ffn_ranks % num_scaleup_ranks != 0 or
+        deep_ep::get_env<int>("AFDEP_UNION_HYBRID", 0) != 0)
+        return 0;
+    return afd_ffn_ranks / num_scaleup_ranks;
+}
+
 static bool afdep_per_cta_exit() {
     return deep_ep::get_env<int>("AFDEP_GRID_SYNC_EXIT", 0) == 0;
 }
