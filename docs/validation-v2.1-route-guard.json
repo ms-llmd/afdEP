@@ -1,0 +1,706 @@
+{
+ "date": "2026-10-21",
+ "change": "Directional hybrid dispatch validates routes in its notify and scale-out warps instead of launching the separate route-guard kernel before each source dispatch",
+ "native_source_sha256": "a5a18c80cadd7a34c7e26c54c35325f1ed4de809daca865a312a604fa55fd623",
+ "commit": "78a442f",
+ "screen": {
+  "topology": "2 waldorf nodes (gf49e9c FFN, gf48cf2 Attention) x 2 NVIDIA H200, InfiniBand GIN",
+  "arms": {
+   "afd": {
+    "_label": "c1"
+   },
+   "guard": {
+    "_label": "c1",
+    "_env": {
+     "AFDEP_HYBRID_ROUTE_GUARD": "1"
+    }
+   },
+   "masked": {
+    "_label": "c1",
+    "role_aware": false
+   }
+  },
+  "passthrough": [
+   "--payload",
+   "bf16",
+   "--routing",
+   "random",
+   "--hidden",
+   "2048",
+   "--tokens",
+   "1",
+   "8",
+   "32",
+   "128",
+   "512",
+   "2048",
+   "--capacity",
+   "2048",
+   "--hybrid",
+   "on",
+   "--warmup",
+   "50",
+   "--iterations",
+   "200",
+   "--blocks",
+   "2"
+  ],
+  "metric": "per block: max Attention-rank CUDA-event us per exchange; 3 fresh two-pod processes per arm, rotating order",
+  "table": [
+   {
+    "tokens": 1,
+    "afd": {
+     "median_us": 70.8409595489502,
+     "paired_change_pct": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "guard": {
+     "median_us": 72.89448022842407,
+     "paired_change_pct": [
+      2.678523217642681,
+      2.3583817444014166,
+      2.9135675027089247
+     ],
+     "geomean_change_pct": 2.649905231139993,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 88.75239849090576,
+     "paired_change_pct": [
+      25.03149219619676,
+      24.626060258551476,
+      25.89179927931522
+     ],
+     "geomean_change_pct": 25.182006093856636,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 8,
+    "afd": {
+     "median_us": 79.22592163085938,
+     "paired_change_pct": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "guard": {
+     "median_us": 80.22192001342773,
+     "paired_change_pct": [
+      1.3523420327282931,
+      1.3572291825159066,
+      0.9972664627516448
+     ],
+     "geomean_change_pct": 1.2354721406964364,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 98.40695858001709,
+     "paired_change_pct": [
+      23.873395208719028,
+      24.21055704284352,
+      24.135548190790047
+     ],
+     "geomean_change_pct": 24.073082584453132,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 32,
+    "afd": {
+     "median_us": 82.0042371749878,
+     "paired_change_pct": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "guard": {
+     "median_us": 83.14823627471924,
+     "paired_change_pct": [
+      0.9906434527097829,
+      1.6507357625481056,
+      1.3950487671634315
+     ],
+     "geomean_change_pct": 1.3451114755167026,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 104.38488006591797,
+     "paired_change_pct": [
+      26.64271202877897,
+      27.419464773075774,
+      27.70988981851179
+     ],
+     "geomean_change_pct": 27.256557202781153,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 128,
+    "afd": {
+     "median_us": 103.51744174957275,
+     "paired_change_pct": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "guard": {
+     "median_us": 104.40855979919434,
+     "paired_change_pct": [
+      0.3315917652334077,
+      1.6092315965305248,
+      1.2847763574543203
+     ],
+     "geomean_change_pct": 1.0737426997305066,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 121.25279903411865,
+     "paired_change_pct": [
+      16.565740786268734,
+      17.132723708001695,
+      17.671543781279908
+     ],
+     "geomean_change_pct": 17.12246580432697,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 512,
+    "afd": {
+     "median_us": 200.54415702819824,
+     "paired_change_pct": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "guard": {
+     "median_us": 202.14248657226562,
+     "paired_change_pct": [
+      0.9679716590839771,
+      0.44415269334177054,
+      0.6536422515307949
+     ],
+     "geomean_change_pct": 0.6883588221117565,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 216.08712196350098,
+     "paired_change_pct": [
+      7.725738663943216,
+      8.04850389557945,
+      7.512359231638688
+     ],
+     "geomean_change_pct": 7.761975299040325,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 2048,
+    "afd": {
+     "median_us": 539.1659927368164,
+     "paired_change_pct": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "guard": {
+     "median_us": 542.0191192626953,
+     "paired_change_pct": [
+      0.4163329849397934,
+      0.684893295540534,
+      0.5291740510925846
+     ],
+     "geomean_change_pct": 0.5434064986959974,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 550.4420852661133,
+     "paired_change_pct": [
+      2.0188254115694804,
+      1.8418805022833773,
+      2.1060834320969724
+     ],
+     "geomean_change_pct": 1.98887053970771,
+     "repeats_faster": 0
+    }
+   }
+  ],
+  "processes": [
+   {
+    "order": [
+     "afd",
+     "guard",
+     "masked"
+    ],
+    "median_us": {
+     "afd": {
+      "1": 70.8240795135498,
+      "8": 79.15152072906494,
+      "32": 82.2495985031128,
+      "128": 103.95912170410156,
+      "512": 200.20456314086914,
+      "2048": 539.5495223999023
+     },
+     "guard": {
+      "1": 72.72111892700195,
+      "8": 80.22192001342773,
+      "32": 83.06439876556396,
+      "128": 104.30384159088135,
+      "512": 202.14248657226562,
+      "2048": 541.7958450317383
+     },
+     "masked": {
+      "1": 88.5524034500122,
+      "8": 98.04767608642578,
+      "32": 104.16312217712402,
+      "128": 121.18072032928467,
+      "512": 215.67184448242188,
+      "2048": 550.4420852661133
+     }
+    }
+   },
+   {
+    "order": [
+     "guard",
+     "masked",
+     "afd"
+    ],
+    "median_us": {
+     "guard": {
+      "1": 72.89448022842407,
+      "8": 80.30119895935059,
+      "32": 83.27455997467041,
+      "128": 105.18327713012695,
+      "512": 201.43487930297852,
+      "2048": 542.8518486022949
+     },
+     "masked": {
+      "1": 88.75239849090576,
+      "8": 98.40695858001709,
+      "32": 104.38488006591797,
+      "128": 121.25279903411865,
+      "512": 216.68496131896973,
+      "2048": 549.0898513793945
+     },
+     "afd": {
+      "1": 71.21495962142944,
+      "8": 79.22592163085938,
+      "32": 81.92224025726318,
+      "128": 103.51744174957275,
+      "512": 200.54415702819824,
+      "2048": 539.1591835021973
+     }
+    }
+   },
+   {
+    "order": [
+     "masked",
+     "afd",
+     "guard"
+    ],
+    "median_us": {
+     "masked": {
+      "1": 89.18295860290527,
+      "8": 98.58487606048584,
+      "32": 104.72752094268799,
+      "128": 121.30072116851807,
+      "512": 216.08712196350098,
+      "2048": 550.5212783813477
+     },
+     "afd": {
+      "1": 70.8409595489502,
+      "8": 79.41711902618408,
+      "32": 82.0042371749878,
+      "128": 103.0841588973999,
+      "512": 200.98816871643066,
+      "2048": 539.1659927368164
+     },
+     "guard": {
+      "1": 72.90495872497559,
+      "8": 80.20911931991577,
+      "32": 83.14823627471924,
+      "128": 104.40855979919434,
+      "512": 202.30191230773926,
+      "2048": 542.0191192626953
+     }
+    }
+   }
+  ],
+  "native_source_sha256": {
+   "afd": "a5a18c80cadd7a34c7e26c54c35325f1ed4de809daca865a312a604fa55fd623",
+   "guard": "a5a18c80cadd7a34c7e26c54c35325f1ed4de809daca865a312a604fa55fd623",
+   "masked": "a5a18c80cadd7a34c7e26c54c35325f1ed4de809daca865a312a604fa55fd623"
+  }
+ },
+ "kernel_trace": "nsys with CUDA-graph node tracing on the parent build (HEAD e9851e7): the Attention node runs afdep_validate_source_routes_impl for 0.9 us (T=1, 32) to 1.5 us (T=512) plus a 0.45 us edge before every dispatch",
+ "correctness": {
+  "cross_node": {
+   "result": "14/14 cross-node cases pass; 8/8 invalid-route cases (dummy, duplicate, negative, wide; eager and graph) stop with the afdep_checked_expert device assertion and launch no guard kernel",
+   "summary": [
+    "bf16-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "bf16-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "bf16-direct-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "bf16-direct-large: afdep-v21-xa exit=0 afdep-v21-xb exit=0 ",
+    "bf16-generic: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "fp8-hyb-small: afdep-v21-xa exit=0 afdep-v21-xb exit=0 ",
+    "fp8-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "fp8-direct-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "fp8-direct-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "fp8-generic: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "f1-hyb-small: afdep-v21-xa exit=0 afdep-v21-xb exit=0 ",
+    "f3-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "f1-hyb-large: afdep-v21-xa exit=0 afdep-v21-xb exit=0 ",
+    "f3-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "done",
+    "invalid-eager-dummy: afdep-v21-xb exit=1 afdep-v21-xa exit=1  assertion=yes",
+    "invalid-eager-duplicate: afdep-v21-xb exit=1 afdep-v21-xa exit=1  assertion=yes",
+    "invalid-eager-negative: afdep-v21-xb exit=1 afdep-v21-xa exit=1  assertion=yes",
+    "invalid-eager-wide: afdep-v21-xb exit=1 afdep-v21-xa exit=1  assertion=yes",
+    "invalid-graph-dummy: afdep-v21-xb exit=1 afdep-v21-xa exit=1  assertion=yes",
+    "invalid-graph-duplicate: afdep-v21-xb exit=1 afdep-v21-xa exit=1  assertion=yes",
+    "invalid-graph-negative: afdep-v21-xb exit=1 afdep-v21-xa exit=1  assertion=yes",
+    "invalid-graph-wide: afdep-v21-xb exit=1 afdep-v21-xa exit=1  assertion=yes"
+   ],
+   "logs": [
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-bf16-direct-large-n0.log",
+     "log_sha256": "83e5c2803c55429098a76057d4bb379ed3bf4756da24ce86bd904b011c9bf660"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-bf16-direct-small-n0.log",
+     "log_sha256": "e94f40ecd84cfd63153ac5c0219c1d864b259790222c0484941de02aaba55de1"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-bf16-generic-n0.log",
+     "log_sha256": "d0f6dd5e5d04965c9e0824b34f894261d24df458e306405dbcdbe295a7c22073"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-bf16-hyb-large-n0.log",
+     "log_sha256": "e246bc5259385dd4dc9ad01f0e57e636dc7889b948b6a872b4bf0da21ceff425"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-bf16-hyb-small-n0.log",
+     "log_sha256": "b47ac173de99f750028809fb7eaea4816b9c8c9251e718be4f36d524a1868058"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-f1-hyb-large-n0.log",
+     "log_sha256": "4ce1e7172d0ad4553e12c9af0b922602a2991b8a20a111e4d83595273d0b61f3"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-f1-hyb-small-n0.log",
+     "log_sha256": "6bcdf045265cc7043fd94b1e419a81e7c43160bdf9735236ecc9740f6be1d83e"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-f3-hyb-large-n0.log",
+     "log_sha256": "9777317877f3fecc8e57034edde65fba4568cb66a186d32d3e18979bfcab7f2f"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-f3-hyb-small-n0.log",
+     "log_sha256": "1af315839775f72be1d8f0bc6d856ce6a1636b2a3a6a9813e0ebcc3250a5d8fc"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-fp8-direct-large-n0.log",
+     "log_sha256": "70c9ef0ca8bdaa78df61c5cfa677e051fba96896f48c80a00e3d4b68962ef3c0"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-fp8-direct-small-n0.log",
+     "log_sha256": "b7ec1843e08efe1777a2ec3d6a773eb0ae5f211e6487aa75281cc200d847b858"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-fp8-generic-n0.log",
+     "log_sha256": "3770229dbea00cf7acd0b861e9ac31ac392a6d172d25d5ec5728da657bf99ec3"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-fp8-hyb-large-n0.log",
+     "log_sha256": "379fcc50d0b1e4d73c5acbcf816da45f688ea73cce14ce623402fc22f2e558f8"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1m-fp8-hyb-small-n0.log",
+     "log_sha256": "044225a4ac6aa9c88f1997adf1e146d4fff7eb33bcdcff4d4cde7da74594da08"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1inv-eager-dummy-n0.log",
+     "log_sha256": "3c0d8c251a06cc741635e62a0b5f73c29bee407c8e2c579be29997238b80e853"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1inv-eager-duplicate-n0.log",
+     "log_sha256": "e6191d4ed1c278e0b5c5bac3c4a670941e46addce42ab11ca781132abf26dc68"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1inv-eager-negative-n0.log",
+     "log_sha256": "5e20f93ff35f5def549f61b1cb7d04ee66003de300622904a1bdbaccef71ba1d"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1inv-eager-wide-n0.log",
+     "log_sha256": "e0b04fa8d02ec36f1b6b88fdd7d3bb6c6e8d1a0457b05f9edd250928e1d2bda2"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1inv-graph-dummy-n0.log",
+     "log_sha256": "68339cb38dc573d0a74c7e843a6e63959dbb0a783031a1368581168a3091d4a8"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1inv-graph-duplicate-n0.log",
+     "log_sha256": "ecc6983f1a4b1ea789e09bcefb9df5c62770cebf8c11c2263a50c63d35b7a704"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1inv-graph-negative-n0.log",
+     "log_sha256": "92f79f081ef6d7759a1d407feb4cef4ca9d127b7813fd631b893d7a6eea6ccd6"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "c1inv-graph-wide-n0.log",
+     "log_sha256": "3eb00ae1d0b573c1a477934ba23e023204cf5dfe7a22bcf4ae5c13033b047c32"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-bf16-direct-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-bf16-direct-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-bf16-generic-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-bf16-hyb-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-bf16-hyb-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-f1-hyb-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-f1-hyb-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-f3-hyb-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-f3-hyb-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-fp8-direct-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-fp8-direct-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-fp8-generic-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-fp8-hyb-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1m-fp8-hyb-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1inv-eager-dummy-n1.log",
+     "log_sha256": "e6823c2ec03603d08d4350d811932f4074e6e87359342fe24746fe60535f628a"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1inv-eager-duplicate-n1.log",
+     "log_sha256": "b3f388d96f5bbca3236b034284799cc23c19c006958cf5203b88c6510dc4de42"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1inv-eager-negative-n1.log",
+     "log_sha256": "18e0daae8d1260b404bc5e1fea05a80f47bbf613481c0c987ae3264b0e4865c9"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1inv-eager-wide-n1.log",
+     "log_sha256": "117420c00c3494efad708ea360c2ee94a2a9df14b4ff5c252e0880a8d2440723"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1inv-graph-dummy-n1.log",
+     "log_sha256": "7cc0bcfa3101854645e9297c0f943dd1f2762ea06cab75de3d46656178f0190b"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1inv-graph-duplicate-n1.log",
+     "log_sha256": "ac7d25e3624a653fdd3b440d955caa0ab7aad970ef637b41b28910a2d7f1ba3f"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1inv-graph-negative-n1.log",
+     "log_sha256": "bc554a3a82e9248baa6ccec7ede678e75c65a6c657a9b49c3c99b6d64b83d2e9"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "c1inv-graph-wide-n1.log",
+     "log_sha256": "a39f3be46fcbb528125488fc48f2db8c1819df7a39261fed2722b5397d4271ad"
+    }
+   ]
+  },
+  "single_domain": {
+   "topology": "pokprod 4 x NVIDIA H100 80GB HBM3, one NVLink domain",
+   "result": "10/10 GPU matrix cases pass; 8/8 invalid-route cases assert",
+   "logs": [
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-direct-small.log",
+     "log_sha256": "4b4d78e385ca62d5a115cdf685bb2d4079f5c9e45bf83a276698c0e65605dbf1"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-generic-control.log",
+     "log_sha256": "fa2e1fd2168f0b2a01cdbac2b0ddf22bf4f754f5a4d1b99e92b96efaa8eb95aa"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-hybrid-small.log",
+     "log_sha256": "4dca56574a4f30a5902525f27f4ba47410ad59ab3da0ee9123e418fadefec108"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-off-large.log",
+     "log_sha256": "08bf9b987f8fd5e9069c0b466ceb9ba4fd688b760027b9d6ace8121a5a7fb029"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-on-large.log",
+     "log_sha256": "2c1e9a2bec82923411743d77b4c0c4c57aff0b75010eaf4d4da6bc6b0cfd26e4"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-direct-small.log",
+     "log_sha256": "aab1b759ccece5d6d1b3b8ea2fb47c83a2fca4ceafeaedea75b9acf3e369c826"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-generic-control.log",
+     "log_sha256": "0ec3d7596a0e1bd27db48a41dd032678bf165c1287a8e160590ac626f4b66296"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-hybrid-small.log",
+     "log_sha256": "82f8cfc6dcb36473e80f81fe99fee9ea39ad4727e12440ea099bb7fbf4e391f2"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-off-large.log",
+     "log_sha256": "e140990c819d2e8c6ecfdad712b237c628823f834399ad5c5dc548bd06e1d44c"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-on-large.log",
+     "log_sha256": "e9929119f584cfb1f2b750396650886957e0b8672bf379b05fd3f808f3c93f40"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-eager-dummy.log",
+     "log_sha256": "9991896cfba32ee1abc745ca1de829fec02854d99c8043d212c24c71097b7ae6"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-eager-duplicate.log",
+     "log_sha256": "2835b934f9be330b0e49491ec344700b0c214135928c80b5190593fef9f08c5a"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-eager-negative.log",
+     "log_sha256": "eaf634a39d74336f5666416b0cdf5ca452c2b0aaaf51f806299215c4c1fdfad7"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-eager-wide.log",
+     "log_sha256": "e0c56a0dc9dfab84b45f42b6d2a5f25737ce52abe8380def5cf8d82afb212989"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-graph-dummy.log",
+     "log_sha256": "94bc26e0a24da3c102143767b6d0cc3fab3b736c0de3b35f3a19ea9e4293a77f"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-graph-duplicate.log",
+     "log_sha256": "6c15816bd6c7fbffb2d045aed4413a7752dfbb95687d5ee3ceb8acd0a04580a4"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-graph-negative.log",
+     "log_sha256": "baeba713a28fc1b33c56e62ab50c113cfb102ae7f7ef1951bca5f32e1b2dd0c9"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-graph-wide.log",
+     "log_sha256": "ff549123a30b51ab6bb9dc7dadc0fb86dcd36f549f050c9eeccb723f7ef4d588"
+    }
+   ]
+  }
+ },
+ "scope": "communication only; no serving claim"
+}
