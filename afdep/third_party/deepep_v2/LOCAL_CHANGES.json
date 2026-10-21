@@ -4,11 +4,11 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "60de21423baabcef743f688055615a42dd4f75c7393a05374160bed0c2262ff2"
+      "sha256": "2e05ebbe7f7c8f615f17c588fc3a78a666e48954a047a988a7d9fd5e30e809c2"
     },
     "csrc/kernels/elastic/combine.hpp": {
       "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
-      "sha256": "bec87a6481dfae0b1f31b29755314476757754e07dc8a3de763476b0aacd73d4"
+      "sha256": "570620e1df425ef24e269908a11a8f5bd105c48f6173ab692409b97dd7b7ed23"
     },
     "csrc/kernels/elastic/dispatch.hpp": {
       "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
@@ -20,7 +20,7 @@
     },
     "deep_ep/include/deep_ep/impls/combine.cuh": {
       "upstream_sha256": "6a0f1f3f978978a35f9616178825f8c29881aafc3a04d8c2ba68b50a4a283c9a",
-      "sha256": "9ff89427309edfb6670d1383888deba989d951efcc3947e1f8954dae04ea215a"
+      "sha256": "8847dfb9b41cc0cb0c971ac0c35ca25d95cacc2443413ca3a6d6b7dcb43a51e1"
     },
     "deep_ep/include/deep_ep/impls/dispatch.cuh": {
       "upstream_sha256": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
@@ -41,7 +41,7 @@
   },
   "added_files": {
     "csrc/kernels/elastic/afdep_roles.hpp": {
-      "sha256": "46d1219d822abb018fa630957e044de9854516f8ca10b8afb4a717b6713fc726"
+      "sha256": "5fdf680757d47ed343da890230c90afef9a6de6125b5d6427292f56a18737430"
     },
     "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
       "sha256": "4f7ed0d81d7215753c99dfe1364e4ba6e707101cb5ede0d1b139e8b1923e937a"
@@ -63,7 +63,8 @@
     "v2.1: with directed exit, each sending CTA (Attention sources in dispatch, FFN ranks in combine) releases its own arrival after its TMA stores complete, without the sender grid sync; receivers wait for round x sender CTAs and the last source CTA resets the slot counters. AFDEP_GRID_SYNC_EXIT=1 keeps the grid-synced release as a measurement control.",
     "v2.1: directional hybrid protocol when every scale-out (NVLink) domain holds one role: Attention domains send counts, payloads and finish tails to FFN domains only and skip forwarding and combine reduction; FFN domains skip scale-out sends, wait only for Attention domains, and signal combine arrival to Attention domains only. Both hybrid entry barriers keep only their scale-up half, and Attention domains (which then share no state) skip their scale-up barriers too. AFDEP_UNION_HYBRID=1 keeps the union hybrid protocol as a measurement control.",
     "v2.1: directional hybrid dispatch validates full-width real expert IDs and duplicates in its notify and scale-out warps before route-derived indexing, stores or puts, as the direct path does, and drops the separate route-guard kernel ahead of each source dispatch; mixed-role (union hybrid) layouts keep the guard. AFDEP_HYBRID_ROUTE_GUARD=1 keeps the guard kernel as a measurement control.",
-    "v2.1: directional hybrid dispatch skips the entry grid sync on Attention domains, which run neither barrier half there; it guarded no cross-CTA state. AFDEP_ATTENTION_GRID_SYNC=1 keeps it as a measurement control."
+    "v2.1: directional hybrid dispatch skips the entry grid sync on Attention domains, which run neither barrier half there; it guarded no cross-CTA state. AFDEP_ATTENTION_GRID_SYNC=1 keeps it as a measurement control.",
+    "v2.1: single-FFN reduction. With one FFN rank on the direct-NVLink role path every token's top-k rows are local, so the FFN combine's branch-free reduction prefix covers all top_k slots instead of ceil(top_k / union ranks), which counts the expert-free Attention ranks. AFDEP_UNION_REDUCE_PREFIX=1 keeps the union prefix as a measurement control."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",

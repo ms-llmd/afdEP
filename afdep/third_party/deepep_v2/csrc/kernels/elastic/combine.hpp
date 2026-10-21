@@ -28,6 +28,7 @@ public:
         bool afd_skip_entry_barrier;
         int afd_directed_ffn_ranks;
         bool afd_per_cta_exit;
+        bool afd_single_ffn_reduce;
         int afd_ffn_scaleout_ranks;
 
         // Parameters
@@ -52,8 +53,8 @@ public:
         if (args.num_scaleout_ranks == 1) {
             header_name = "combine";
             const auto afdep_args = args.afd_skip_entry_barrier or args.afd_directed_ffn_ranks > 0 ?
-                fmt::format(", {}, {}, {}", args.afd_skip_entry_barrier, args.afd_directed_ffn_ranks,
-                            args.afd_per_cta_exit) : std::string();
+                fmt::format(", {}, {}, {}{}", args.afd_skip_entry_barrier, args.afd_directed_ffn_ranks,
+                            args.afd_per_cta_exit, args.afd_single_ffn_reduce ? ", true" : "") : std::string();
             func_name = fmt::format("combine_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>",
                                     args.is_scaleup_nvlink,
                                     args.use_expanded_layout, args.allow_multiple_reduction,
@@ -144,7 +145,8 @@ static void* launch_combine(void* x,
                             const bool& afd_skip_entry_barrier = false,
                             const int& afd_directed_ffn_ranks = 0,
                             const bool& afd_per_cta_exit = false,
-                            const int& afd_ffn_scaleout_ranks = 0) {
+                            const int& afd_ffn_scaleout_ranks = 0,
+                            const bool& afd_single_ffn_reduce = false) {
     // Maximize shared memory utilization
     const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
     auto num_warps = std::min(num_smem_bytes / token_layout.get_num_bytes<true>(), 32);
@@ -179,6 +181,8 @@ static void* launch_combine(void* x,
         .afd_directed_ffn_ranks = num_scaleout_ranks == 1 and is_scaleup_nvlink ? afd_directed_ffn_ranks : 0,
         .afd_per_cta_exit = num_scaleout_ranks == 1 and is_scaleup_nvlink and afd_directed_ffn_ranks > 0 and
                             afd_per_cta_exit,
+        .afd_single_ffn_reduce = num_scaleout_ranks == 1 and (afd_skip_entry_barrier or afd_directed_ffn_ranks > 0) and
+                                 afd_single_ffn_reduce,
         .afd_ffn_scaleout_ranks = num_scaleout_ranks > 1 ? afd_ffn_scaleout_ranks : 0,
         .x = static_cast<nv_bfloat16*>(x),
         .topk_weights = static_cast<float*>(topk_weights),

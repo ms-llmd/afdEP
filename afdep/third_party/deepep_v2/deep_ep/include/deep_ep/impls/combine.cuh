@@ -27,6 +27,8 @@ template <bool kIsScaleupNVLink,
           int kAfdDirectedFfnRanks = 0,
           // afdEP: with directed exit, every FFN CTA releases its own arrival (no sender grid sync).
           bool kAfdPerCtaExit = false,
+          // afdEP: with one FFN rank, every token's top-k rows are local, so all kNumTopk slots are valid.
+          bool kAfdSingleFfnReduce = false,
           int kNumThreads = kNumWarps * 32,
           int kNumHiddenBytes = kHidden * sizeof(nv_bfloat16),
           bool kUseRankLayout = use_rank_layout<kAllowMultipleReduction, kNumRanks, kNumTopk>(),
@@ -163,7 +165,10 @@ combine_impl(nv_bfloat16* x,
 
             // Reduce into shared memory
             constexpr int kUnrollFactor = get_max_unroll_factor<kHiddenVec, 4>();
-            combine_reduce<kHiddenVec, kUnrollFactor, math::constexpr_ceil_div(kNumTopk, kNumRanks)>(
+            // The branch-free prefix is the expected valid-slot count: top-k / ranks for union
+            // ranks, but with one FFN rank (dummy Attention ranks hold no experts) all of top-k.
+            constexpr int kNumExpectedTopk = kAfdSingleFfnReduce ? kNumTopk : math::constexpr_ceil_div(kNumTopk, kNumRanks);
+            combine_reduce<kHiddenVec, kUnrollFactor, kNumExpectedTopk>(
                 lane_idx, topk_slot_idx, static_cast<combine_vec_t*>(tma_buffer.get_base_ptr()),
                 /* Get source base */ [=](const int& slot_idx) {
                     return math::advance_ptr<combine_vec_t>(

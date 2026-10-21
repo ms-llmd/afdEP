@@ -1325,7 +1325,8 @@ public:
             afd_direct and afdep_directed_exit() and afdep_per_cta_exit(),
             afd_ffn_ranks > 0 and not deterministic ?
                 afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
-                                         nccl_context->num_scaleup_ranks) : 0);
+                                         nccl_context->num_scaleup_ranks) : 0,
+            afd_direct and afd_ffn_ranks == 1 and afdep_single_ffn_reduce());
 
         // Allocate output tensors
         auto combined_x = torch::empty({num_combined_tokens, hidden}, x.options());

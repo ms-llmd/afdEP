@@ -79,6 +79,16 @@ static bool afdep_skip_attention_entry_sync() {
     return deep_ep::get_env<int>("AFDEP_ATTENTION_GRID_SYNC", 0) == 0;
 }
 
+// Single-FFN reduction: DeepEP's FFN combine reduces a token's local top-k rows
+// with a branch-free prefix of ceil(top_k / ranks) slots, an expected count for
+// tokens spread over every rank. On the role path the Attention ranks hold no
+// experts; with one FFN rank every token's top-k rows are local, so all top_k slots
+// are valid on every token and the whole reduction takes the branch-free path.
+// AFDEP_UNION_REDUCE_PREFIX=1 keeps the union prefix as a measurement control.
+static bool afdep_single_ffn_reduce() {
+    return deep_ep::get_env<int>("AFDEP_UNION_REDUCE_PREFIX", 0) == 0;
+}
+
 static bool afdep_per_cta_exit() {
     return deep_ep::get_env<int>("AFDEP_GRID_SYNC_EXIT", 0) == 0;
 }
