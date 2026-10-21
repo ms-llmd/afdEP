@@ -138,23 +138,7 @@ public:
         std::string header_name, func_name;
         if (args.num_scaleout_ranks == 1) {
             header_name = "dispatch";
-            func_name = fmt::format("dispatch_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>",
-                args.is_scaleup_nvlink,
-                args.do_cpu_sync,
-                args.reuse_slot_indices,
-                args.launch_args.grid_dim.first,
-                args.num_notify_warps, args.num_dispatch_warps,
-                args.num_scaleup_ranks,
-                args.num_hidden_bytes, args.num_sf_packs,
-                args.num_max_tokens_per_rank,
-                args.num_experts, args.num_topk, args.expert_alignment,
-                args.num_qps, args.num_timeout_cycles, args.afd_ffn_ranks,
-                args.afd_ffn_ranks > 0 ? fmt::format(", {}, {}, {}, {}, {}{}", args.afd_skip_entry_barrier,
-                                                     args.afd_directional_notify, args.afd_directed_exit,
-                                                     args.afd_role_buffers, args.afd_per_cta_exit,
-                                                     args.afd_zero_collect_row_bytes > 0 ?
-                                                         fmt::format(", {}", args.afd_zero_collect_row_bytes) : "")
-                                       : std::string());
+            func_name = "dispatch_impl" + get_direct_template_args(args);
         } else {
             header_name = "hybrid_dispatch";
             func_name = "hybrid_dispatch_impl" + get_hybrid_template_args(args);
@@ -169,6 +153,27 @@ static void __instantiate_kernel() {{
     auto ptr = reinterpret_cast<void*>(&{});
 }}
 )", header_name, func_name);
+    }
+
+    // Shared with the afdEP FFN receive of one NVLink domain, a copy of dispatch_impl.
+    static std::string get_direct_template_args(const Args& args) {
+        return fmt::format("<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>",
+            args.is_scaleup_nvlink,
+            args.do_cpu_sync,
+            args.reuse_slot_indices,
+            args.launch_args.grid_dim.first,
+            args.num_notify_warps, args.num_dispatch_warps,
+            args.num_scaleup_ranks,
+            args.num_hidden_bytes, args.num_sf_packs,
+            args.num_max_tokens_per_rank,
+            args.num_experts, args.num_topk, args.expert_alignment,
+            args.num_qps, args.num_timeout_cycles, args.afd_ffn_ranks,
+            args.afd_ffn_ranks > 0 ? fmt::format(", {}, {}, {}, {}, {}{}", args.afd_skip_entry_barrier,
+                                                 args.afd_directional_notify, args.afd_directed_exit,
+                                                 args.afd_role_buffers, args.afd_per_cta_exit,
+                                                 args.afd_zero_collect_row_bytes > 0 ?
+                                                     fmt::format(", {}", args.afd_zero_collect_row_bytes) : "")
+                                   : std::string());
     }
 
     // Shared with the afdEP FFN hybrid dispatch, a copy of hybrid_dispatch_impl.
@@ -242,6 +247,29 @@ static void __instantiate_kernel() {{
     auto ptr = reinterpret_cast<void*>(&afdep_ffn_hybrid_dispatch_impl{});
 }}
 )", DispatchRuntime::get_hybrid_template_args(args));
+    }
+
+    static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
+        DispatchRuntime::launch_impl(kernel, config, args);
+    }
+};
+
+// afdEP FFN dispatch receive of one NVLink domain (afdep_suites.hpp): the shared argument
+// list and launch shape, through a generated copy of dispatch.cuh.
+class AfdepFfnDispatchRuntime final : public jit::LaunchRuntime<AfdepFfnDispatchRuntime> {
+public:
+    using Args = DispatchRuntime::Args;
+
+    static std::string generate_impl(const Args& args) {
+        return fmt::format(R"(
+#include <deep_ep/impls/afdep_ffn_dispatch.cuh>
+
+using namespace deep_ep::elastic;
+
+static void __instantiate_kernel() {{
+    auto ptr = reinterpret_cast<void*>(&afdep_ffn_dispatch_impl{});
+}}
+)", DispatchRuntime::get_direct_template_args(args));
     }
 
     static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
@@ -377,6 +405,17 @@ static void launch_dispatch(void* x, void* sf,
         .scaleout_rank_idx = scaleout_rank_idx, .scaleup_rank_idx = scaleup_rank_idx,
         // NOTES: make cluster dim 2 to overlap with clustered computation kernels
         .launch_args = jit::LaunchArgs(num_sms, num_threads, num_smem_bytes, 2 - (num_sms % 2), true)};
+    if (afd_shape == AfdLaunchShape::kRoleKernel and num_scaleout_ranks == 1) {
+        // afdEP FFN receive of one NVLink domain (afdep_suites.hpp): the shared shape; the copy
+        // triggers the copy epilogue only after the arrival wait.
+        EP_HOST_ASSERT(is_scaleup_nvlink and num_tokens == 0 and args.afd_ffn_ranks > 0 and
+                       args.afd_skip_entry_barrier and args.afd_directional_notify and args.afd_directed_exit and
+                       scaleup_rank_idx < args.afd_ffn_ranks and not reuse_slot_indices);
+        const auto role_code = AfdepFfnDispatchRuntime::generate(args);
+        const auto role_runtime = jit::compiler->build("afdep_ffn_dispatch", role_code);
+        AfdepFfnDispatchRuntime::launch(role_runtime, args, stream);
+        return;
+    }
     if (afd_shape == AfdLaunchShape::kRoleKernel) {
         // afdEP FFN directional hybrid dispatch (afdep_suites.hpp): notify and forward warps.
         EP_HOST_ASSERT(num_scaleout_ranks > 1 and args.afd_ffn_scaleout_ranks > 0 and

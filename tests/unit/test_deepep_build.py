@@ -111,18 +111,23 @@ def test_role_suite_shapes_are_host_launch_overrides():
     """The Attention hybrid send block relaunches the shared cubin, generated first."""
     elastic = VENDOR_ROOT / "csrc/kernels/elastic"
     suites = (elastic / "afdep_suites.hpp").read_text()
-    for control in ("ROLE_KERNELS", "HYBRID_SEND", "HYBRID_FORWARD", "HYBRID_COLLECT"):
+    controls = ("ROLE_KERNELS", "FFN_RECEIVE", "HYBRID_SEND", "HYBRID_FORWARD")
+    for control in (*controls, "HYBRID_COLLECT"):
         assert f'"AFDEP_SHARED_{control}", 0) == 0' in suites
     dispatch = (elastic / "dispatch.hpp").read_text()
     generate = dispatch.index("const auto code = DispatchRuntime::generate(args);")
     assert generate < dispatch.index("shaped_args.launch_args = jit::LaunchArgs(")
 
 
-def test_ffn_hybrid_dispatch_is_the_generated_copy():
-    from tests.role_kernels import FFN_HYBRID_DISPATCH, IMPLS, ffn_hybrid_dispatch
+def test_ffn_role_kernels_are_the_generated_copies():
+    from tests import role_kernels as rk
 
-    shared = (IMPLS / "hybrid_dispatch.cuh").read_text()
-    assert (IMPLS / FFN_HYBRID_DISPATCH).read_text() == ffn_hybrid_dispatch(shared)
+    hybrid = (rk.IMPLS / "hybrid_dispatch.cuh").read_text()
+    assert (rk.IMPLS / rk.FFN_HYBRID_DISPATCH).read_text() == rk.ffn_hybrid_dispatch(
+        hybrid
+    )
+    direct = (rk.IMPLS / "dispatch.cuh").read_text()
+    assert (rk.IMPLS / rk.FFN_DISPATCH).read_text() == rk.ffn_dispatch(direct)
 
 
 def test_runtime_header_contents_invalidate_build(tmp_path):

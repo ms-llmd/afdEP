@@ -991,10 +991,14 @@ public:
 
         // Do dispatch into the buffers (with SM limitation)
         EP_HOST_ASSERT(num_sms <= jit::device_runtime->get_num_sms());
-        // afdEP role suites (afdep_suites.hpp): in directional hybrid each role launches only
-        // the warp classes it uses; one NVLink domain keeps v2.1's shapes.
+        // afdEP role suites (afdep_suites.hpp): in one NVLink domain the FFN receive triggers its
+        // copy epilogue after the arrival wait; in directional hybrid each role launches only
+        // the warp classes it uses.
         auto afd_dispatch_shape = AfdLaunchShape::kShared;
-        if (afd_ffn_scaleout_ranks > 0 and afd_source and afdep_hybrid_send_blocks())
+        if (afd_direct_nvlink and not afd_source and afdep_skip_entry_barriers() and afdep_directional_notify() and
+            afdep_directed_exit() and afdep_ffn_receive_kernels())
+            afd_dispatch_shape = AfdLaunchShape::kRoleKernel;
+        else if (afd_ffn_scaleout_ranks > 0 and afd_source and afdep_hybrid_send_blocks())
             afd_dispatch_shape = AfdLaunchShape::kSendBlock;
         else if (afd_ffn_scaleout_ranks > 0 and not afd_source and afdep_hybrid_forward_kernels())
             afd_dispatch_shape = AfdLaunchShape::kRoleKernel;
