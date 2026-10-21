@@ -179,13 +179,39 @@ class Exchange:
         return snapshot, received.recv_counts_host if host_counts else None
 
 
+def combined_reference(x, ids, weights, config: Config, scaleup_ranks: int | None):
+    """BF16 combine result along DeepEP's reduction tree.
+
+    Each FFN rank sums its experts' BF16 rows into one BF16 partial; with hybrid
+    (multi-domain) transport each FFN domain's forwarder sums its ranks' partials
+    into one BF16 partial; the source sums what it receives. Every stage is an
+    exact FP32 sum rounded once to BF16, so this equals a single rounding whenever
+    the intermediates are exact (one FFN domain, small expert factors).
+    """
+    contribution = (weights * (ids + 1).float()).masked_fill(ids < 0, 0)
+    rows_bf16 = (x.float()[:, None, :] * contribution[:, :, None]).bfloat16().float()
+    owner = torch.where(ids >= 0, ids // config.experts_per_rank, -1)
+    partials = [
+        (rows_bf16 * (owner == rank)[:, :, None]).sum(dim=1).bfloat16().float()
+        for rank in range(config.ffn_ranks)
+    ]
+    if scaleup_ranks is not None:
+        partials = [
+            sum(partials[start : start + scaleup_ranks]).bfloat16().float()
+            for start in range(0, config.ffn_ranks, scaleup_ranks)
+        ]
+    return sum(partials).bfloat16()
+
+
 def verify(snapshot, case: Case, buffer: Buffer, rows: int, *, sign=1) -> None:
     value, host_counts = snapshot
     config = buffer.config
     if buffer.role == "attention":
         x, ids, weights = inputs(case, buffer.role_rank, rows, config)
-        factor = torch.where(ids >= 0, (ids + 1).float() * weights, 0).sum(dim=1)
-        expected = (sign * x.float() * factor[:, None]).bfloat16()
+        scaleout, scaleup = buffer.logical_domain
+        expected = combined_reference(
+            sign * x.float(), ids, weights, config, scaleup if scaleout > 1 else None
+        )
         torch.testing.assert_close(value, expected, rtol=0, atol=0)
         return
     first = buffer.role_rank * config.experts_per_rank
