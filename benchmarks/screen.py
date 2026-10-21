@@ -20,6 +20,9 @@ from pathlib import Path
 # Arms are Config overrides. Masked keeps DeepEP's union protocol and dummy slots.
 DEFAULT_ARMS = {"masked": {"role_aware": False}, "afd": {}}
 ENV_KEY = "_env"
+# "_tree" runs the arm from another source tree, imported alone (PYTHONSAFEPATH);
+# "_digest" is the native source digest every rank of the arm must report.
+TREE_KEY, DIGEST_KEY = "_tree", "_digest"
 LAUNCH = ["torchrun", "--standalone", "--nproc-per-node"]
 PROCESS_TIMEOUT_S = 900
 
@@ -28,6 +31,11 @@ def run_arm(name, overrides, repeat, args, passthrough):
     """Run one fresh process; an arm's optional "_env" applies to that process."""
     overrides = dict(overrides)
     env = os.environ | overrides.pop(ENV_KEY, {})
+    tree, digest = overrides.pop(TREE_KEY, None), overrides.pop(DIGEST_KEY, None)
+    cwd = None
+    if tree is not None:
+        cwd = str(Path(tree).resolve())
+        env |= {"PYTHONPATH": cwd, "PYTHONSAFEPATH": "1"}
     output = args.output.parent / f"{args.output.stem}-{name}-r{repeat}.json"
     command = [
         *LAUNCH,
@@ -48,11 +56,17 @@ def run_arm(name, overrides, repeat, args, passthrough):
             stderr=subprocess.STDOUT,
             timeout=PROCESS_TIMEOUT_S,
             env=env,
+            cwd=cwd,
         ).returncode
     if code:
         raise SystemExit(f"{name} repeat {repeat} failed ({code}); see {log}")
-    cells = json.loads(output.read_text())["cells"]
-    return {cell["tokens"]: cell["summary"][name]["median_us"] for cell in cells}
+    result = json.loads(output.read_text())
+    digests = {rank["native_source_sha256"] for rank in result["metadata"]}
+    if len(digests) != 1 or (digest is not None and digests != {digest}):
+        raise SystemExit(f"{name} repeat {repeat}: native digests {sorted(digests)}")
+    cells = result["cells"]
+    medians = {cell["tokens"]: cell["summary"][name]["median_us"] for cell in cells}
+    return medians, digests.pop()
 
 
 def summarize(processes, names):
@@ -95,11 +109,15 @@ def main():
     processes = []
     for repeat in range(args.repeats):
         order = names[repeat % len(names) :] + names[: repeat % len(names)]
-        results = {
+        runs = {
             name: run_arm(name, args.arms[name], repeat, args, passthrough)
             for name in order
         }
-        processes.append({"order": order, "median_us": results})
+        results = {name: medians for name, (medians, _) in runs.items()}
+        digests = {name: digest for name, (_, digest) in runs.items()}
+        processes.append(
+            {"order": order, "median_us": results, "native_source_sha256": digests}
+        )
         print(json.dumps({"repeat": repeat} | results), flush=True)
     table = summarize(processes, names)
     args.output.write_text(
