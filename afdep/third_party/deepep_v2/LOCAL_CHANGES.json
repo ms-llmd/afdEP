@@ -4,7 +4,7 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "216c955193b7f228aaf111525b0b5774a02388d6fe29225b6aff8790f2521db1"
+      "sha256": "0f1a8ab3ef9262fcc67a906f0234e8b34c6e78f48f0cc8e6a76b2866636431cd"
     },
     "csrc/kernels/elastic/combine.hpp": {
       "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
@@ -12,7 +12,7 @@
     },
     "csrc/kernels/elastic/dispatch.hpp": {
       "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
-      "sha256": "ac4d7cb9ba41cfed02346f51555b59da8a0dd5543d769c991b4f420dedca65a0"
+      "sha256": "e10288d5e9f39168729a21aca99398886c144a6ed18c5a7fa7475644540ede5b"
     },
     "csrc/python_api.cpp": {
       "upstream_sha256": "64b6041b75c1027c9f7f16b236e1fb037f0838f5338020804035e8e39d5710ba",
@@ -36,12 +36,12 @@
     },
     "deep_ep/include/deep_ep/impls/hybrid_dispatch.cuh": {
       "upstream_sha256": "87ff341af541de4b11f88237b688705a35762229ae2f37ae488c7e3bfda949ac",
-      "sha256": "03ac432db1fdf1075091a77d1bb2a0f106e0570a13e6e56c6df16488f462e93a"
+      "sha256": "1b0738b60b5cb87c2ab258f1c54f03a942edccd37a05097d2099d8393dc2f28c"
     }
   },
   "added_files": {
     "csrc/kernels/elastic/afdep_roles.hpp": {
-      "sha256": "eab3b847a8a32026cab7cff39d2230f68d84ecde023c6e7c2f221ad90f961297"
+      "sha256": "da5a51281d6e2ad37ccb3e2c419c5050b5825baa8a7ebaa980413ba01e12569f"
     },
     "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
       "sha256": "4f7ed0d81d7215753c99dfe1364e4ba6e707101cb5ede0d1b139e8b1923e937a"
@@ -61,7 +61,8 @@
     "v2.1: role-aware direct-NVLink dispatch and combine replace their all-rank exit barriers with directed arrival: senders flush, grid-sync and release per-peer monotonic counters (unused scale-out channel-tail workspace in direct mode); only receivers wait. AFDEP_ALL_RANK_EXIT=1 restores the exit barriers as a measurement control.",
     "v2.1: role-sized registered buffers. In one NVLink domain the role path sizes FFN dispatch inboxes for the Attention sources only (source s writes region s - F; the copy epilogue reads with the same offset) and, in the rank layout, Attention combine inboxes for the F FFN senders only; every rank registers the same maximum. AFDEP_UNION_BUFFERS=1 keeps union sizing as a measurement control.",
     "v2.1: with directed exit, each sending CTA (Attention sources in dispatch, FFN ranks in combine) releases its own arrival after its TMA stores complete, without the sender grid sync; receivers wait for round x sender CTAs and the last source CTA resets the slot counters. AFDEP_GRID_SYNC_EXIT=1 keeps the grid-synced release as a measurement control.",
-    "v2.1: directional hybrid protocol when every scale-out (NVLink) domain holds one role: Attention domains send counts, payloads and finish tails to FFN domains only and skip forwarding and combine reduction; FFN domains skip scale-out sends, wait only for Attention domains, and signal combine arrival to Attention domains only. Both hybrid entry barriers keep only their scale-up half, and Attention domains (which then share no state) skip their scale-up barriers too. AFDEP_UNION_HYBRID=1 keeps the union hybrid protocol as a measurement control."
+    "v2.1: directional hybrid protocol when every scale-out (NVLink) domain holds one role: Attention domains send counts, payloads and finish tails to FFN domains only and skip forwarding and combine reduction; FFN domains skip scale-out sends, wait only for Attention domains, and signal combine arrival to Attention domains only. Both hybrid entry barriers keep only their scale-up half, and Attention domains (which then share no state) skip their scale-up barriers too. AFDEP_UNION_HYBRID=1 keeps the union hybrid protocol as a measurement control.",
+    "v2.1: directional hybrid dispatch validates full-width real expert IDs and duplicates in its notify and scale-out warps before route-derived indexing, stores or puts, as the direct path does, and drops the separate route-guard kernel ahead of each source dispatch; mixed-role (union hybrid) layouts keep the guard. AFDEP_HYBRID_ROUTE_GUARD=1 keeps the guard kernel as a measurement control."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",

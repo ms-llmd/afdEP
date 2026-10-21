@@ -63,6 +63,15 @@ static int afdep_directional_hybrid(const int afd_ffn_ranks, const int num_scale
     return afd_ffn_ranks / num_scaleup_ranks;
 }
 
+// Directional hybrid dispatch validates each route in the notify and scale-out
+// warps before its first route-derived index, store or put, as the direct path
+// does, instead of a separate route-guard kernel ahead of every dispatch (the
+// guard exists only because the union world gives Attention ranks dummy expert
+// slots). AFDEP_HYBRID_ROUTE_GUARD=1 keeps the guard kernel as a control.
+static bool afdep_hybrid_routes_in_kernel() {
+    return deep_ep::get_env<int>("AFDEP_HYBRID_ROUTE_GUARD", 0) == 0;
+}
+
 static bool afdep_per_cta_exit() {
     return deep_ep::get_env<int>("AFDEP_GRID_SYNC_EXIT", 0) == 0;
 }

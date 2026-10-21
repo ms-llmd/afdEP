@@ -110,6 +110,7 @@ public:
         bool afd_role_buffers;
         bool afd_per_cta_exit;
         int afd_ffn_scaleout_ranks;
+        bool afd_directional_routes;
 
         // Parameters
         void* x; sf_pack_t* sf; topk_idx_t* topk_idx; float* topk_weights;
@@ -161,7 +162,9 @@ public:
                 args.num_max_tokens_per_rank,
                 args.num_experts, args.num_topk, args.expert_alignment,
                 args.num_qps, args.num_timeout_cycles,
-                args.afd_ffn_scaleout_ranks > 0 ? fmt::format(", {}", args.afd_ffn_scaleout_ranks) : std::string());
+                args.afd_ffn_scaleout_ranks > 0 ?
+                    fmt::format(", {}{}", args.afd_ffn_scaleout_ranks, args.afd_directional_routes ? ", true" : "") :
+                    std::string());
         }
 
         return fmt::format(R"(
@@ -254,7 +257,8 @@ static void launch_dispatch(void* x, void* sf,
                             const bool afd_directed_exit = false,
                             const bool afd_role_buffers = false,
                             const bool afd_per_cta_exit = false,
-                            const int afd_ffn_scaleout_ranks = 0) {
+                            const int afd_ffn_scaleout_ranks = 0,
+                            const bool afd_directional_routes = false) {
     // Cached mode does not support expert token counting
     if (cached_mode)
         EP_HOST_ASSERT(cumulative_local_expert_recv_stats == nullptr);
@@ -316,6 +320,7 @@ static void launch_dispatch(void* x, void* sf,
         .afd_per_cta_exit = num_scaleout_ranks == 1 and afd_ffn_ranks > 0 and is_scaleup_nvlink and
                             afd_directed_exit and afd_per_cta_exit,
         .afd_ffn_scaleout_ranks = num_scaleout_ranks > 1 ? afd_ffn_scaleout_ranks : 0,
+        .afd_directional_routes = num_scaleout_ranks > 1 and afd_ffn_scaleout_ranks > 0 and afd_directional_routes,
         .x = x, .sf = static_cast<sf_pack_t*>(sf), .topk_idx = topk_idx, .topk_weights = topk_weights,
         .copied_topk_idx = copied_topk_idx,
         .cumulative_local_expert_recv_stats = cumulative_local_expert_recv_stats,

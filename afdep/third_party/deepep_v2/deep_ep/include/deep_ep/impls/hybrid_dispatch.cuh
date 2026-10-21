@@ -6,6 +6,7 @@
 #include <deep_ep/common/layout.cuh>
 #include <deep_ep/common/math.cuh>
 #include <deep_ep/common/ptx.cuh>
+#include <deep_ep/impls/afdep_roles.cuh>
 
 
 namespace deep_ep::elastic {
@@ -22,6 +23,8 @@ template <bool kDoCPUSync,
           // afdEP: scale-out domains [0, kAfdFfnScaleoutRanks) hold only FFN ranks and the rest only
           // Attention ranks; dispatch traffic then flows Attention -> FFN only. 0 keeps the union protocol.
           int kAfdFfnScaleoutRanks = 0,
+          // afdEP directional: validate routes in-kernel instead of launching the route guard.
+          bool kAfdDirectionalRoutes = false,
           int kNumScaleupRanksPerLane = math::constexpr_ceil_div(kNumScaleupRanks, 32),
           int kNumChannelsPerSM = kNumScaleoutWarps,
           int kNumChannels = kNumScaleoutWarps * kNumSMs,
@@ -86,6 +89,7 @@ hybrid_dispatch_impl(
     // so only the scale-up half of the barrier remains.
     constexpr bool kAfdDirectional = kAfdFfnScaleoutRanks > 0;
     EP_STATIC_ASSERT(not kAfdDirectional or (kAfdFfnScaleoutRanks < kNumScaleoutRanks), "Need both roles");
+    EP_STATIC_ASSERT(not kAfdDirectionalRoutes or kAfdDirectional, "Route checks need the directional protocol");
     const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;
     comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,
                       kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kHybridDispatchTag0, false, false, true>(
@@ -132,8 +136,15 @@ hybrid_dispatch_impl(
         for (int i = global_warp_idx; i < num_tokens; i += kNumNotifyWarps * kNumSMs) {
             // Expert choice can not be redundant
             // NOTES: no assertions here as they are expensive
-            const auto dst_expert_idx = lane_idx < kNumTopk ?
-                static_cast<int>(__ldg(topk_idx + i * kNumTopk + lane_idx)) : -1;
+            const topk_idx_t raw_expert = lane_idx < kNumTopk ? __ldg(topk_idx + i * kNumTopk + lane_idx) : -1;
+            int dst_expert_idx;
+            if constexpr (kAfdDirectionalRoutes) {
+                // afdEP directional: notify and scale-out warps run concurrently, so each
+                // validates its own routes before indexing (the role path's route guard).
+                dst_expert_idx = afdep_checked_expert<kAfdFfnScaleoutRanks * kNumExpertsPerScaleout>(raw_expert, lane_idx);
+            } else {
+                dst_expert_idx = static_cast<int>(raw_expert);
+            }
             if (dst_expert_idx >= 0)
                 atomicAdd_block(expert_count + dst_expert_idx, 1);
 
@@ -408,9 +419,17 @@ hybrid_dispatch_impl(
             // Load top-k indices and weights
             EP_STATIC_ASSERT(kNumTopk <= 32, "Insufficient lanes for loading top-k indices");
             int stored_dst_scaleout_rank_idx = -1;
+            const topk_idx_t uncasted_dst_expert_idx = lane_idx < kNumTopk ?
+                __ldg(topk_idx + token_idx * kNumTopk + lane_idx) : -1;
+            int dst_expert_idx;
+            if constexpr (kAfdDirectionalRoutes) {
+                // All lanes take part in duplicate detection; checked before this token's stores and puts.
+                dst_expert_idx = afdep_checked_expert<kAfdFfnScaleoutRanks * kNumExpertsPerScaleout>(
+                    uncasted_dst_expert_idx, lane_idx);
+            } else {
+                dst_expert_idx = static_cast<int>(uncasted_dst_expert_idx);
+            }
             if (lane_idx < kNumTopk) {
-                const auto uncasted_dst_expert_idx = __ldg(topk_idx + token_idx * kNumTopk + lane_idx);
-                const auto dst_expert_idx = static_cast<int>(uncasted_dst_expert_idx);
                 stored_dst_scaleout_rank_idx = dst_expert_idx >= 0 ? dst_expert_idx / kNumExpertsPerScaleout : -1;
                 tma_buffer.get_topk_idx_ptr()[lane_idx] = dst_expert_idx;
                 if (topk_weights != nullptr)

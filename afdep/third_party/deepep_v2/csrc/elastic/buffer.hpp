@@ -761,7 +761,11 @@ public:
         // All new tensor allocations should happen after this
         const auto compute_stream = stream_control_prologue(previous_event, allocate_on_comm_stream, async_with_compute_stream);
 
-        if (afd_source and not afd_direct_nvlink)
+        const int afd_ffn_scaleout_ranks = afd_role_aware and not deterministic ?
+            afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
+                                     nccl_context->num_scaleup_ranks) : 0;
+        const bool afd_hybrid_routes_in_kernel = afd_ffn_scaleout_ranks > 0 and afdep_hybrid_routes_in_kernel();
+        if (afd_source and not afd_direct_nvlink and not afd_hybrid_routes_in_kernel)
             launch_afdep_route_guard(topk_idx.data_ptr<topk_idx_t>(), num_tokens,
                                     afd_ffn_ranks * num_local_experts, num_topk,
                                     num_sms, comm_stream);
@@ -985,9 +989,7 @@ public:
                         afd_direct_nvlink and afdep_directed_exit(),
                         afd_role_buffers,
                         afd_direct_nvlink and afdep_directed_exit() and afdep_per_cta_exit(),
-                        afd_role_aware and not deterministic ?
-                            afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
-                                                     nccl_context->num_scaleup_ranks) : 0);
+                        afd_ffn_scaleout_ranks, afd_hybrid_routes_in_kernel);
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
