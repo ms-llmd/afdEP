@@ -1,0 +1,445 @@
+{
+ "date": "2026-10-21",
+ "decision": "rejected",
+ "change": "per-CTA counts: each source CTA adds its partial counts into FFN inboxes before its per-CTA arrival release; FFN ranks read them after every arrival (no SM0 grid-wide count reduction)",
+ "motivation": "globaltimer trace at one token: source SM0 released its arrival 2.1-2.2 us after kernel start, other CTAs 0.45-0.51 us",
+ "correctness": "BF16/FP8 small and large and the 3:1 and 1:3 small cases passed",
+ "arms": {
+  "afd": "per-CTA counts",
+  "sm0_counts": "AFDEP_SM0_COUNTS=1 (shipped behavior)",
+  "masked": "role_aware=False"
+ },
+ "screens": [
+  {
+   "hidden": 2048,
+   "processes": [
+    {
+     "order": [
+      "afd",
+      "sm0_counts",
+      "masked"
+     ],
+     "median_us": {
+      "afd": {
+       "1": 21.01456046104431,
+       "8": 25.153119564056396,
+       "32": 26.751999855041504,
+       "128": 36.3155996799469,
+       "512": 71.72768115997314,
+       "2048": 193.2196807861328
+      },
+      "sm0_counts": {
+       "1": 20.742640495300293,
+       "8": 24.737999439239502,
+       "32": 26.36080026626587,
+       "128": 35.655120611190796,
+       "512": 70.5406403541565,
+       "2048": 192.48736381530762
+      },
+      "masked": {
+       "1": 31.730000972747803,
+       "8": 34.45616006851196,
+       "32": 35.5785608291626,
+       "128": 44.37359809875488,
+       "512": 78.88328075408936,
+       "2048": 201.15415573120117
+      }
+     }
+    },
+    {
+     "order": [
+      "sm0_counts",
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "sm0_counts": {
+       "1": 20.517680644989014,
+       "8": 24.47119951248169,
+       "32": 26.74351930618286,
+       "128": 35.40223956108093,
+       "512": 70.65208196640015,
+       "2048": 192.45247840881348
+      },
+      "masked": {
+       "1": 31.50256037712097,
+       "8": 35.49088001251221,
+       "32": 35.78743934631348,
+       "128": 44.48024034500122,
+       "512": 79.028000831604,
+       "2048": 200.81975936889648
+      },
+      "afd": {
+       "1": 21.160240173339844,
+       "8": 25.31983971595764,
+       "32": 27.142720222473145,
+       "128": 36.74943923950195,
+       "512": 72.08832025527954,
+       "2048": 193.75255584716797
+      }
+     }
+    },
+    {
+     "order": [
+      "masked",
+      "afd",
+      "sm0_counts"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 31.43984079360962,
+       "8": 34.383360147476196,
+       "32": 35.673919916152954,
+       "128": 44.064719676971436,
+       "512": 78.56103897094727,
+       "2048": 200.9708023071289
+      },
+      "afd": {
+       "1": 21.008479595184326,
+       "8": 25.134159326553345,
+       "32": 26.87399983406067,
+       "128": 36.74816012382507,
+       "512": 72.09455966949463,
+       "2048": 193.5209560394287
+      },
+      "sm0_counts": {
+       "1": 20.651999711990356,
+       "8": 24.989761114120483,
+       "32": 26.616320610046387,
+       "128": 35.37495970726013,
+       "512": 70.46296119689941,
+       "2048": 191.91591262817383
+      }
+     }
+    }
+   ],
+   "native_source_sha256": "8ec0f5dc07490bd82a842b96140ab6ca2c2f0c7cab8084ed40dff536ab4e8edb",
+   "table": [
+    {
+     "tokens": 1,
+     "afd": {
+      "median_us": 21.015,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 20.652,
+      "geomean_change_pct": -2.012,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 31.503,
+      "geomean_change_pct": 49.837,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 8,
+     "afd": {
+      "median_us": 25.153,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 24.738,
+      "geomean_change_pct": -1.866,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 34.456,
+      "geomean_change_pct": 37.976,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "afd": {
+      "median_us": 26.874,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 26.616,
+      "geomean_change_pct": -1.298,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 35.674,
+      "geomean_change_pct": 32.529,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "afd": {
+      "median_us": 36.748,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 35.402,
+      "geomean_change_pct": -3.078,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 44.374,
+      "geomean_change_pct": 21.042,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "afd": {
+      "median_us": 72.088,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 70.541,
+      "geomean_change_pct": -1.97,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 78.883,
+      "geomean_change_pct": 9.523,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 2048,
+     "afd": {
+      "median_us": 193.521,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 192.452,
+      "geomean_change_pct": -0.627,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 200.971,
+      "geomean_change_pct": 3.868,
+      "repeats_faster": 0
+     }
+    }
+   ]
+  },
+  {
+   "hidden": 4096,
+   "processes": [
+    {
+     "order": [
+      "afd",
+      "sm0_counts",
+      "masked"
+     ],
+     "median_us": {
+      "afd": {
+       "1": 28.62336039543152,
+       "8": 37.73584008216858,
+       "32": 44.20543909072876,
+       "128": 62.82680034637451,
+       "512": 127.94680118560791,
+       "2048": 384.09719467163086
+      },
+      "sm0_counts": {
+       "1": 28.390560150146484,
+       "8": 39.39568042755127,
+       "32": 46.411120891571045,
+       "128": 61.63831949234009,
+       "512": 127.03887939453125,
+       "2048": 383.1898307800293
+      },
+      "masked": {
+       "1": 38.68736028671265,
+       "8": 46.0208797454834,
+       "32": 54.95728015899658,
+       "128": 68.7930417060852,
+       "512": 136.1192798614502,
+       "2048": 392.4932098388672
+      }
+     }
+    },
+    {
+     "order": [
+      "sm0_counts",
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "sm0_counts": {
+       "1": 28.344160318374634,
+       "8": 37.83423900604248,
+       "32": 42.33824014663696,
+       "128": 61.9380784034729,
+       "512": 127.21391677856445,
+       "2048": 383.54671478271484
+      },
+      "masked": {
+       "1": 38.94032001495361,
+       "8": 48.93991947174072,
+       "32": 57.38247871398926,
+       "128": 68.10887813568115,
+       "512": 135.92567920684814,
+       "2048": 392.22240447998047
+      },
+      "afd": {
+       "1": 28.744559288024902,
+       "8": 38.99503946304321,
+       "32": 43.774399757385254,
+       "128": 62.67911911010742,
+       "512": 127.8762435913086,
+       "2048": 384.2973518371582
+      }
+     }
+    },
+    {
+     "order": [
+      "masked",
+      "afd",
+      "sm0_counts"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 38.69047999382019,
+       "8": 48.05839776992798,
+       "32": 56.05144023895264,
+       "128": 68.89655828475952,
+       "512": 135.89967727661133,
+       "2048": 392.6358413696289
+      },
+      "afd": {
+       "1": 28.516240119934082,
+       "8": 41.88159942626953,
+       "32": 47.74463891983032,
+       "128": 62.4294376373291,
+       "512": 128.13047885894775,
+       "2048": 384.0600776672363
+      },
+      "sm0_counts": {
+       "1": 28.31055998802185,
+       "8": 39.4544792175293,
+       "32": 46.73856019973755,
+       "128": 61.19823932647705,
+       "512": 127.13959693908691,
+       "2048": 383.51470947265625
+      }
+     }
+    }
+   ],
+   "native_source_sha256": "8ec0f5dc07490bd82a842b96140ab6ca2c2f0c7cab8084ed40dff536ab4e8edb",
+   "table": [
+    {
+     "tokens": 1,
+     "afd": {
+      "median_us": 28.623,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 28.344,
+      "geomean_change_pct": -0.976,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 38.69,
+      "geomean_change_pct": 35.436,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 8,
+     "afd": {
+      "median_us": 38.995,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 39.396,
+      "geomean_change_pct": -1.55,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 48.058,
+      "geomean_change_pct": 20.652,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "afd": {
+      "median_us": 44.205,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 46.411,
+      "geomean_change_pct": -0.199,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 56.051,
+      "geomean_change_pct": 24.143,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "afd": {
+      "median_us": 62.679,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 61.638,
+      "geomean_change_pct": -1.683,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 68.793,
+      "geomean_change_pct": 9.504,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "afd": {
+      "median_us": 127.947,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 127.14,
+      "geomean_change_pct": -0.667,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 135.926,
+      "geomean_change_pct": 6.248,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 2048,
+     "afd": {
+      "median_us": 384.097,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sm0_counts": {
+      "median_us": 383.515,
+      "geomean_change_pct": -0.191,
+      "repeats_faster": 3
+     },
+     "masked": {
+      "median_us": 392.493,
+      "geomean_change_pct": 2.16,
+      "repeats_faster": 0
+     }
+    }
+   ]
+  }
+ ],
+ "conclusion": "The SM0-count control was faster in every repeat at H2048 (-2.0% at one token, 20.65 vs 21.01 us) and in most H4096 cells: moving the prefix sums behind the arrival and completing remote count atomics before each release costs more than SM0's late release. Not shipped."
+}
