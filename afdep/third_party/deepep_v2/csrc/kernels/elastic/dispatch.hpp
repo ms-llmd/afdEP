@@ -111,6 +111,7 @@ public:
         bool afd_per_cta_exit;
         int afd_ffn_scaleout_ranks;
         bool afd_directional_routes;
+        bool afd_skip_attention_entry_sync;
 
         // Parameters
         void* x; sf_pack_t* sf; topk_idx_t* topk_idx; float* topk_weights;
@@ -163,7 +164,8 @@ public:
                 args.num_experts, args.num_topk, args.expert_alignment,
                 args.num_qps, args.num_timeout_cycles,
                 args.afd_ffn_scaleout_ranks > 0 ?
-                    fmt::format(", {}{}", args.afd_ffn_scaleout_ranks, args.afd_directional_routes ? ", true" : "") :
+                    fmt::format(", {}, {}{}", args.afd_ffn_scaleout_ranks, args.afd_directional_routes,
+                                args.afd_skip_attention_entry_sync ? ", true" : "") :
                     std::string());
         }
 
@@ -258,7 +260,8 @@ static void launch_dispatch(void* x, void* sf,
                             const bool afd_role_buffers = false,
                             const bool afd_per_cta_exit = false,
                             const int afd_ffn_scaleout_ranks = 0,
-                            const bool afd_directional_routes = false) {
+                            const bool afd_directional_routes = false,
+                            const bool afd_skip_attention_entry_sync = false) {
     // Cached mode does not support expert token counting
     if (cached_mode)
         EP_HOST_ASSERT(cumulative_local_expert_recv_stats == nullptr);
@@ -321,6 +324,8 @@ static void launch_dispatch(void* x, void* sf,
                             afd_directed_exit and afd_per_cta_exit,
         .afd_ffn_scaleout_ranks = num_scaleout_ranks > 1 ? afd_ffn_scaleout_ranks : 0,
         .afd_directional_routes = num_scaleout_ranks > 1 and afd_ffn_scaleout_ranks > 0 and afd_directional_routes,
+        .afd_skip_attention_entry_sync = num_scaleout_ranks > 1 and afd_ffn_scaleout_ranks > 0 and
+                                         afd_skip_attention_entry_sync,
         .x = x, .sf = static_cast<sf_pack_t*>(sf), .topk_idx = topk_idx, .topk_weights = topk_weights,
         .copied_topk_idx = copied_topk_idx,
         .cumulative_local_expert_recv_stats = cumulative_local_expert_recv_stats,

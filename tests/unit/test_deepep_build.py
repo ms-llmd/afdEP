@@ -61,6 +61,7 @@ def test_role_template_parameters_default_to_upstream_kernels():
         assert "int kAfdFfnScaleoutRanks = 0," in (impls / hybrid).read_text()
     hybrid_dispatch = (impls / "hybrid_dispatch.cuh").read_text()
     assert "bool kAfdDirectionalRoutes = false," in hybrid_dispatch
+    assert "bool kAfdSkipAttentionEntrySync = false," in hybrid_dispatch
 
 
 def test_runtime_header_contents_invalidate_build(tmp_path):

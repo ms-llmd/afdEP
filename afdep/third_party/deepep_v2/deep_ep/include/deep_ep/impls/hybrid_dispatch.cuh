@@ -25,6 +25,8 @@ template <bool kDoCPUSync,
           int kAfdFfnScaleoutRanks = 0,
           // afdEP directional: validate routes in-kernel instead of launching the route guard.
           bool kAfdDirectionalRoutes = false,
+          // afdEP directional: Attention domains skip the entry grid sync of their (empty) entry barrier.
+          bool kAfdSkipAttentionEntrySync = false,
           int kNumScaleupRanksPerLane = math::constexpr_ceil_div(kNumScaleupRanks, 32),
           int kNumChannelsPerSM = kNumScaleoutWarps,
           int kNumChannels = kNumScaleoutWarps * kNumSMs,
@@ -90,11 +92,17 @@ hybrid_dispatch_impl(
     constexpr bool kAfdDirectional = kAfdFfnScaleoutRanks > 0;
     EP_STATIC_ASSERT(not kAfdDirectional or (kAfdFfnScaleoutRanks < kNumScaleoutRanks), "Need both roles");
     EP_STATIC_ASSERT(not kAfdDirectionalRoutes or kAfdDirectional, "Route checks need the directional protocol");
+    EP_STATIC_ASSERT(not kAfdSkipAttentionEntrySync or kAfdDirectional, "Needs the directional protocol");
     const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;
-    comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,
-                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kHybridDispatchTag0, false, false, true>(
-        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, not kAfdDirectional,
-        /* Attention domains share no state in directional mode */ not kAfdDirectional or afd_ffn_domain);
+    // Attention domains run neither barrier half here; the grid sync that would hold
+    // their CTAs behind it guards no cross-CTA state (SM0's notify reduction counts
+    // its own arrivals and send-buffer reuse follows the round trip), so it is skipped.
+    if (not (kAfdSkipAttentionEntrySync and not afd_ffn_domain)) {
+        comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,
+                          kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kHybridDispatchTag0, false, false, true>(
+            gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, not kAfdDirectional,
+            /* Attention domains share no state in directional mode */ not kAfdDirectional or afd_ffn_domain);
+    }
 
     // The golden layout during the whole process for both scale-out and forward warps
     const auto token_layout = layout::TokenLayout(kNumHiddenBytes, kNumSFPacks * sizeof(sf_pack_t), kNumTopk, true);

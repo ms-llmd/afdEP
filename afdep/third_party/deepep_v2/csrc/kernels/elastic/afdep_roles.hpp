@@ -72,6 +72,13 @@ static bool afdep_hybrid_routes_in_kernel() {
     return deep_ep::get_env<int>("AFDEP_HYBRID_ROUTE_GUARD", 0) == 0;
 }
 
+// Directional hybrid: Attention domains run neither half of the dispatch entry
+// barrier, so its grid sync only holds their CTAs (and the first put) behind the
+// slowest CTA. AFDEP_ATTENTION_GRID_SYNC=1 keeps it as a measurement control.
+static bool afdep_skip_attention_entry_sync() {
+    return deep_ep::get_env<int>("AFDEP_ATTENTION_GRID_SYNC", 0) == 0;
+}
+
 static bool afdep_per_cta_exit() {
     return deep_ep::get_env<int>("AFDEP_GRID_SYNC_EXIT", 0) == 0;
 }

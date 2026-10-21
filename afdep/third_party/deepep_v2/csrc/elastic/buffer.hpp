@@ -989,7 +989,8 @@ public:
                         afd_direct_nvlink and afdep_directed_exit(),
                         afd_role_buffers,
                         afd_direct_nvlink and afdep_directed_exit() and afdep_per_cta_exit(),
-                        afd_ffn_scaleout_ranks, afd_hybrid_routes_in_kernel);
+                        afd_ffn_scaleout_ranks, afd_hybrid_routes_in_kernel,
+                        afd_ffn_scaleout_ranks > 0 and afdep_skip_attention_entry_sync());
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
