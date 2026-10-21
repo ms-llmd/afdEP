@@ -89,7 +89,8 @@ hybrid_dispatch_impl(
     const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;
     comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,
                       kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kHybridDispatchTag0, false, false, true>(
-        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, not kAfdDirectional, true);
+        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, not kAfdDirectional,
+        /* Attention domains share no state in directional mode */ not kAfdDirectional or afd_ffn_domain);
 
     // The golden layout during the whole process for both scale-out and forward warps
     const auto token_layout = layout::TokenLayout(kNumHiddenBytes, kNumSFPacks * sizeof(sf_pack_t), kNumTopk, true);
@@ -683,7 +684,8 @@ hybrid_dispatch_impl(
     // As scale-out tokens have already been consumed by forwarders, no need to do scale-out barrier again
     comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,
                       kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kHybridDispatchTag1, true, true, false>(
-        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, /* do not scale-out */ false, true);
+        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, /* do not scale-out */ false,
+        /* afdEP directional: Attention domains forward nothing */ not kAfdDirectional or afd_ffn_domain);
 
     // Trigger the copy epilogue kernel
     cudaTriggerProgrammaticLaunchCompletion();

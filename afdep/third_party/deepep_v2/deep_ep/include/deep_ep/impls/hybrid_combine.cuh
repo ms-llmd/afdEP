@@ -100,7 +100,8 @@ hybrid_combine_impl(nv_bfloat16* x,
     const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;
     comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,
                       kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kHybridCombineTag0, false, true, true>(
-        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, not kAfdDirectional, true);
+        gin, workspace_layout, scaleout_rank_idx, scaleup_rank_idx, sm_idx, thread_idx, not kAfdDirectional,
+        /* Attention domains share no state in directional mode */ not kAfdDirectional or afd_ffn_domain);
 
     // Adjust register count at certain cases
     // TODO: support more cases, or try to make channel count more aligned

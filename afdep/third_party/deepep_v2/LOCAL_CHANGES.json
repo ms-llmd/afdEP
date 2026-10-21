@@ -32,11 +32,11 @@
     },
     "deep_ep/include/deep_ep/impls/hybrid_combine.cuh": {
       "upstream_sha256": "c9c628569eb49edbaabf1364a0ae8f0436b76cd6f9be4ab02daf5e4a8c2ae3b3",
-      "sha256": "9d860ec93a8f413b59b5e4c8ee80a4fd40518e3293de36f56a78e23a8d5b200b"
+      "sha256": "19685317cbef9f9ecbfa1ed9d9b70751e7746d9801ee0891935676722b699e87"
     },
     "deep_ep/include/deep_ep/impls/hybrid_dispatch.cuh": {
       "upstream_sha256": "87ff341af541de4b11f88237b688705a35762229ae2f37ae488c7e3bfda949ac",
-      "sha256": "3c5331745abc0587e9b1a009a421e7272a9f506a1461301c06e87f041588e622"
+      "sha256": "03ac432db1fdf1075091a77d1bb2a0f106e0570a13e6e56c6df16488f462e93a"
     }
   },
   "added_files": {
@@ -61,7 +61,7 @@
     "v2.1: role-aware direct-NVLink dispatch and combine replace their all-rank exit barriers with directed arrival: senders flush, grid-sync and release per-peer monotonic counters (unused scale-out channel-tail workspace in direct mode); only receivers wait. AFDEP_ALL_RANK_EXIT=1 restores the exit barriers as a measurement control.",
     "v2.1: role-sized registered buffers. In one NVLink domain the role path sizes FFN dispatch inboxes for the Attention sources only (source s writes region s - F; the copy epilogue reads with the same offset) and, in the rank layout, Attention combine inboxes for the F FFN senders only; every rank registers the same maximum. AFDEP_UNION_BUFFERS=1 keeps union sizing as a measurement control.",
     "v2.1: with directed exit, each sending CTA (Attention sources in dispatch, FFN ranks in combine) releases its own arrival after its TMA stores complete, without the sender grid sync; receivers wait for round x sender CTAs and the last source CTA resets the slot counters. AFDEP_GRID_SYNC_EXIT=1 keeps the grid-synced release as a measurement control.",
-    "v2.1: directional hybrid protocol when every scale-out (NVLink) domain holds one role: Attention domains send counts, payloads and finish tails to FFN domains only and skip forwarding and combine reduction; FFN domains skip scale-out sends, wait only for Attention domains, and signal combine arrival to Attention domains only. Both hybrid entry barriers keep only their scale-up half. AFDEP_UNION_HYBRID=1 keeps the union hybrid protocol as a measurement control."
+    "v2.1: directional hybrid protocol when every scale-out (NVLink) domain holds one role: Attention domains send counts, payloads and finish tails to FFN domains only and skip forwarding and combine reduction; FFN domains skip scale-out sends, wait only for Attention domains, and signal combine arrival to Attention domains only. Both hybrid entry barriers keep only their scale-up half, and Attention domains (which then share no state) skip their scale-up barriers too. AFDEP_UNION_HYBRID=1 keeps the union hybrid protocol as a measurement control."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",
