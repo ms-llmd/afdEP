@@ -218,5 +218,267 @@
    }
   ]
  },
- "reference_note": "With more than one FFN domain, DeepEP's hybrid combine rounds each FFN domain's partial to BF16 before the cross-domain sum. The suite's previous single-rounding reference therefore failed by one BF16 ulp (0.25 at ~40) on 16 boundary-straddling rows of the f4 large case, identically for Masked (generic), the union hybrid control and the directional protocol. The reference now rounds once per stage (FFN rank, FFN domain when hybrid, total); it equals the previous reference whenever intermediates are exact."
+ "reference_note": "With more than one FFN domain, DeepEP's hybrid combine rounds each FFN domain's partial to BF16 before the cross-domain sum. The suite's previous single-rounding reference therefore failed by one BF16 ulp (0.25 at ~40) on 16 boundary-straddling rows of the f4 large case, identically for Masked (generic), the union hybrid control and the directional protocol. The reference now rounds once per stage (FFN rank, FFN domain when hybrid, total); it equals the previous reference whenever intermediates are exact.",
+ "screen": {
+  "layout": "1 FFN domain (gf41fb2) + 2 Attention domains (gf48cf2, gf49e9c), 6 ranks, H2048 random, E128 top-k 8",
+  "native_source_sha256": {
+   "afd": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee",
+   "union_hybrid": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee",
+   "masked": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee"
+  },
+  "arms": {
+   "afd": {
+    "_label": "xh"
+   },
+   "union_hybrid": {
+    "_label": "xh",
+    "_env": {
+     "AFDEP_UNION_HYBRID": "1"
+    }
+   },
+   "masked": {
+    "_label": "xh",
+    "role_aware": false
+   }
+  },
+  "passthrough": [
+   "--payload",
+   "bf16",
+   "--routing",
+   "random",
+   "--hidden",
+   "2048",
+   "--ffn-ranks",
+   "2",
+   "--attention-ranks",
+   "4",
+   "--experts",
+   "128",
+   "--tokens",
+   "1",
+   "8",
+   "32",
+   "128",
+   "512",
+   "2048",
+   "--capacity",
+   "2048",
+   "--blocks",
+   "6",
+   "--hybrid",
+   "on"
+  ],
+  "processes": [
+   {
+    "order": [
+     "afd",
+     "union_hybrid",
+     "masked"
+    ],
+    "median_us": {
+     "afd": {
+      "1": 84.46488380432129,
+      "8": 93.02175998687744,
+      "32": 99.02607917785645,
+      "128": 134.06295776367188,
+      "512": 321.16512298583984,
+      "2048": 924.7995758056641
+     },
+     "union_hybrid": {
+      "1": 108.26792240142822,
+      "8": 119.89183902740479,
+      "32": 125.68952083587646,
+      "128": 156.71200275421143,
+      "512": 340.39886474609375,
+      "2048": 945.0377655029297
+     },
+     "masked": {
+      "1": 106.97679996490479,
+      "8": 119.99983787536621,
+      "32": 125.64536094665527,
+      "128": 155.4862403869629,
+      "512": 339.39096450805664,
+      "2048": 940.7305526733398
+     }
+    }
+   },
+   {
+    "order": [
+     "union_hybrid",
+     "masked",
+     "afd"
+    ],
+    "median_us": {
+     "union_hybrid": {
+      "1": 108.57423782348633,
+      "8": 120.43456077575684,
+      "32": 126.48015975952148,
+      "128": 156.20912075042725,
+      "512": 339.80791091918945,
+      "2048": 945.9318542480469
+     },
+     "masked": {
+      "1": 106.53247833251953,
+      "8": 118.94991874694824,
+      "32": 124.76696014404297,
+      "128": 155.19792079925537,
+      "512": 338.04927825927734,
+      "2048": 940.4218673706055
+     },
+     "afd": {
+      "1": 84.09783840179443,
+      "8": 94.05680179595947,
+      "32": 98.67136001586914,
+      "128": 134.00455951690674,
+      "512": 321.7584037780762,
+      "2048": 924.6326446533203
+     }
+    }
+   },
+   {
+    "order": [
+     "masked",
+     "afd",
+     "union_hybrid"
+    ],
+    "median_us": {
+     "masked": {
+      "1": 106.457200050354,
+      "8": 119.09952163696289,
+      "32": 125.38119792938232,
+      "128": 155.44296264648438,
+      "512": 339.444637298584,
+      "2048": 940.7552719116211
+     },
+     "afd": {
+      "1": 84.0891981124878,
+      "8": 94.02895927429199,
+      "32": 98.80959987640381,
+      "128": 133.57304096221924,
+      "512": 321.03662490844727,
+      "2048": 923.5676956176758
+     },
+     "union_hybrid": {
+      "1": 108.11240196228027,
+      "8": 120.39423942565918,
+      "32": 125.87607860565186,
+      "128": 156.4515209197998,
+      "512": 340.13431549072266,
+      "2048": 945.32958984375
+     }
+    }
+   }
+  ],
+  "table": [
+   {
+    "tokens": 1,
+    "afd": {
+     "median_us": 84.098,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 108.268,
+     "geomean_change_pct": 28.618,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 106.532,
+     "geomean_change_pct": 26.643,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 8,
+    "afd": {
+     "median_us": 94.029,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 120.394,
+     "geomean_change_pct": 28.323,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 119.1,
+     "geomean_change_pct": 27.372,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 32,
+    "afd": {
+     "median_us": 98.81,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 125.876,
+     "geomean_change_pct": 27.499,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 125.381,
+     "geomean_change_pct": 26.74,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 128,
+    "afd": {
+     "median_us": 134.005,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 156.452,
+     "geomean_change_pct": 16.864,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 155.443,
+     "geomean_change_pct": 16.056,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 512,
+    "afd": {
+     "median_us": 321.165,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 340.134,
+     "geomean_change_pct": 5.849,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 339.391,
+     "geomean_change_pct": 5.49,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 2048,
+    "afd": {
+     "median_us": 924.633,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 945.33,
+     "geomean_change_pct": 2.283,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 940.731,
+     "geomean_change_pct": 1.764,
+     "repeats_faster": 0
+    }
+   }
+  ],
+  "note": "A second screen with 2 FFN domains + 1 Attention domain was interrupted when two pods were preempted by higher-priority workloads."
+ }
 }

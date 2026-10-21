@@ -72,7 +72,7 @@ one four-GPU NVLink domain ([evidence](docs/validation-v2.1-clean.json)), and
 across two and three NVLink domains of two H200 GPUs joined by InfiniBand GIN (FFN domain +
 Attention domain, plus 3:1 and 1:3 layouts that mix roles in a domain;
 [evidence](docs/validation-v2.1-cross-node.json)). When each domain holds a single
-role, a directional hybrid protocol is 17% faster than Masked at one token
+role, a directional hybrid protocol is 17% (two nodes) to 21% (three nodes) faster than Masked at one token
 ([evidence](docs/validation-v2.1-directional-hybrid.json)); mixed-role domains keep
 DeepEP's hybrid protocol. Other group layouts and larger multi-domain worlds
 require validation.
