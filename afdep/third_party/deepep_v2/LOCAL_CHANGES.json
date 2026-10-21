@@ -4,7 +4,7 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "12babb364d62760302f5e84af818e93a593e3506107182072561ac59a4c492d5"
+      "sha256": "d0e6e544e4b71f7e33b2c6e97ac0c344488ee07f84bae75a11b159e4cba27d4d"
     },
     "csrc/kernels/elastic/combine.hpp": {
       "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
@@ -32,11 +32,11 @@
     },
     "deep_ep/include/deep_ep/impls/hybrid_combine.cuh": {
       "upstream_sha256": "c9c628569eb49edbaabf1364a0ae8f0436b76cd6f9be4ab02daf5e4a8c2ae3b3",
-      "sha256": "198baf68b9cf2b1a96d42c02d3a897c98f9aa1c294e9b6a1c0add688695ee489"
+      "sha256": "a6fd0f17475bf1b1783a9671cbe09218e982ae904ad86ff2e6aa12efe2c9ee8a"
     },
     "deep_ep/include/deep_ep/impls/hybrid_dispatch.cuh": {
       "upstream_sha256": "87ff341af541de4b11f88237b688705a35762229ae2f37ae488c7e3bfda949ac",
-      "sha256": "69aa938543ce00274de92ea9a20025d2ca4c8656c1fc16bce2327c4ab6c02d36"
+      "sha256": "56ebe2ee6854380fa575881bf53e4a8d9392f7e4bf3ad1510c57b65854d1c313"
     }
   },
   "added_files": {
@@ -65,7 +65,7 @@
     "v2.1: directional hybrid dispatch validates full-width real expert IDs and duplicates in its notify and scale-out warps before route-derived indexing, stores or puts, as the direct path does, and drops the separate route-guard kernel ahead of each source dispatch; mixed-role (union hybrid) layouts keep the guard. AFDEP_HYBRID_ROUTE_GUARD=1 keeps the guard kernel as a measurement control.",
     "v2.1: directional hybrid dispatch skips the entry grid sync on Attention domains, which run neither barrier half there; it guarded no cross-CTA state. AFDEP_ATTENTION_GRID_SYNC=1 keeps it as a measurement control.",
     "v2.1: single-FFN reduction. With one FFN rank on the direct-NVLink role path every token's top-k rows are local, so the FFN combine's branch-free reduction prefix covers all top_k slots instead of ceil(top_k / union ranks), which counts the expert-free Attention ranks. AFDEP_UNION_REDUCE_PREFIX=1 keeps the union prefix as a measurement control.",
-    "v2.1 fix: directional hybrid staging no longer overlaps remotely written inboxes. Attention domains stage dispatch tokens at window offset 0 (their scale-up inboxes, unused in both phases in this mode) instead of over their combine scale-out inbox; FFN domains stage combine replies in a slice reserved at the window end (calculate_buffer_size adds it for role-pure hybrid layouts) instead of over their dispatch scale-out inbox. Without it, a destination that finished early could overwrite staging the NIC had not yet read for another domain."
+    "v2.1 fix: directional hybrid staging no longer overlaps remotely written inboxes when a race is possible. With two or more FFN domains, Attention domains stage dispatch tokens at window offset 0 (their scale-up inboxes, unused in both phases in this mode) instead of over their combine scale-out inbox; with two or more Attention domains, FFN domains stage combine replies in a slice reserved at the window end (calculate_buffer_size adds it) instead of over their dispatch scale-out inbox. Without it, a destination that finished early could overwrite staging the NIC had not yet read for another domain. With one domain on the other side every reply or next request follows that domain's per-channel signals, each after the channel's puts, so the layout is unchanged there."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",

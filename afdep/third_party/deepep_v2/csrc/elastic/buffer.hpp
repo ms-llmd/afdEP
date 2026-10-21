@@ -650,10 +650,12 @@ public:
             num_scaleout_ranks, num_scaleup_ranks,
             is_scaleup_nvlink, allow_multiple_reduction, afd_role_ffn_ranks);
 
-        // afdEP directional hybrid: FFN combine staging must not overlap any inbox another role or
-        // domain writes (the dispatch inboxes), so it gets its own slice past both layouts.
-        if (afd_ffn_ranks > 0 and num_scaleout_ranks > 1 and
-            afdep_directional_hybrid(afd_ffn_ranks, num_scaleout_ranks, num_scaleup_ranks) > 0) {
+        // afdEP directional hybrid with two or more Attention domains: FFN combine staging must not
+        // overlap any inbox another role or domain writes (the dispatch inboxes), so it gets its
+        // own slice past both layouts.
+        const int afd_ffn_scaleout_ranks = afd_ffn_ranks > 0 and num_scaleout_ranks > 1 ?
+            afdep_directional_hybrid(afd_ffn_ranks, num_scaleout_ranks, num_scaleup_ranks) : 0;
+        if (afd_ffn_scaleout_ranks > 0 and num_scaleout_ranks - afd_ffn_scaleout_ranks >= 2) {
             const auto num_send_bytes = get_hybrid_combine_send_bytes(
                 num_max_tokens_per_rank, hidden, num_topk, num_scaleout_ranks, allow_multiple_reduction);
             return std::max(num_dispatch_bytes, num_combine_bytes - num_send_bytes) + num_send_bytes;
@@ -1324,7 +1326,7 @@ public:
             afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
                                      nccl_context->num_scaleup_ranks) : 0;
         void* afd_scaleout_send_base = nullptr;
-        if (afd_ffn_scaleout_ranks > 0) {
+        if (afd_ffn_scaleout_ranks > 0 and nccl_context->num_scaleout_ranks - afd_ffn_scaleout_ranks >= 2) {
             const auto num_send_bytes = get_hybrid_combine_send_bytes(
                 num_max_tokens_per_rank, hidden, num_topk, nccl_context->num_scaleout_ranks, allow_multiple_reduction);
             // calculate_buffer_size reserved this slice past both layouts (sized for top-k 32).

@@ -101,9 +101,11 @@ hybrid_combine_impl(nv_bfloat16* x,
     const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;
     // afdEP directional: an FFN domain's staging would otherwise overlap its dispatch scale-out inbox,
     // which an Attention domain writes for exchange N+1 as soon as its own combine-N signals arrive,
-    // possibly while this NIC is still reading staging for another Attention domain. It lives in a
-    // slice reserved past every dispatch region instead (sized in calculate_buffer_size).
-    if (kAfdDirectional and afd_ffn_domain) {
+    // possibly while this NIC is still reading staging for another Attention domain. With one
+    // Attention domain every signal follows that channel's puts, so only two or more Attention
+    // domains need it. The staging then lives in a slice reserved past every dispatch region
+    // (sized in calculate_buffer_size).
+    if (kAfdDirectional and kNumScaleoutRanks - kAfdFfnScaleoutRanks >= 2 and afd_ffn_domain) {
         EP_DEVICE_ASSERT(afd_scaleout_send_base != nullptr);
         scaleout_send_buffer = layout::BufferLayout<false>(
             token_layout, kAllowMultipleReduction ? 1 : kNumTopk, kNumChannels * (kNumScaleoutRanks * kNumMaxTokensPerChannel),

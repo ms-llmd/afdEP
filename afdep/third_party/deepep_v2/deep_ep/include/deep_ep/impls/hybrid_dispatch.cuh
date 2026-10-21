@@ -117,10 +117,12 @@ hybrid_dispatch_impl(
     auto scaleout_recv_buffer = layout::BufferLayout<false>(
         token_layout, kNumScaleoutRanks, kNumChannels * kNumMaxTokensPerChannel, scaleout_send_buffer.get_buffer_end_ptr());
     // afdEP directional: an Attention domain's staging would otherwise overlap its combine scale-out
-    // inbox, which FFN domains write as soon as their own dispatch arrives, possibly while this NIC is
-    // still reading staging for another FFN domain. Attention domains receive nothing into their
-    // scale-up inboxes in either phase, so their staging moves to offset 0.
-    if (kAfdDirectional and not afd_ffn_domain)
+    // inbox, which an FFN domain writes as soon as its own dispatch arrives, possibly while this NIC
+    // is still reading staging for another FFN domain. With one FFN domain its replies follow every
+    // channel's finish tail, each after that channel's puts, so only two or more FFN domains need
+    // it. Attention domains receive nothing into their scale-up inboxes in either phase, so their
+    // staging moves to offset 0.
+    if (kAfdDirectional and kAfdFfnScaleoutRanks >= 2 and not afd_ffn_domain)
         scaleout_send_buffer = layout::BufferLayout<false>(token_layout, 1, kNumMaxTokensPerRank, buffer);
 
     // Init TMA for scale-out and forward warps
