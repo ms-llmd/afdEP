@@ -479,9 +479,13 @@ class ElasticBuffer:
         )
 
     def combine(
-        self, expert_output: torch.Tensor, handle: DispatchHandle
+        self, expert_output: torch.Tensor, handle: DispatchHandle, *, view: bool = False
     ) -> torch.Tensor:
-        """Sum already-weighted expert rows into their original token order."""
+        """Sum already-weighted expert rows into their original token order.
+
+        ``view=True`` may return a strided view of the registered transport buffer
+        (one FFN rank in one NVLink domain); it is valid until the next dispatch.
+        """
         self._check_live()
         if handle._owner is not self._owner or handle is not self._pending:
             raise ValueError("Handle does not belong to this pending exchange")
@@ -506,6 +510,7 @@ class ElasticBuffer:
             False,
             False,
             True,
+            view,
         )
         self._pending = None
         return combined
@@ -699,14 +704,22 @@ class Buffer:
             do_cpu_sync=read_host_counts,
         )
 
-    def source_collect(self) -> torch.Tensor:
-        """Return the native BF16 token output without an extra output copy."""
+    def source_collect(self, *, view: bool = False) -> torch.Tensor:
+        """Return the native BF16 token output without an extra output copy.
+
+        With ``view=True`` and one FFN rank in one NVLink domain, the result is a
+        strided view of the registered combine inbox: no reduce kernel runs, and it
+        stays valid only until the next ``source_dispatch`` on this Buffer. Other
+        layouts return the ordinary result.
+        """
         self._check_role("attention")
         handle = self.transport._pending
         if handle is None:
             raise RuntimeError("source_collect requires a matching dispatch")
         assert self._zero_output is not None
-        return self.transport.combine(self._zero_output[: handle.recv_shape[0]], handle)
+        return self.transport.combine(
+            self._zero_output[: handle.recv_shape[0]], handle, view=view
+        )
 
     def worker_reply(self, rows: torch.Tensor, receipt: DispatchHandle) -> None:
         """Reply with BF16 rows weighted exactly once by recv_topk_weights."""

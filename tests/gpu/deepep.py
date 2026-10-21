@@ -25,6 +25,7 @@ DEFAULT_TOP_K = 2
 DEFAULT_FFN_RANKS = 2
 GRAPH_STEPS = 26
 DELAY_CYCLES = 2_000_000
+COLLECT_VIEW = False  # --collect-view: Attention reads the single-FFN collect view
 # FFN rank 0 delays replies; the last Attention rank delays its next dispatch.
 
 
@@ -163,7 +164,7 @@ class Exchange:
                     0,
                     self.config.hidden_size,
                 )
-            return self.buffer.source_collect().clone(), None
+            return self.buffer.source_collect(view=COLLECT_VIEW).clone(), None
         received = self.buffer.worker_receive(
             bucket=self.config.capacity_tokens_per_rank, read_host_counts=host_counts
         )
@@ -353,7 +354,14 @@ def main() -> None:
     parser.add_argument(
         "--invalid-execution", choices=("eager", "graph"), default="graph"
     )
+    parser.add_argument(
+        "--collect-view",
+        action="store_true",
+        help="Attention collects through source_collect(view=True)",
+    )
     args = parser.parse_args()
+    global COLLECT_VIEW
+    COLLECT_VIEW = args.collect_view
     if min(args.capacity, args.graph_steps, args.num_sms) < 1:
         parser.error("capacity, graph-steps and num-sms must be positive")
     if args.invalid_route and (args.generic or args.capacity < 8):

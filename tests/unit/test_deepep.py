@@ -291,6 +291,10 @@ def test_role_source_returns_native_output_without_copy(runtime):
     output = buffer.source_collect()
     assert output is runtime.native.combine.return_value[0]
     assert runtime.native.combine.call_args.args[0].view_parent is buffer._zero_output
+    assert runtime.native.combine.call_args.args[-1] is False
+    buffer.source_dispatch(x, ids, weights, bucket=8)
+    buffer.source_collect(view=True)
+    assert runtime.native.combine.call_args.args[-1] is True
     with pytest.raises(RuntimeError, match="ffn role"):
         buffer.worker_receive(bucket=8)
     with pytest.raises(ValueError, match="dtype"):

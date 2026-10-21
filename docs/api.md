@@ -19,7 +19,7 @@ on graph replay. All payload tensors are on the selected CUDA device.
 | `source_dispatch(x, ids, weights, x_scale=None, *, bucket, read_host_counts=False)` | Attention: contiguous `x [T,H]`, IDs/FP32 weights `[T,K]`, `T ≤ bucket ≤ capacity` |
 | `worker_receive(*, bucket, read_host_counts=False)` | FFN: expert-major rows, weights, device expert prefix sums and opaque receipt |
 | `worker_reply(rows, receipt)` | FFN: contiguous BF16 `[receive_rows,H]`, routing weight applied exactly once |
-| `source_collect()` | Attention: BF16 `[T,H]` summed over selected experts, in original token order |
+| `source_collect(*, view=False)` | Attention: BF16 `[T,H]` summed over selected experts, in original token order |
 
 BF16 dispatch uses BF16 activations. FP8 uses `float8_e4m3fn` activations and
 FP32 block-128 scales `[T,H/128]`; strided scale views are supported. The library
@@ -47,7 +47,12 @@ has a launch cost.
 allocation on FFN. Otherwise receive capacity is conservative and device counts
 identify live rows. Attention has zero receive payload rows. FFN bounds count
 Attention sources only. Registered transport buffers are distinct from receive
-tensors. In one NVLink domain the role-aware path sizes them by role: FFN
+tensors, except for `source_collect(view=True)`. With one FFN rank in one NVLink
+domain (and no more ranks than top-k), each token's only reply row is already its
+final output. That call then skips the reduce kernel and returns a strided `[T,H]`
+view of the registered combine inbox. Treat the view as read-only. It is valid
+until the next `source_dispatch` on the same Buffer is enqueued; copy it if the
+caller needs it longer. Other layouts return the ordinary result. In one NVLink domain the role-aware path sizes them by role: FFN
 dispatch inboxes for the Attention sources and, when ranks do not exceed top-k,
 Attention combine inboxes for the FFN ranks; every rank registers the same size.
 Generic buffers and `AFDEP_UNION_BUFFERS=1` keep DeepEP's union sizing.

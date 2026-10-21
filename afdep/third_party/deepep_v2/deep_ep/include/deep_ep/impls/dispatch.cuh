@@ -36,6 +36,9 @@ template <bool kIsScaleupNVLink,
           bool kAfdRoleBuffers = false,
           // afdEP: with directed exit, every source CTA releases its own arrival (no sender grid sync).
           bool kAfdPerCtaExit = false,
+          // afdEP single-FFN collect view: the combine row stride (bytes) of rows to zero for tokens
+          // with no valid route, which no FFN rank writes. 0 disables.
+          int kAfdZeroCollectRowBytes = 0,
           int kNumNotifyThreads = kNumNotifyWarps * 32,
           int kNumDispatchThreads = kNumDispatchWarps * 32,
           int kNumThreads = kNumNotifyThreads + kNumDispatchThreads,
@@ -406,6 +409,18 @@ dispatch_impl(
                     uncasted_dst_expert_idx, lane_idx);
             } else {
                 dst_expert_idx = static_cast<int>(uncasted_dst_expert_idx);
+            }
+            if constexpr (kAfdZeroCollectRowBytes > 0) {
+                // With one FFN rank the combine inbox row of a token is its final output (the collect
+                // view); a token with no valid route gets no reply, so its row is zeroed here. The
+                // Attention receives nothing at this offset in dispatch, and the FFN writes only
+                // routed tokens' rows, after this dispatch.
+                EP_STATIC_ASSERT(kAfdZeroCollectRowBytes % sizeof(int4) == 0, "Unaligned collect row");
+                if (__ballot_sync(0xffffffff, lane_idx < kNumTopk and dst_expert_idx >= 0) == 0) {
+                    const auto row = math::advance_ptr<int4>(buffer, token_i64_idx * kAfdZeroCollectRowBytes);
+                    for (int i = lane_idx; i < kAfdZeroCollectRowBytes / static_cast<int>(sizeof(int4)); i += 32)
+                        row[i] = make_int4(0, 0, 0, 0);
+                }
             }
             if (lane_idx < kNumTopk) {
                 stored_dst_rank_idx = dst_expert_idx >= 0 ? dst_expert_idx / kNumExpertsPerRank : -1;

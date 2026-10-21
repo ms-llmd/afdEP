@@ -615,6 +615,12 @@ public:
             num_scaleout_ranks * (num_max_tokens_per_rank + kNumMaxChannels)).get_num_bytes();
     }
 
+    // afdEP single-FFN collect view: one FFN rank, one NVLink domain, rank layout.
+    bool afd_single_ffn_collect_rows(const bool& afd_direct_nvlink, const int& num_topk) const {
+        return afd_direct_nvlink and afd_ffn_ranks == 1 and allow_multiple_reduction and
+            nccl_context->num_ranks <= num_topk;
+    }
+
     static int64_t calculate_buffer_size(const int64_t& nccl_comm,
                                          const int& num_max_tokens_per_rank, const int& hidden,
                                          int num_topk, const bool& use_fp8_dispatch,
@@ -1014,7 +1020,9 @@ public:
                         afd_role_buffers,
                         afd_direct_nvlink and afdep_directed_exit() and afdep_per_cta_exit(),
                         afd_ffn_scaleout_ranks, afd_hybrid_routes_in_kernel,
-                        afd_ffn_scaleout_ranks > 0 and afdep_skip_attention_entry_sync());
+                        afd_ffn_scaleout_ranks > 0 and afdep_skip_attention_entry_sync(),
+                        afd_source and afd_single_ffn_collect_rows(afd_direct_nvlink, num_topk) ?
+                            get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk).get_num_bytes<false>() : 0);
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
@@ -1223,7 +1231,8 @@ public:
             const std::optional<EventHandle>& previous_event_before_epilogue,
             const bool& async_with_compute_stream,
             const bool& allocate_on_comm_stream,
-            const bool& use_expanded_layout) const {
+            const bool& use_expanded_layout,
+            const bool& afd_collect_view) const {
         // Check SM count
         EP_HOST_ASSERT(num_sms > 0);
 
@@ -1364,7 +1373,16 @@ public:
             afd_scaleout_send_base);
 
         // Allocate output tensors
-        auto combined_x = torch::empty({num_combined_tokens, hidden}, x.options());
+        // afdEP single-FFN collect view: with one FFN rank in one NVLink domain (rank layout), each
+        // token's only reply row in inbox region 0 is its final output, so the result can alias it
+        // (valid until the next source dispatch, which rewrites the inbox) instead of copying it.
+        const bool afd_view = afd_collect_view and not afd_worker and afd_single_ffn_collect_rows(afd_direct, num_topk) and
+            not topk_weights.has_value() and not bias_0.has_value() and not bias_1.has_value();
+        const auto collect_row_elems = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk).get_num_bytes<false>() /
+            static_cast<int>(sizeof(nv_bfloat16));
+        auto combined_x = afd_view ?
+            torch::from_blob(reduce_buffer, {num_combined_tokens, hidden}, {collect_row_elems, 1}, x.options()) :
+            torch::empty({num_combined_tokens, hidden}, x.options());
         auto combined_topk_weights = std::optional<torch::Tensor>();
         float* combined_topk_weights_ptr = nullptr;
         if (topk_weights.has_value()) {
@@ -1381,7 +1399,7 @@ public:
                                         num_experts, num_channels, comm_stream);
             // The normal event/wait below already covers the full main
             // combine, its transport barrier and all input-reader lifetimes.
-        } else {
+        } else if (not afd_view) {
             launch_combine_reduce_epilogue(combined_x.data_ptr(),
                                        combined_topk_weights_ptr,
                                        combined_topk_idx.data_ptr<topk_idx_t>(),

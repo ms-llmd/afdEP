@@ -56,6 +56,7 @@ def test_role_template_parameters_default_to_upstream_kernels():
     assert "bool kAfdDirectedExit = false," in dispatch
     assert "bool kAfdRoleBuffers = false," in dispatch
     assert "bool kAfdPerCtaExit = false," in dispatch
+    assert "int kAfdZeroCollectRowBytes = 0," in dispatch
     epilogue = (impls / "dispatch_copy_epilogue.cuh").read_text()
     assert "int kAfdRegionOffset = 0," in epilogue
     for hybrid in ("hybrid_dispatch.cuh", "hybrid_combine.cuh"):

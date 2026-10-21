@@ -30,6 +30,8 @@ METRIC = "per block: max Attention-rank CUDA-event us per exchange"
 SCOPE = "communication only; init/capture excluded; graph replay included"
 # Buffers coexisting in one process need separate DeepEP communication streams.
 PER_BUFFER_COMM_STREAM_ENV = "AFD_DEEPEP_PER_BUFFER_COMM_STREAM"
+# Arms may set AFDEP_BENCH_COLLECT_VIEW=1 (in "_env") to time source_collect(view=True).
+COLLECT_VIEW = os.environ.get("AFDEP_BENCH_COLLECT_VIEW", "0") == "1"
 
 
 def routes(args, rank, n):
@@ -82,7 +84,7 @@ class Arm:
                 buffer.source_dispatch(
                     x, ids.to(buffer.topk_idx_dtype), weights, scale, bucket=n
                 )
-                self.result = buffer.source_collect()
+                self.result = buffer.source_collect(view=COLLECT_VIEW)
 
         for _ in range(2):
             step()
