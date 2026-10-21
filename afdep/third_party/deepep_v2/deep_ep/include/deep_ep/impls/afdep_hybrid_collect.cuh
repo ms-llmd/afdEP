@@ -16,6 +16,11 @@ namespace deep_ep::elastic {
 // clears, each FFN domain's per-channel finish signal; it moves no data. This CTA
 // runs those statements for every channel: the same words, values and clears, read
 // with the same acquire. The reduce epilogue still waits for this grid to complete.
+// The shared kernel's entry gpu_barrier is two local grid syncs on an Attention
+// domain (neither barrier half runs there); they are dropped. They ordered nothing:
+// each tail and signal word belongs to one channel and is touched by one thread, and
+// reuse across exchanges is ordered by the kernel boundary and by the FFN dispatch
+// N+1, which needs this rank's dispatch N+1 finish tails, sent after this kernel.
 template <int kNumScaleoutRanks, int kNumScaleupRanks, int kNumExperts, int kNumChannels,
           int kAfdFfnScaleoutRanks, int64_t kNumTimeoutCycles, int kNumThreads>
 __global__ void __launch_bounds__(kNumThreads, 1)

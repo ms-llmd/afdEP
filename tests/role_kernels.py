@@ -2,10 +2,11 @@
 """Derive afdEP role kernels that must stay mechanical copies of shared kernels.
 
 The FFN directional hybrid dispatch is hybrid_dispatch.cuh without its scale-out
-warps, which an FFN domain never uses: the six edits below are the whole
-difference. tests/unit/test_deepep_build.py re-derives the copy and requires byte
-equality, so a fix to the shared kernel fails the test until the copy is
-regenerated: python -m tests.role_kernels
+warps, which an FFN domain never uses: the seven edits below (six functional,
+plus the generated-file banner) are the whole difference.
+tests/unit/test_deepep_build.py re-derives the copy and requires byte equality,
+so a fix to the shared kernel fails the test until the copy is regenerated:
+python -m tests.role_kernels
 """
 
 from __future__ import annotations

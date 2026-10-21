@@ -3,6 +3,7 @@ import json
 import math
 import subprocess
 from argparse import Namespace
+from pathlib import Path
 
 import pytest
 
@@ -42,7 +43,12 @@ def fake_run(digests, calls):
 def test_tree_arm_imports_its_own_tree_and_checks_its_digest(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(screen.subprocess, "run", fake_run(["d", "d"], calls))
-    args = Namespace(output=tmp_path / "s.json", nproc=4)
+    args = Namespace(
+        output=tmp_path / "s.json",
+        nproc=4,
+        module="benchmarks.comm",
+        metric="median_us",
+    )
     arm = {"_tree": str(tmp_path), "_digest": "d", "_env": {"A": "1"}}
     medians, digest = screen.run_arm("head", arm, 0, args, [])
     assert medians == {1: 5.0} and digest == "d"
@@ -53,3 +59,51 @@ def test_tree_arm_imports_its_own_tree_and_checks_its_digest(tmp_path, monkeypat
     monkeypatch.setattr(screen.subprocess, "run", fake_run(["d", "e"], calls))
     with pytest.raises(SystemExit, match="native digests"):
         screen.run_arm("head", {"_digest": "d"}, 0, args, [])
+
+
+def test_tree_arm_output_is_resolved_against_the_callers_directory(
+    tmp_path, monkeypatch
+):
+    calls = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(screen.subprocess, "run", fake_run(["d"], calls))
+    args = Namespace(
+        output=Path("runs/s.json"),
+        nproc=4,
+        module="benchmarks.comm",
+        metric="median_us",
+    )
+    (tmp_path / "runs").mkdir()
+    other = tmp_path / "other"
+    other.mkdir()
+    assert screen.run_arm("head", {"_tree": str(other)}, 0, args, [])[0] == {1: 5.0}
+    assert (tmp_path / "runs/s-head-r0.json").exists()
+
+
+def test_screen_reads_a_nested_metric_of_another_module(tmp_path, monkeypatch):
+    calls = []
+
+    def run(command, *, stdout, stderr, timeout, env, cwd):
+        assert command[command.index("-m") + 1] == "benchmarks.overlap"
+        output = command[command.index("--output") + 1]
+        name = next(iter(json.loads(command[command.index("--arms") + 1])))
+        calls.append(name)
+        summary = {name: {"attention": {"gemm_us_per_gemm": 7.5}, "median_us": 1.0}}
+        with open(output, "w") as stream:
+            json.dump(
+                {
+                    "cells": [{"tokens": 1, "summary": summary}],
+                    "metadata": [{"native_source_sha256": "d"}],
+                },
+                stream,
+            )
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(screen.subprocess, "run", run)
+    args = Namespace(
+        output=tmp_path / "s.json",
+        nproc=4,
+        module="benchmarks.overlap",
+        metric="attention.gemm_us_per_gemm",
+    )
+    assert screen.run_arm("afd", {}, 0, args, []) == ({1: 7.5}, "d")

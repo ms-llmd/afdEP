@@ -44,13 +44,13 @@
       "sha256": "af22ad6a205d994645700bf5d3ac3f921cf51b5bf426a7190a0b8f3600b3eb92"
     },
     "csrc/kernels/elastic/afdep_suites.hpp": {
-      "sha256": "82444accaa12a00407405238aa726ea8345ab63598b23aa96643d3b179cd2a1e"
+      "sha256": "0158f147252c2bced539e72f1feb6e40726ac0ac75d0c0a400c68e9fa65b7bc2"
     },
     "deep_ep/include/deep_ep/impls/afdep_ffn_hybrid_dispatch.cuh": {
       "sha256": "2e6002f532be2269a7878c1d67d7a74d6eaf5d3eb5493f40270863e01550c1e5"
     },
     "deep_ep/include/deep_ep/impls/afdep_hybrid_collect.cuh": {
-      "sha256": "a4b113264125960b9ee5b7be1bb41733aee1e6dff72777a77327228984a6992a"
+      "sha256": "92b0b5a514e3f5e409934c7851ccd5faf07357453c402985f651e7c9692309ce"
     },
     "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
       "sha256": "4f7ed0d81d7215753c99dfe1364e4ba6e707101cb5ede0d1b139e8b1923e937a"

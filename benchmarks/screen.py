@@ -36,12 +36,13 @@ def run_arm(name, overrides, repeat, args, passthrough):
     if tree is not None:
         cwd = str(Path(tree).resolve())
         env |= {"PYTHONPATH": cwd, "PYTHONSAFEPATH": "1"}
-    output = args.output.parent / f"{args.output.stem}-{name}-r{repeat}.json"
+    # Resolved: a "_tree" arm runs from another working directory.
+    output = args.output.resolve().parent / f"{args.output.stem}-{name}-r{repeat}.json"
     command = [
         *LAUNCH,
         str(args.nproc),
         "-m",
-        "benchmarks.comm",
+        args.module,
         *passthrough,
         "--arms",
         json.dumps({name: overrides}),
@@ -64,8 +65,12 @@ def run_arm(name, overrides, repeat, args, passthrough):
     digests = {rank["native_source_sha256"] for rank in result["metadata"]}
     if len(digests) != 1 or (digest is not None and digests != {digest}):
         raise SystemExit(f"{name} repeat {repeat}: native digests {sorted(digests)}")
-    cells = result["cells"]
-    medians = {cell["tokens"]: cell["summary"][name]["median_us"] for cell in cells}
+    medians = {}
+    for cell in result["cells"]:
+        value = cell["summary"][name]
+        for key in args.metric.split("."):
+            value = value[key]
+        medians[cell["tokens"]] = value
     return medians, digests.pop()
 
 
@@ -100,6 +105,10 @@ def main():
     parser.add_argument("--repeats", type=int, default=4)
     parser.add_argument("--nproc", type=int, default=4)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--module", default="benchmarks.comm", help="per-arm benchmark")
+    parser.add_argument(
+        "--metric", default="median_us", help="dot path into each arm's cell summary"
+    )
     args, passthrough = parser.parse_known_args()
     passthrough = [value for value in passthrough if value != "--"]
     if args.repeats < 1 or not isinstance(args.arms, dict) or not args.arms:
