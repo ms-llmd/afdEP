@@ -991,6 +991,13 @@ public:
 
         // Do dispatch into the buffers (with SM limitation)
         EP_HOST_ASSERT(num_sms <= jit::device_runtime->get_num_sms());
+        // afdEP role suites (afdep_suites.hpp): in directional hybrid each role launches only
+        // the warp classes it uses; one NVLink domain keeps v2.1's shapes.
+        auto afd_dispatch_shape = AfdLaunchShape::kShared;
+        if (afd_ffn_scaleout_ranks > 0 and afd_source and afdep_hybrid_send_blocks())
+            afd_dispatch_shape = AfdLaunchShape::kSendBlock;
+        else if (afd_ffn_scaleout_ranks > 0 and not afd_source and afdep_hybrid_forward_kernels())
+            afd_dispatch_shape = AfdLaunchShape::kRoleKernel;
         launch_dispatch(x.data_ptr(), sf_ptr,
                         topk_idx.data_ptr<topk_idx_t>(), topk_weights_ptr,
                         copied_topk_idx_ptr,
@@ -1022,7 +1029,8 @@ public:
                         afd_ffn_scaleout_ranks, afd_hybrid_routes_in_kernel,
                         afd_ffn_scaleout_ranks > 0 and afdep_skip_attention_entry_sync(),
                         afd_source and afd_single_ffn_collect_rows(afd_direct_nvlink, num_topk) ?
-                            get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk).get_num_bytes<false>() : 0);
+                            get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk).get_num_bytes<false>() : 0,
+                        afd_dispatch_shape);
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
@@ -1346,6 +1354,11 @@ public:
             EP_HOST_ASSERT(num_send_bytes <= num_buffer_bytes);
             afd_scaleout_send_base = math::advance_ptr(buffer, num_buffer_bytes - num_send_bytes);
         }
+        // afdEP role suites (afdep_suites.hpp): in directional hybrid the Attention receive runs
+        // the one-CTA collect kernel.
+        auto afd_combine_shape = AfdLaunchShape::kShared;
+        if (afd_ffn_scaleout_ranks > 0 and not afd_worker and afdep_hybrid_collect_kernels())
+            afd_combine_shape = AfdLaunchShape::kRoleKernel;
         const auto reduce_buffer = launch_combine(
             x.data_ptr(),
             topk_weights.has_value() ? topk_weights->data_ptr() : nullptr,
@@ -1370,7 +1383,8 @@ public:
             afd_direct and afdep_directed_exit() and afdep_per_cta_exit(),
             afd_ffn_scaleout_ranks,
             afd_direct and afd_ffn_ranks == 1 and afdep_single_ffn_reduce(),
-            afd_scaleout_send_base);
+            afd_scaleout_send_base,
+            afd_combine_shape);
 
         // Allocate output tensors
         // afdEP single-FFN collect view: with one FFN rank in one NVLink domain (rank layout), each

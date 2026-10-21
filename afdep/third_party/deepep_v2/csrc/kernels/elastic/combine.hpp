@@ -7,6 +7,7 @@
 
 #include "../../jit/compiler.hpp"
 #include "../../jit/launch_runtime.hpp"
+#include "afdep_suites.hpp"
 
 namespace deep_ep::elastic {
 
@@ -120,9 +121,61 @@ static void __instantiate_kernel() {{
     }
 };
 
+// afdEP Attention directional hybrid combine receive (afdep_suites.hpp).
+class AfdepHybridCollectRuntime final : public jit::LaunchRuntime<AfdepHybridCollectRuntime> {
+public:
+    struct Args {
+        int num_scaleout_ranks, num_scaleup_ranks;
+        int num_experts, num_channels;
+        int afd_ffn_scaleout_ranks;
+        int64_t num_timeout_cycles;
+
+        void* workspace;
+        int scaleout_rank_idx, scaleup_rank_idx;
+
+        jit::LaunchArgs launch_args;
+    };
+
+    static std::string generate_impl(const Args& args) {
+        return fmt::format(R"(
+#include <deep_ep/impls/afdep_hybrid_collect.cuh>
+
+using namespace deep_ep::elastic;
+
+static void __instantiate_kernel() {{
+    auto ptr = reinterpret_cast<void*>(&afdep_hybrid_collect_impl<{}, {}, {}, {}, {}, {}, {}>);
+}}
+)",
+                           args.num_scaleout_ranks, args.num_scaleup_ranks,
+                           args.num_experts, args.num_channels,
+                           args.afd_ffn_scaleout_ranks, args.num_timeout_cycles,
+                           args.launch_args.num_threads);
+    }
+
+    static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
+        EP_CUDA_UNIFIED_CHECK(jit::launch_kernel(kernel, config,
+                                                 args.workspace, args.scaleout_rank_idx, args.scaleup_rank_idx));
+    }
+};
+
 static layout::TokenLayout get_combine_token_layout(
     const int& hidden, const int& elem_size, const int& num_topk) {
     return layout::TokenLayout(hidden * elem_size, 0, num_topk, false);
+}
+
+static void* get_hybrid_reduce_buffer(void* buffer, const layout::TokenLayout& token_layout,
+                                      const int& num_scaleout_ranks, const int& num_scaleup_ranks,
+                                      const int& num_max_tokens_per_rank, const int& num_topk,
+                                      const bool& allow_multiple_reduction) {
+    // For hybrid mode, we have to skip the scale-up buffer
+    const bool is_scaleup_buffer_rank_layout =
+        allow_multiple_reduction ? (num_scaleup_ranks <= num_topk) : false;
+    const auto scaleup_buffer = layout::BufferLayout<false>(
+        token_layout, 
+        is_scaleup_buffer_rank_layout ? num_scaleup_ranks : num_topk,
+        num_scaleout_ranks * num_max_tokens_per_rank,
+        buffer);
+    return scaleup_buffer.get_buffer_end_ptr();
 }
 
 static void* launch_combine(void* x,
@@ -149,7 +202,8 @@ static void* launch_combine(void* x,
                             const bool& afd_per_cta_exit = false,
                             const int& afd_ffn_scaleout_ranks = 0,
                             const bool& afd_single_ffn_reduce = false,
-                            void* afd_scaleout_send_base = nullptr) {
+                            void* afd_scaleout_send_base = nullptr,
+                            const AfdLaunchShape afd_shape = AfdLaunchShape::kShared) {
     // Maximize shared memory utilization
     const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
     auto num_warps = std::min(num_smem_bytes / token_layout.get_num_bytes<true>(), 32);
@@ -169,6 +223,26 @@ static void* launch_combine(void* x,
 
     // Generate, build and launch
     const auto num_threads = num_warps * 32;
+    if (afd_shape == AfdLaunchShape::kRoleKernel) {
+        // afdEP Attention directional hybrid combine (afdep_suites.hpp): one CTA, a thread per
+        // (channel, FFN domain) signal while they fit.
+        EP_HOST_ASSERT(num_scaleout_ranks > 1 and afd_ffn_scaleout_ranks > 0 and
+                       scaleout_rank_idx >= afd_ffn_scaleout_ranks);
+        const AfdepHybridCollectRuntime::Args collect_args = {
+            .num_scaleout_ranks = num_scaleout_ranks, .num_scaleup_ranks = num_scaleup_ranks,
+            .num_experts = num_experts, .num_channels = num_channels,
+            .afd_ffn_scaleout_ranks = afd_ffn_scaleout_ranks,
+            .num_timeout_cycles = num_timeout_cycles,
+            .workspace = workspace,
+            .scaleout_rank_idx = scaleout_rank_idx, .scaleup_rank_idx = scaleup_rank_idx,
+            .launch_args = jit::LaunchArgs(
+                1, std::min(1024, math::align(num_channels * afd_ffn_scaleout_ranks, 32)), num_smem_bytes, 1, false)};
+        const auto code = AfdepHybridCollectRuntime::generate(collect_args);
+        const auto runtime = jit::compiler->build("afdep_hybrid_collect", code);
+        AfdepHybridCollectRuntime::launch(runtime, collect_args, stream);
+        return get_hybrid_reduce_buffer(buffer, token_layout, num_scaleout_ranks, num_scaleup_ranks,
+                                        num_max_tokens_per_rank, num_topk, allow_multiple_reduction);
+    }
     const CombineRuntime::Args args = {
         .is_scaleup_nvlink = is_scaleup_nvlink,
         .use_expanded_layout = use_expanded_layout,
@@ -208,16 +282,8 @@ static void* launch_combine(void* x,
     // Return the buffer to be reduced
     if (num_scaleout_ranks == 1)
         return buffer;
-
-    // For hybrid mode, we have to skip the scale-up buffer
-    const bool is_scaleup_buffer_rank_layout =
-        allow_multiple_reduction ? (num_scaleup_ranks <= num_topk) : false;
-    const auto scaleup_buffer = layout::BufferLayout<false>(
-        token_layout, 
-        is_scaleup_buffer_rank_layout ? num_scaleup_ranks : num_topk,
-        num_scaleout_ranks * num_max_tokens_per_rank,
-        buffer);
-    return scaleup_buffer.get_buffer_end_ptr();
+    return get_hybrid_reduce_buffer(buffer, token_layout, num_scaleout_ranks, num_scaleup_ranks,
+                                    num_max_tokens_per_rank, num_topk, allow_multiple_reduction);
 }
 
 class CombineReduceEpilogueRuntime final : public jit::LaunchRuntime<CombineReduceEpilogueRuntime> {

@@ -8,6 +8,7 @@
 
 #include "../../jit/compiler.hpp"
 #include "../../jit/launch_runtime.hpp"
+#include "afdep_suites.hpp"
 
 namespace deep_ep::elastic {
 
@@ -156,20 +157,7 @@ public:
                                        : std::string());
         } else {
             header_name = "hybrid_dispatch";
-            func_name = fmt::format("hybrid_dispatch_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>",
-                args.do_cpu_sync,
-                args.reuse_slot_indices,
-                args.launch_args.grid_dim.first,
-                args.num_notify_warps, args.num_scaleout_warps, args.num_forward_warps,
-                args.num_scaleout_ranks, args.num_scaleup_ranks,
-                args.num_hidden_bytes, args.num_sf_packs,
-                args.num_max_tokens_per_rank,
-                args.num_experts, args.num_topk, args.expert_alignment,
-                args.num_qps, args.num_timeout_cycles,
-                args.afd_ffn_scaleout_ranks > 0 ?
-                    fmt::format(", {}, {}{}", args.afd_ffn_scaleout_ranks, args.afd_directional_routes,
-                                args.afd_skip_attention_entry_sync ? ", true" : "") :
-                    std::string());
+            func_name = "hybrid_dispatch_impl" + get_hybrid_template_args(args);
         }
 
         return fmt::format(R"(
@@ -181,6 +169,24 @@ static void __instantiate_kernel() {{
     auto ptr = reinterpret_cast<void*>(&{});
 }}
 )", header_name, func_name);
+    }
+
+    // Shared with the afdEP FFN hybrid dispatch, a copy of hybrid_dispatch_impl.
+    static std::string get_hybrid_template_args(const Args& args) {
+        return fmt::format("<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}{}>",
+            args.do_cpu_sync,
+            args.reuse_slot_indices,
+            args.launch_args.grid_dim.first,
+            args.num_notify_warps, args.num_scaleout_warps, args.num_forward_warps,
+            args.num_scaleout_ranks, args.num_scaleup_ranks,
+            args.num_hidden_bytes, args.num_sf_packs,
+            args.num_max_tokens_per_rank,
+            args.num_experts, args.num_topk, args.expert_alignment,
+            args.num_qps, args.num_timeout_cycles,
+            args.afd_ffn_scaleout_ranks > 0 ?
+                fmt::format(", {}, {}{}", args.afd_ffn_scaleout_ranks, args.afd_directional_routes,
+                            args.afd_skip_attention_entry_sync ? ", true" : "") :
+                std::string());
     }
 
     static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
@@ -217,6 +223,29 @@ static void __instantiate_kernel() {{
                 args.scaleout_rank_idx, args.scaleup_rank_idx
             ));
         }
+    }
+};
+
+// afdEP FFN directional hybrid dispatch (afdep_suites.hpp): the shared argument
+// list, with no scale-out warps, through a generated copy of hybrid_dispatch.cuh.
+class AfdepFfnHybridDispatchRuntime final : public jit::LaunchRuntime<AfdepFfnHybridDispatchRuntime> {
+public:
+    using Args = DispatchRuntime::Args;
+
+    static std::string generate_impl(const Args& args) {
+        return fmt::format(R"(
+#include <deep_ep/impls/afdep_ffn_hybrid_dispatch.cuh>
+
+using namespace deep_ep::elastic;
+
+static void __instantiate_kernel() {{
+    auto ptr = reinterpret_cast<void*>(&afdep_ffn_hybrid_dispatch_impl{});
+}}
+)", DispatchRuntime::get_hybrid_template_args(args));
+    }
+
+    static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
+        DispatchRuntime::launch_impl(kernel, config, args);
     }
 };
 
@@ -265,7 +294,8 @@ static void launch_dispatch(void* x, void* sf,
                             const int afd_ffn_scaleout_ranks = 0,
                             const bool afd_directional_routes = false,
                             const bool afd_skip_attention_entry_sync = false,
-                            const int afd_zero_collect_row_bytes = 0) {
+                            const int afd_zero_collect_row_bytes = 0,
+                            const AfdLaunchShape afd_shape = AfdLaunchShape::kShared) {
     // Cached mode does not support expert token counting
     if (cached_mode)
         EP_HOST_ASSERT(cumulative_local_expert_recv_stats == nullptr);
@@ -347,9 +377,34 @@ static void launch_dispatch(void* x, void* sf,
         .scaleout_rank_idx = scaleout_rank_idx, .scaleup_rank_idx = scaleup_rank_idx,
         // NOTES: make cluster dim 2 to overlap with clustered computation kernels
         .launch_args = jit::LaunchArgs(num_sms, num_threads, num_smem_bytes, 2 - (num_sms % 2), true)};
+    if (afd_shape == AfdLaunchShape::kRoleKernel) {
+        // afdEP FFN directional hybrid dispatch (afdep_suites.hpp): notify and forward warps.
+        EP_HOST_ASSERT(num_scaleout_ranks > 1 and args.afd_ffn_scaleout_ranks > 0 and
+                       scaleout_rank_idx < args.afd_ffn_scaleout_ranks and num_tokens == 0 and
+                       not reuse_slot_indices and num_notify_warps > 0 and
+                       num_scaleup_ranks <= (num_notify_warps + num_forward_warps) * 32);
+        auto role_args = args;
+        role_args.num_scaleout_warps = 0;
+        role_args.launch_args = jit::LaunchArgs(num_sms, (num_notify_warps + num_forward_warps) * 32,
+                                                num_smem_bytes, 2 - (num_sms % 2), true);
+        const auto role_code = AfdepFfnHybridDispatchRuntime::generate(role_args);
+        const auto role_runtime = jit::compiler->build("afdep_ffn_hybrid_dispatch", role_code);
+        AfdepFfnHybridDispatchRuntime::launch(role_runtime, role_args, stream);
+        return;
+    }
     const auto code = DispatchRuntime::generate(args);
     const auto runtime = jit::compiler->build("dispatch", code);
-    DispatchRuntime::launch(runtime, args, stream);
+    auto shaped_args = args;
+    if (afd_shape == AfdLaunchShape::kSendBlock) {
+        // afdEP Attention directional hybrid dispatch (afdep_suites.hpp): notify and scale-out
+        // warps; the trailing forward warps are not launched.
+        EP_HOST_ASSERT(num_scaleout_ranks > 1 and args.afd_ffn_scaleout_ranks > 0 and
+                       scaleout_rank_idx >= args.afd_ffn_scaleout_ranks and num_notify_warps > 0 and
+                       num_scaleup_ranks <= (num_notify_warps + num_scaleout_warps) * 32);
+        shaped_args.launch_args = jit::LaunchArgs(num_sms, (num_notify_warps + num_scaleout_warps) * 32,
+                                                  num_smem_bytes, 2 - (num_sms % 2), true);
+    }
+    DispatchRuntime::launch(runtime, shaped_args, stream);
 }
 
 class DispatchCopyEpilogueRuntime final : public jit::LaunchRuntime<DispatchCopyEpilogueRuntime> {

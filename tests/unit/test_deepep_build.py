@@ -66,6 +66,65 @@ def test_role_template_parameters_default_to_upstream_kernels():
     assert "bool kAfdSkipAttentionEntrySync = false," in hybrid_dispatch
 
 
+# Device sources of v2.1 (native digest 8205d02b). The role suites size launches of
+# these kernels and add separate role kernels; they never edit a shared kernel, so
+# Masked and every shared instantiation keep their code, include hash and cubin.
+V21_KERNEL_SHA256 = {
+    "dispatch.cuh": (
+        "81e189fab1985fba3f8c772ecfe0b2efbfe4618744c0ae0195566ae20326ce6a"
+    ),
+    "combine.cuh": "8847dfb9b41cc0cb0c971ac0c35ca25d95cacc2443413ca3a6d6b7dcb43a51e1",
+    "hybrid_dispatch.cuh": (
+        "56ebe2ee6854380fa575881bf53e4a8d9392f7e4bf3ad1510c57b65854d1c313"
+    ),
+    "hybrid_combine.cuh": (
+        "a6fd0f17475bf1b1783a9671cbe09218e982ae904ad86ff2e6aa12efe2c9ee8a"
+    ),
+    "dispatch_copy_epilogue.cuh": (
+        "0b573abeb0dc2bb8d4c65d9a3ce28f82537e129d3dc4cf5e3709dd4e9cbf85cf"
+    ),
+    "afdep_roles.cuh": (
+        "4f7ed0d81d7215753c99dfe1364e4ba6e707101cb5ede0d1b139e8b1923e937a"
+    ),
+}
+
+
+def test_role_suites_leave_shared_kernels_untouched():
+    provenance = json.loads((VENDOR_ROOT / "PROVENANCE.json").read_text())
+    include = VENDOR_ROOT / "deep_ep/include/deep_ep"
+
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    for name, sha in V21_KERNEL_SHA256.items():
+        assert digest(include / "impls" / name) == sha, name
+    upstream = [
+        include / "impls/combine_reduce_epilogue.cuh",
+        *sorted((include / "common").glob("*")),
+    ]
+    for path in upstream:
+        name = path.relative_to(VENDOR_ROOT).as_posix()
+        assert digest(path) == provenance["file_sha256"][name], name
+
+
+def test_role_suite_shapes_are_host_launch_overrides():
+    """The Attention hybrid send block relaunches the shared cubin, generated first."""
+    elastic = VENDOR_ROOT / "csrc/kernels/elastic"
+    suites = (elastic / "afdep_suites.hpp").read_text()
+    for control in ("ROLE_KERNELS", "HYBRID_SEND", "HYBRID_FORWARD", "HYBRID_COLLECT"):
+        assert f'"AFDEP_SHARED_{control}", 0) == 0' in suites
+    dispatch = (elastic / "dispatch.hpp").read_text()
+    generate = dispatch.index("const auto code = DispatchRuntime::generate(args);")
+    assert generate < dispatch.index("shaped_args.launch_args = jit::LaunchArgs(")
+
+
+def test_ffn_hybrid_dispatch_is_the_generated_copy():
+    from tests.role_kernels import FFN_HYBRID_DISPATCH, IMPLS, ffn_hybrid_dispatch
+
+    shared = (IMPLS / "hybrid_dispatch.cuh").read_text()
+    assert (IMPLS / FFN_HYBRID_DISPATCH).read_text() == ffn_hybrid_dispatch(shared)
+
+
 def test_runtime_header_contents_invalidate_build(tmp_path):
     header = tmp_path / "include/deep_ep/impls/dispatch.cuh"
     header.parent.mkdir(parents=True)
