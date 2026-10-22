@@ -194,6 +194,12 @@ public:
         return {afd_cf_min_bucket, afd_cf_arm};
     }
 
+    // afdEP sparse directional hybrid (afdep_suites.hpp): (stagger bound, sparse dispatch, sparse
+    // combine) as this rank resolves them, which must agree on every rank.
+    std::tuple<int, bool, bool> get_afd_sparse_hybrid_config() const {
+        return {afdep_hybrid_stagger_max_tokens(), afdep_hybrid_sparse_dispatch(), afdep_hybrid_sparse_combine()};
+    }
+
     // ReSharper disable once CppMemberFunctionMayBeStatic
     void barrier(const bool& use_comm_stream, const bool& with_cpu_sync) const {
         const auto compute_stream = at::cuda::getCurrentCUDAStream();
@@ -1504,6 +1510,7 @@ static void register_apis(pybind11::module_& m) {
         .def("get_physical_domain_size", &ElasticBuffer::get_physical_domain_size)
         .def("get_logical_domain_size", &ElasticBuffer::get_logical_domain_size)
         .def("get_afd_count_first_config", &ElasticBuffer::get_afd_count_first_config)
+        .def("get_afd_sparse_hybrid_config", &ElasticBuffer::get_afd_sparse_hybrid_config)
         .def("barrier", &ElasticBuffer::barrier)
         .def("engram_write", &ElasticBuffer::engram_write)
         .def("engram_fetch", &ElasticBuffer::engram_fetch)

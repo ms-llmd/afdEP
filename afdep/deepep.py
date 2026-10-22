@@ -380,6 +380,14 @@ class ElasticBuffer:
         if count_first[0][1] not in ("full", "source"):
             self.close()
             raise ValueError("AFDEP_COUNT_FIRST_ARM must be full or source")
+        # So do the sparse directional hybrid switches, as each rank resolves them
+        # (role-local shape controls can turn them off on one role only).
+        sparse = self._gather(tuple(self._runtime.get_afd_sparse_hybrid_config()))
+        if any(value != sparse[0] for value in sparse):
+            self.close()
+            raise ValueError(
+                "Every DeepEP rank must use the same sparse hybrid configuration"
+            )
 
     def _gather(self, value) -> list:
         values = [None] * self._group.size()

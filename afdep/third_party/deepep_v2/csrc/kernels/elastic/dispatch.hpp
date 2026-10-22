@@ -117,6 +117,10 @@ public:
         // afdEP count-first source only (AfdepSourceDispatchRuntime)
         int afd_ungated_tokens;
         bool afd_thread_count;
+        // afdEP sparse directional hybrid only (afdep_sparse_hybrid.cuh); set by the launcher
+        int afd_stagger_max_tokens;
+        bool afd_sparse_dispatch;
+        bool afd_sparse_combine;
 
         // Parameters
         void* x; sf_pack_t* sf; topk_idx_t* topk_idx; float* topk_weights;
@@ -250,6 +254,62 @@ static void __instantiate_kernel() {{
     auto ptr = reinterpret_cast<void*>(&afdep_ffn_hybrid_dispatch_impl{});
 }}
 )", DispatchRuntime::get_hybrid_template_args(args));
+    }
+
+    static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
+        DispatchRuntime::launch_impl(kernel, config, args);
+    }
+};
+
+// afdEP sparse directional hybrid (afdep_suites.hpp): the shared argument list, with the
+// entry-sync flag always explicit, then the stagger bound and sparse-dispatch and -combine flags.
+static std::string afdep_sparse_hybrid_template_args(const DispatchRuntime::Args& args) {
+    EP_HOST_ASSERT(args.afd_ffn_scaleout_ranks > 0);
+    auto shared = DispatchRuntime::get_hybrid_template_args(args);
+    shared.pop_back();
+    return fmt::format("{}{}, {}, {}, {}>", shared, args.afd_skip_attention_entry_sync ? "" : ", false",
+                       args.afd_stagger_max_tokens, args.afd_sparse_dispatch, args.afd_sparse_combine);
+}
+
+// afdEP Attention directional hybrid send, staggered and/or sparse (afdep_suites.hpp): the
+// send-block shape through a generated copy of hybrid_dispatch.cuh.
+class AfdepSourceHybridDispatchRuntime final : public jit::LaunchRuntime<AfdepSourceHybridDispatchRuntime> {
+public:
+    using Args = DispatchRuntime::Args;
+
+    static std::string generate_impl(const Args& args) {
+        return fmt::format(R"(
+#include <deep_ep/impls/afdep_source_hybrid_dispatch.cuh>
+
+using namespace deep_ep::elastic;
+
+static void __instantiate_kernel() {{
+    auto ptr = reinterpret_cast<void*>(&afdep_source_hybrid_dispatch_impl{});
+}}
+)", afdep_sparse_hybrid_template_args(args));
+    }
+
+    static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
+        DispatchRuntime::launch_impl(kernel, config, args);
+    }
+};
+
+// afdEP FFN directional hybrid dispatch whose forwarders retire unused channels by source
+// token count (afdep_suites.hpp): the FFN copy's shape.
+class AfdepFfnSparseHybridDispatchRuntime final : public jit::LaunchRuntime<AfdepFfnSparseHybridDispatchRuntime> {
+public:
+    using Args = DispatchRuntime::Args;
+
+    static std::string generate_impl(const Args& args) {
+        return fmt::format(R"(
+#include <deep_ep/impls/afdep_ffn_sparse_hybrid_dispatch.cuh>
+
+using namespace deep_ep::elastic;
+
+static void __instantiate_kernel() {{
+    auto ptr = reinterpret_cast<void*>(&afdep_ffn_sparse_hybrid_dispatch_impl{});
+}}
+)", afdep_sparse_hybrid_template_args(args));
     }
 
     static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
@@ -511,9 +571,35 @@ static void launch_dispatch(void* x, void* sf,
         role_args.num_scaleout_warps = 0;
         role_args.launch_args = jit::LaunchArgs(num_sms, (num_notify_warps + num_forward_warps) * 32,
                                                 num_smem_bytes, 2 - (num_sms % 2), true);
+        if (afdep_hybrid_sparse_dispatch()) {
+            role_args.afd_stagger_max_tokens = afdep_hybrid_stagger_max_tokens();
+            role_args.afd_sparse_dispatch = true;
+            role_args.afd_sparse_combine = afdep_hybrid_sparse_combine();
+            const auto sparse_code = AfdepFfnSparseHybridDispatchRuntime::generate(role_args);
+            const auto sparse_runtime = jit::compiler->build("afdep_ffn_sparse_hybrid_dispatch", sparse_code);
+            AfdepFfnSparseHybridDispatchRuntime::launch(sparse_runtime, role_args, stream);
+            return;
+        }
         const auto role_code = AfdepFfnHybridDispatchRuntime::generate(role_args);
         const auto role_runtime = jit::compiler->build("afdep_ffn_hybrid_dispatch", role_code);
         AfdepFfnHybridDispatchRuntime::launch(role_runtime, role_args, stream);
+        return;
+    }
+    if (afd_shape == AfdLaunchShape::kSendBlock and
+        (afdep_hybrid_stagger() or afdep_hybrid_sparse_dispatch() or afdep_hybrid_sparse_combine())) {
+        // afdEP staggered or sparse send (afdep_suites.hpp): the send-block shape through the generated copy.
+        EP_HOST_ASSERT(num_scaleout_ranks > 1 and args.afd_ffn_scaleout_ranks > 0 and
+                       scaleout_rank_idx >= args.afd_ffn_scaleout_ranks and num_notify_warps > 0 and
+                       num_scaleup_ranks <= (num_notify_warps + num_scaleout_warps) * 32);
+        auto role_args = args;
+        role_args.afd_stagger_max_tokens = afdep_hybrid_stagger_max_tokens();
+        role_args.afd_sparse_dispatch = afdep_hybrid_sparse_dispatch();
+        role_args.afd_sparse_combine = afdep_hybrid_sparse_combine();
+        role_args.launch_args = jit::LaunchArgs(num_sms, (num_notify_warps + num_scaleout_warps) * 32,
+                                                num_smem_bytes, 2 - (num_sms % 2), true);
+        const auto role_code = AfdepSourceHybridDispatchRuntime::generate(role_args);
+        const auto role_runtime = jit::compiler->build("afdep_source_hybrid_dispatch", role_code);
+        AfdepSourceHybridDispatchRuntime::launch(role_runtime, role_args, stream);
         return;
     }
     const auto code = DispatchRuntime::generate(args);

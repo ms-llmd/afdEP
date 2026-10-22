@@ -75,6 +75,7 @@ def runtime(monkeypatch):
     native = Mock()
     native.get_logical_domain_size.return_value = (1, 4)
     native.get_afd_count_first_config.return_value = (0, "full")
+    native.get_afd_sparse_hybrid_config.return_value = (0, False, False)
     native.combine.return_value = (Tensor((2, 256)), None, None)
 
     def dispatch(*args):
@@ -189,6 +190,21 @@ def test_count_first_configuration_must_agree(runtime):
 
     runtime.dist.all_gather_object = split
     with pytest.raises(ValueError, match="same count-first configuration"):
+        elastic(runtime, role_aware=True, ffn_ranks=2)
+    runtime.native.destroy.assert_called_once()
+    runtime.module.destroy_nccl_comm.assert_called_once_with(17)
+
+
+def test_sparse_hybrid_configuration_must_agree(runtime):
+    gather = runtime.dist.all_gather_object
+
+    def split(values, value, group):
+        gather(values, value, group)
+        if value == (0, False, False):
+            values[1] = (0, True, True)
+
+    runtime.dist.all_gather_object = split
+    with pytest.raises(ValueError, match="same sparse hybrid configuration"):
         elastic(runtime, role_aware=True, ffn_ranks=2)
     runtime.native.destroy.assert_called_once()
     runtime.module.destroy_nccl_comm.assert_called_once_with(17)

@@ -129,6 +129,16 @@ def test_ffn_role_kernels_are_the_generated_copies():
     assert (rk.IMPLS / rk.FFN_HYBRID_DISPATCH).read_text() == rk.ffn_hybrid_dispatch(
         hybrid
     )
+    source_hybrid = (rk.IMPLS / rk.SOURCE_HYBRID_DISPATCH).read_text()
+    assert source_hybrid == rk.source_hybrid_dispatch(hybrid)
+    ffn_sparse = (rk.IMPLS / rk.FFN_SPARSE_HYBRID_DISPATCH).read_text()
+    assert ffn_sparse == rk.ffn_sparse_hybrid_dispatch(hybrid)
+    combine = (rk.IMPLS / "hybrid_combine.cuh").read_text()
+    ffn_combine = (rk.IMPLS / rk.FFN_SPARSE_HYBRID_COMBINE).read_text()
+    assert ffn_combine == rk.ffn_sparse_hybrid_combine(combine)
+    collect = (rk.IMPLS / "afdep_hybrid_collect.cuh").read_text()
+    sparse_collect = (rk.IMPLS / rk.SPARSE_HYBRID_COLLECT).read_text()
+    assert sparse_collect == rk.sparse_hybrid_collect(collect)
     direct = (rk.IMPLS / "dispatch.cuh").read_text()
     assert (rk.IMPLS / rk.FFN_DISPATCH).read_text() == rk.ffn_dispatch(direct)
     assert (rk.IMPLS / rk.SOURCE_DISPATCH).read_text() == rk.source_dispatch(direct)
@@ -154,6 +164,23 @@ def test_count_first_kernels_stay_out_of_shared_runtimes():
         "afdep_ffn_dispatch.cuh",
     ):
         assert "afdep_count_first.cuh" not in (rk.IMPLS / name).read_text(), name
+
+
+def test_sparse_hybrid_kernels_stay_out_of_shared_runtimes():
+    """Only sparse copies include the sparse header, each via one runtime."""
+    from tests import role_kernels as rk
+
+    dispatch = (VENDOR_ROOT / "csrc/kernels/elastic/dispatch.hpp").read_text()
+    for name in (rk.SOURCE_HYBRID_DISPATCH, rk.FFN_SPARSE_HYBRID_DISPATCH):
+        assert dispatch.count(f"#include <deep_ep/impls/{name}>") == 1, name
+    combine = (VENDOR_ROOT / "csrc/kernels/elastic/combine.hpp").read_text()
+    for name in (rk.FFN_SPARSE_HYBRID_COMBINE, rk.SPARSE_HYBRID_COLLECT):
+        assert combine.count(f'"{name.removesuffix(".cuh")}");') == 1, name
+    header = "#include <deep_ep/impls/afdep_sparse_hybrid.cuh>"
+    assert header not in dispatch and header not in combine
+    shared = ("hybrid_dispatch.cuh", "hybrid_combine.cuh", "afdep_hybrid_collect.cuh")
+    for name in (*shared, rk.FFN_HYBRID_DISPATCH):
+        assert header not in (rk.IMPLS / name).read_text(), name
 
 
 def test_count_first_host_flag_geometry_mirrors_the_header():
