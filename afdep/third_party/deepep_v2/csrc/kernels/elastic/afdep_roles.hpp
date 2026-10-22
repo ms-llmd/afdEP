@@ -63,6 +63,34 @@ static int afdep_directional_hybrid(const int afd_ffn_ranks, const int num_scale
     return afd_ffn_ranks / num_scaleup_ranks;
 }
 
+// Mixed-role directional hybrid (opt-in, AFDEP_MIXED_HYBRID=1): FFN ranks [0, F) with
+// 0 < F < U fill part of NVLink domain 0, which they share with U - F Attention ranks
+// (A0), and every other domain holds only Attention ranks (AP). The directional
+// protocol above applies with one FFN-holding domain and roles per rank: every domain-0
+// GPU stays its rail's forwarder, so remote tokens still enter through all U NICs; only
+// ranks below F hold experts; A0 GPUs are also sources, whose own tokens take the local
+// bypass into their own forwarder (rail lane 0) and whose replies their own forward
+// warps write locally. Its orderings are the directional ones plus:
+// - Domain 0 keeps all three scale-up barriers (dispatch entry and exit, combine entry)
+//   across all U GPUs, A0 included, so state shared inside domain 0 (scale-up inboxes,
+//   tails, counts, list ends) is ordered as in union.
+// - An AP writes dispatch N+1 into forwarder (0,u) only after its collect N saw (0,u)'s
+//   signal on every channel, each sent after that channel's combine-N reads; the one
+//   region (0,u) still reads afterwards is A0's reply inbox (its reduce epilogue), which
+//   therefore moves, on every rank, into a slice reserved before the combine staging
+//   slice at the window end, past both layouts (calculate_buffer_size).
+// - Forwarders stage AP replies in the section-11 staging slice with two or more AP
+//   domains; A0 never stages dispatch tokens (all are local) and nothing is written into
+//   an AP window except its reply slice and signal words.
+// Returns F, or 0 (union, or the directional protocol when F % U == 0).
+static int afdep_mixed_hybrid(const int afd_ffn_ranks, const int num_scaleout_ranks,
+                              const int num_scaleup_ranks) {
+    if (afd_ffn_ranks <= 0 or num_scaleout_ranks <= 1 or afd_ffn_ranks >= num_scaleup_ranks or
+        deep_ep::get_env<int>("AFDEP_UNION_HYBRID", 0) != 0 or deep_ep::get_env<int>("AFDEP_MIXED_HYBRID", 0) == 0)
+        return 0;
+    return afd_ffn_ranks;
+}
+
 // Directional hybrid dispatch, and direct dispatch over GIN (hybrid off across
 // NVLink domains), validate each route in their notify and payload warps before
 // the first route-derived index, store or put, as the direct NVLink path does,

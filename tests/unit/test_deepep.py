@@ -75,7 +75,7 @@ def runtime(monkeypatch):
     native = Mock()
     native.get_logical_domain_size.return_value = (1, 4)
     native.get_afd_count_first_config.return_value = (0, "full")
-    native.get_afd_sparse_hybrid_config.return_value = (0, False, False)
+    native.get_afd_sparse_hybrid_config.return_value = (0, False, False, 0)
     native.combine.return_value = (Tensor((2, 256)), None, None)
 
     def dispatch(*args):
@@ -200,8 +200,8 @@ def test_sparse_hybrid_configuration_must_agree(runtime):
 
     def split(values, value, group):
         gather(values, value, group)
-        if value == (0, False, False):
-            values[1] = (0, True, True)
+        if value == (0, False, False, 0):
+            values[1] = (0, False, False, 2)
 
     runtime.dist.all_gather_object = split
     with pytest.raises(ValueError, match="same sparse hybrid configuration"):

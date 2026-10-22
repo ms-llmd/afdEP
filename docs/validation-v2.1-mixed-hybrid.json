@@ -1,0 +1,522 @@
+{
+ "date": "2026-10-22",
+ "change": "opt-in mixed-role directional hybrid (AFDEP_MIXED_HYBRID=1): FFN ranks [0, F), 0 < F < U, share NVLink domain 0 with Attention ranks; per-rank roles through generated copies of hybrid_dispatch.cuh and hybrid_combine.cuh; every rank's reply inbox in a slice before the staging slice (docs/v2.1.md section 18)",
+ "decision": "opt-in prototype (stage 1, dense); the section-17 sparse switches do not apply yet. Not yet run: fault injection for the reply-slice and staging orderings, two-buffer interleave, 8-GPU nodes, serving.",
+ "native_source_sha256": {
+  "control_v2_1": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
+  "mixed": [
+   "81b71eb093c583acd6cd0972df9232769c02fb202f8662eab7b9553c1ee336b7"
+  ],
+  "mixed_first_screen": "d1c3c18a"
+ },
+ "setup": "kermit 6 pods x 4 H200, InfiniBand, NCCL GIN, FP8, hidden 2048, top-8, capacity 2048, 24 transport SMs, CUDA graphs; benchmarks.comm via cscreen (2 fresh processes per arm, rotated, max over Attention ranks, round trip checked, per-arm digest checked)",
+ "screens": {
+  "f2_11to1_e128": {
+   "arms": {
+    "union": {
+     "_label": "cf"
+    },
+    "mixed": {
+     "_label": "xm",
+     "_env": {
+      "AFDEP_MIXED_HYBRID": "1"
+     }
+    },
+    "masked": {
+     "_label": "cf",
+     "role_aware": false
+    }
+   },
+   "table": [
+    {
+     "tokens": 1,
+     "union": {
+      "median_us": 212.11495876312256,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 162.9769229888916,
+      "paired_change_pct": [
+       -23.156460629547038,
+       -23.17502545436262
+      ],
+      "geomean_change_pct": -23.165743602662925,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 211.25396251678467,
+      "paired_change_pct": [
+       -0.44344140827431433,
+       -0.36849118031025974
+      ],
+      "geomean_change_pct": -0.40597334483620795,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 8,
+     "union": {
+      "median_us": 235.40435791015625,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 189.00795459747314,
+      "paired_change_pct": [
+       -19.784700680197666,
+       -19.633854206862
+      ],
+      "geomean_change_pct": -19.709312868954488,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 235.73264122009277,
+      "paired_change_pct": [
+       -0.1182573547562571,
+       0.3968927204495598
+      ],
+      "geomean_change_pct": 0.13898641930667477,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 32,
+     "union": {
+      "median_us": 264.9659585952759,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 207.46880531311035,
+      "paired_change_pct": [
+       -22.00116015260507,
+       -21.397281183591378
+      ],
+      "geomean_change_pct": -21.699802832107295,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 264.55219745635986,
+      "paired_change_pct": [
+       -0.27432303687419113,
+       -0.03751449620433833
+      ],
+      "geomean_change_pct": -0.15598897388651167,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 128,
+     "union": {
+      "median_us": 333.4525489807129,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 284.0547561645508,
+      "paired_change_pct": [
+       -14.73787202993112,
+       -14.890275054720414
+      ],
+      "geomean_change_pct": -14.81410762466715,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 332.4079132080078,
+      "paired_change_pct": [
+       -0.486612774297146,
+       -0.13979034081249564
+      ],
+      "geomean_change_pct": -0.3133523873201982,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 512,
+     "union": {
+      "median_us": 763.7957763671875,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 701.6360282897949,
+      "paired_change_pct": [
+       -8.089239089285593,
+       -8.187168601137051
+      ],
+      "geomean_change_pct": -8.13821689496429,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 760.4345703125,
+      "paired_change_pct": [
+       -0.3295431075050925,
+       -0.5502993058012717
+      ],
+      "geomean_change_pct": -0.4399823924651214,
+      "repeats_faster": 2
+     }
+    }
+   ]
+  },
+  "f1_23to1_e64": {
+   "arms": {
+    "union": {
+     "_label": "cf"
+    },
+    "mixed": {
+     "_label": "xm",
+     "_env": {
+      "AFDEP_MIXED_HYBRID": "1"
+     }
+    },
+    "masked": {
+     "_label": "cf",
+     "role_aware": false
+    }
+   },
+   "table": [
+    {
+     "tokens": 1,
+     "union": {
+      "median_us": 280.3237581253052,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 222.24304676055908,
+      "paired_change_pct": [
+       -21.32081651206712,
+       -20.111836695100493
+      ],
+      "geomean_change_pct": -20.718631071479756,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 279.23532485961914,
+      "paired_change_pct": [
+       -0.8796621215414024,
+       0.10772616778573774
+      ],
+      "geomean_change_pct": -0.3871913758319301,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 8,
+     "union": {
+      "median_us": 319.3677234649658,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 267.6208782196045,
+      "paired_change_pct": [
+       -16.175755450078533,
+       -16.229962176034142
+      ],
+      "geomean_change_pct": -16.202863196214846,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 319.5514392852783,
+      "paired_change_pct": [
+       0.4448910630371339,
+       -0.3285553830316035
+      ],
+      "geomean_change_pct": 0.0574204976668824,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 32,
+     "union": {
+      "median_us": 353.41163635253906,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 293.9847993850708,
+      "paired_change_pct": [
+       -16.65545142445205,
+       -16.97422742813225
+      ],
+      "geomean_change_pct": -16.81499212515257,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 352.86996841430664,
+      "paired_change_pct": [
+       0.10222718970640532,
+       -0.4076433477740893
+      ],
+      "geomean_change_pct": -0.15303353651956453,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 128,
+     "union": {
+      "median_us": 437.4517250061035,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 383.40487480163574,
+      "paired_change_pct": [
+       -12.379181888680058,
+       -12.330678101164494
+      ],
+      "geomean_change_pct": -12.354933350241415,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 436.14283561706543,
+      "paired_change_pct": [
+       -0.30664294950349946,
+       -0.2917731024535075
+      ],
+      "geomean_change_pct": -0.2992083031984061,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 512,
+     "union": {
+      "median_us": 1082.700366973877,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 1015.5105590820312,
+      "paired_change_pct": [
+       -6.139889318423608,
+       -6.271536516870347
+      ],
+      "geomean_change_pct": -6.205736014718677,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 1080.2915573120117,
+      "paired_change_pct": [
+       -0.1451984771154935,
+       -0.29964966995971176
+      ],
+      "geomean_change_pct": -0.22245395897819709,
+      "repeats_faster": 2
+     }
+    }
+   ]
+  },
+  "f2_first_screen_d1c3c18a": {
+   "table": [
+    {
+     "tokens": 1,
+     "union": {
+      "median_us": 211.8291997909546,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 163.5779571533203,
+      "paired_change_pct": [
+       -22.657220951436607,
+       -22.89991514690246
+      ],
+      "geomean_change_pct": -22.778663392695584,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 211.02980136871338,
+      "paired_change_pct": [
+       -0.5401650408152214,
+       -0.21406501532086342
+      ],
+      "geomean_change_pct": -0.3772484578741908,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 8,
+     "union": {
+      "median_us": 235.64239978790283,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 188.9050006866455,
+      "paired_change_pct": [
+       -19.693961713149832,
+       -19.973485123349988
+      ],
+      "geomean_change_pct": -19.833845248462612,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 234.68811988830566,
+      "paired_change_pct": [
+       -0.4862295466841249,
+       -0.32407250931596465
+      ],
+      "geomean_change_pct": -0.4051840303457954,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 32,
+     "union": {
+      "median_us": 265.06792545318604,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 207.48535633087158,
+      "paired_change_pct": [
+       -21.584755443495172,
+       -21.862323532066807
+      ],
+      "geomean_change_pct": -21.72366251982638,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 264.08055782318115,
+      "paired_change_pct": [
+       -0.2827716724466467,
+       -0.46200919159818943
+      ],
+      "geomean_change_pct": -0.37243073974297936,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 128,
+     "union": {
+      "median_us": 333.9589214324951,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 284.3815612792969,
+      "paired_change_pct": [
+       -14.821450736131037,
+       -14.869281083110375
+      ],
+      "geomean_change_pct": -14.845369267838027,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 332.3055171966553,
+      "paired_change_pct": [
+       -0.5678582505827312,
+       -0.42220974380478005
+      ],
+      "geomean_change_pct": -0.4950606459772522,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 512,
+     "union": {
+      "median_us": 762.7810287475586,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "mixed": {
+      "median_us": 701.7377853393555,
+      "paired_change_pct": [
+       -7.951627391941862,
+       -8.053752021463389
+      ],
+      "geomean_change_pct": -8.002703877552742,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 760.1337432861328,
+      "paired_change_pct": [
+       -0.21402378476860218,
+       -0.4799234081724002
+      ],
+      "geomean_change_pct": -0.34706228248905235,
+      "repeats_faster": 2
+     }
+    }
+   ]
+  },
+  "union_profile_kernel_durations": "evidence xn-k4-prof-mixed-t{1,32}: hybrid_dispatch ~87-113 us on every GPU kind at 1 and 32 tokens; hybrid_combine 97-112 us (T=1) and 145-169 us (T=32)",
+  "union_channel_sweep": "docs/validation-v2.1-sparse-hybrid.json screens.kermit_mixed_role_11to1: 8 SMs instead of 24 give -17.1% at 1 token and +55.8% at 512"
+ },
+ "gpu_suite_81b71eb0": [
+  "F=2 FP8 capacity 8",
+  "F=2 BF16 capacity 8",
+  "F=2 BF16 capacity 64 hidden 2048 24 SMs",
+  "F=1 (8 experts) FP8 capacity 8",
+  "F=3 (12 experts) FP8 capacity 8"
+ ],
+ "gpu_suite_d1c3c18a": [
+  "F=2 FP8 capacity 64 hidden 2048 24 SMs"
+ ],
+ "gpu_suite_scope": "24 ranks per run, 16 eager cases, 32 graph replays, 832 checked graph exchanges, cases incl. empty, inactive, all-skipped, skew, partial prefix, one small source (spread routing), delayed replies and dispatches",
+ "unit": "tests/unit 41/41; Ruff check and format clean",
+ "design": "workflow wf_a78ff548-871: union map, three designs (hub-domain, rail-role, relay composition), three adversarial reviews; stage 1 implements the dense core of the hub/rail-role design"
+}

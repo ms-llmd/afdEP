@@ -139,6 +139,10 @@ def test_ffn_role_kernels_are_the_generated_copies():
     collect = (rk.IMPLS / "afdep_hybrid_collect.cuh").read_text()
     sparse_collect = (rk.IMPLS / rk.SPARSE_HYBRID_COLLECT).read_text()
     assert sparse_collect == rk.sparse_hybrid_collect(collect)
+    mixed_dispatch = (rk.IMPLS / rk.MIXED_HYBRID_DISPATCH).read_text()
+    assert mixed_dispatch == rk.mixed_hybrid_dispatch(hybrid)
+    mixed_combine = (rk.IMPLS / rk.MIXED_HYBRID_COMBINE).read_text()
+    assert mixed_combine == rk.mixed_hybrid_combine(combine)
     direct = (rk.IMPLS / "dispatch.cuh").read_text()
     assert (rk.IMPLS / rk.FFN_DISPATCH).read_text() == rk.ffn_dispatch(direct)
     assert (rk.IMPLS / rk.SOURCE_DISPATCH).read_text() == rk.source_dispatch(direct)
@@ -176,10 +180,14 @@ def test_sparse_hybrid_kernels_stay_out_of_shared_runtimes():
     combine = (VENDOR_ROOT / "csrc/kernels/elastic/combine.hpp").read_text()
     for name in (rk.FFN_SPARSE_HYBRID_COMBINE, rk.SPARSE_HYBRID_COLLECT):
         assert combine.count(f'"{name.removesuffix(".cuh")}");') == 1, name
+    # The mixed-role copies: one runtime each, neither including the sparse header.
+    mixed = rk.MIXED_HYBRID_DISPATCH
+    assert dispatch.count(f"#include <deep_ep/impls/{mixed}>") == 1
+    assert combine.count(f'"{rk.MIXED_HYBRID_COMBINE.removesuffix(".cuh")}");') == 1
     header = "#include <deep_ep/impls/afdep_sparse_hybrid.cuh>"
     assert header not in dispatch and header not in combine
     shared = ("hybrid_dispatch.cuh", "hybrid_combine.cuh", "afdep_hybrid_collect.cuh")
-    for name in (*shared, rk.FFN_HYBRID_DISPATCH):
+    for name in (*shared, rk.FFN_HYBRID_DISPATCH, mixed, rk.MIXED_HYBRID_COMBINE):
         assert header not in (rk.IMPLS / name).read_text(), name
 
 

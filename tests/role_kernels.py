@@ -38,6 +38,8 @@ SOURCE_HYBRID_DISPATCH = "afdep_source_hybrid_dispatch.cuh"
 FFN_SPARSE_HYBRID_DISPATCH = "afdep_ffn_sparse_hybrid_dispatch.cuh"
 FFN_SPARSE_HYBRID_COMBINE = "afdep_ffn_sparse_hybrid_combine.cuh"
 SPARSE_HYBRID_COLLECT = "afdep_sparse_hybrid_collect.cuh"
+MIXED_HYBRID_DISPATCH = "afdep_mixed_hybrid_dispatch.cuh"
+MIXED_HYBRID_COMBINE = "afdep_mixed_hybrid_combine.cuh"
 
 FFN_DISPATCH_EDITS = (
     (
@@ -677,6 +679,130 @@ SPARSE_HYBRID_COLLECT_EDITS = (
 )
 
 
+# Mixed-role directional hybrid (AFDEP_MIXED_HYBRID=1): FFN ranks [0, F), 0 < F < U,
+# fill part of NVLink domain 0 and share it with U - F Attention ranks; the other
+# domains hold only Attention ranks. The directional protocol (kAfdFfnScaleoutRanks
+# = 1) applies with roles per rank: every domain-0 GPU stays its rail's forwarder
+# (node-wide ingress), only ranks below F hold experts, and domain 0's Attention GPUs
+# are also sources, whose own tokens take the local bypass into their forwarder.
+MIXED_TEMPLATE = (
+    "          bool kAfdSkipAttentionEntrySync = false,\n",
+    "          bool kAfdSkipAttentionEntrySync = false,\n"
+    "          // afdEP mixed (afdep_suites.hpp): FFN ranks [0, F) share domain 0 with "
+    "Attention ranks.\n"
+    "          int kAfdMixedFfnRanks = 0,\n",
+)
+MIXED_HYBRID_DISPATCH_EDITS = (
+    (
+        "#pragma once\n",
+        "#pragma once  // afdEP: generated from hybrid_dispatch.cuh by "
+        "tests/role_kernels.py; do not edit\n",
+    ),
+    MIXED_TEMPLATE,
+    ("hybrid_dispatch_impl(\n", "afdep_mixed_hybrid_dispatch_impl(\n"),
+    (
+        "    const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;\n",
+        "    const bool afd_ffn_domain = scaleout_rank_idx < kAfdFfnScaleoutRanks;\n"
+        "    // afdEP mixed: only ranks [0, F) hold experts; domain 0's other GPUs are "
+        "sources and forwarders,\n"
+        "    // whose rail lane 0 carries their own tokens.\n"
+        "    EP_STATIC_ASSERT(kAfdFfnScaleoutRanks == 1 and 0 < kAfdMixedFfnRanks and "
+        "kAfdMixedFfnRanks < kNumScaleupRanks,\n"
+        '                     "mixed: one FFN-holding domain shared with Attention'
+        ' ranks");\n'
+        "    const bool afd_holder = rank_idx < kAfdMixedFfnRanks;\n"
+        "    const bool afd_self_lane = afd_ffn_domain and not afd_holder;\n",
+    ),
+    (
+        "                dst_expert_idx = afdep_checked_expert<kAfdFfnScaleoutRanks * "
+        "kNumExpertsPerScaleout>(raw_expert, lane_idx);\n",
+        "                dst_expert_idx = afdep_checked_expert<kAfdMixedFfnRanks * "
+        "kNumExpertsPerRank>(raw_expert, lane_idx);\n",
+    ),
+    (
+        "                dst_expert_idx = afdep_checked_expert<kAfdFfnScaleoutRanks * "
+        "kNumExpertsPerScaleout>(\n",
+        "                dst_expert_idx = afdep_checked_expert<kAfdMixedFfnRanks * "
+        "kNumExpertsPerRank>(\n",
+    ),
+    (
+        "                (not kAfdDirectional or (not afd_ffn_domain and thread_idx < "
+        "kAfdFfnScaleoutRanks))) {\n",
+        "                (not afd_holder and thread_idx < kAfdFfnScaleoutRanks)) {  "
+        "// afdEP mixed: domain-0 sources count to themselves\n",
+    ),
+    (
+        "                for (int j = kAfdFfnScaleoutRanks; j < kNumScaleoutRanks; ++"
+        " j) {\n",
+        "                for (int j = afd_self_lane ? 0 : kAfdFfnScaleoutRanks; "
+        "j < kNumScaleoutRanks; ++ j) {\n",
+    ),
+    (
+        "    } else if (warp_idx < kNumNotifyWarps + kNumScaleoutWarps and "
+        "(kAfdDirectional and afd_ffn_domain)) {\n",
+        "    } else if (warp_idx < kNumNotifyWarps + kNumScaleoutWarps and"
+        " afd_holder) {\n",
+    ),
+    (
+        "        int stored_finish_flag = lane_idx >= kNumScaleoutRanks or "
+        "lane_idx < kAfdFfnScaleoutRanks;\n",
+        "        // afdEP mixed: on a domain-0 Attention GPU, lane 0 carries its own"
+        " tokens\n"
+        "        int stored_finish_flag = lane_idx >= kNumScaleoutRanks or "
+        "(lane_idx < kAfdFfnScaleoutRanks and not afd_self_lane);\n",
+    ),
+    (
+        "                if (lane_idx < kNumScaleoutRanks and lane_idx >= "
+        "kAfdFfnScaleoutRanks) {\n",
+        "                if (lane_idx < kNumScaleoutRanks and (lane_idx >= "
+        "kAfdFfnScaleoutRanks or afd_self_lane)) {\n",
+    ),
+)
+
+# Mixed-role combine: the directional combine already has every domain-0 GPU reply and
+# signal pure-Attention domains only. Domain 0's Attention GPUs also read replies (their
+# own, written locally by their forward warps) in their reduce epilogue, and the default
+# reply inbox can overlap the dispatch inbox a pure-Attention source writes for the next
+# exchange, so every rank keeps its reply inbox in a slice reserved just before the
+# combine staging slice at the window end (calculate_buffer_size).
+MIXED_HYBRID_COMBINE_EDITS = (
+    (
+        "#pragma once\n",
+        "#pragma once  // afdEP: generated from hybrid_combine.cuh by "
+        "tests/role_kernels.py; do not edit\n",
+    ),
+    (
+        "          int kAfdFfnScaleoutRanks = 0,\n",
+        "          int kAfdFfnScaleoutRanks = 0,\n"
+        "          // afdEP mixed (afdep_suites.hpp): FFN ranks [0, F) share domain 0"
+        " with "
+        "Attention ranks.\n"
+        "          int kAfdMixedFfnRanks = 0,\n",
+    ),
+    ("hybrid_combine_impl(", "afdep_mixed_hybrid_combine_impl("),
+    (
+        "    comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,\n"
+        "                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, "
+        "comm::kHybridCombineTag0",
+        "    // afdEP mixed: every rank's reply inbox lives in the slice before the"
+        " staging "
+        "slice.\n"
+        "    EP_STATIC_ASSERT(kAfdFfnScaleoutRanks == 1 and 0 < kAfdMixedFfnRanks and "
+        "kAfdMixedFfnRanks < kNumScaleupRanks,\n"
+        '                     "mixed: one FFN-holding domain shared with Attention'
+        ' ranks");\n'
+        "    EP_DEVICE_ASSERT(afd_scaleout_send_base != nullptr);\n"
+        "    scaleout_recv_buffer = layout::BufferLayout<false>(\n"
+        "        token_layout, kNumTokensInScaleoutLayout, kNumMaxTokensPerRank,\n"
+        "        math::advance_ptr(afd_scaleout_send_base, "
+        "-scaleout_recv_buffer.get_num_bytes()));\n"
+        "    comm::gpu_barrier<true, kNumScaleoutRanks, kNumScaleupRanks,\n"
+        "                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, "
+        "comm::kHybridCombineTag0",
+    ),
+)
+
+
 def apply_edits(shared: str, edits) -> str:
     """Apply each edit exactly once."""
     for old, new in edits:
@@ -736,6 +862,16 @@ def sparse_hybrid_collect(collect: str) -> str:
     return apply_edits(collect, SPARSE_HYBRID_COLLECT_EDITS)
 
 
+def mixed_hybrid_dispatch(shared: str) -> str:
+    """The hybrid dispatch with per-rank roles in one mixed FFN-holding domain."""
+    return apply_edits(shared, MIXED_HYBRID_DISPATCH_EDITS)
+
+
+def mixed_hybrid_combine(shared: str) -> str:
+    """The hybrid combine with every rank's reply inbox in the reserved slice."""
+    return apply_edits(shared, MIXED_HYBRID_COMBINE_EDITS)
+
+
 def ffn_dispatch(shared: str) -> str:
     """Same template, launch shape and statements; only the notify warps trigger."""
     return apply_edits(shared, FFN_DISPATCH_EDITS)
@@ -766,6 +902,8 @@ if __name__ == "__main__":
     (IMPLS / FFN_SPARSE_HYBRID_DISPATCH).write_text(ffn_sparse_hybrid_dispatch(hybrid))
     combine = (IMPLS / "hybrid_combine.cuh").read_text()
     (IMPLS / FFN_SPARSE_HYBRID_COMBINE).write_text(ffn_sparse_hybrid_combine(combine))
+    (IMPLS / MIXED_HYBRID_DISPATCH).write_text(mixed_hybrid_dispatch(hybrid))
+    (IMPLS / MIXED_HYBRID_COMBINE).write_text(mixed_hybrid_combine(combine))
     collect = (IMPLS / "afdep_hybrid_collect.cuh").read_text()
     (IMPLS / SPARSE_HYBRID_COLLECT).write_text(sparse_hybrid_collect(collect))
     direct = (IMPLS / "dispatch.cuh").read_text()

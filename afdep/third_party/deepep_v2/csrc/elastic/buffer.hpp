@@ -198,11 +198,18 @@ public:
     // combine) as this rank resolves them, which must agree on every rank. Only the directional
     // hybrid reads them, so any other topology (one NVLink domain, mixed-role domains) reports
     // them off and never rejects ranks that set them differently.
-    std::tuple<int, bool, bool> get_afd_sparse_hybrid_config() const {
+    // The mixed-role hybrid (afdep_roles.hpp) is reported the same way: its F, wire-visible.
+    std::tuple<int, bool, bool, int> get_afd_sparse_hybrid_config() const {
+        if (afd_ffn_ranks > 0) {
+            const int mixed = afdep_mixed_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
+                                                 nccl_context->num_scaleup_ranks);
+            if (mixed > 0)
+                return {0, false, false, mixed};
+        }
         if (afd_ffn_ranks <= 0 or afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
                                                            nccl_context->num_scaleup_ranks) == 0)
-            return {0, false, false};
-        return {afdep_hybrid_stagger_max_tokens(), afdep_hybrid_sparse_dispatch(), afdep_hybrid_sparse_combine()};
+            return {0, false, false, 0};
+        return {afdep_hybrid_stagger_max_tokens(), afdep_hybrid_sparse_dispatch(), afdep_hybrid_sparse_combine(), 0};
     }
 
     // ReSharper disable once CppMemberFunctionMayBeStatic
@@ -651,6 +658,16 @@ public:
             num_scaleout_ranks * (num_max_tokens_per_rank + kNumMaxChannels)).get_num_bytes();
     }
 
+    // afdEP mixed-role hybrid: every rank's combine reply inbox, in a slice reserved just before the
+    // staging slice (regions as the kernel's get_num_tokens_in_layout for the scale-out layout).
+    static int64_t get_hybrid_combine_reply_bytes(const int& num_max_tokens_per_rank, const int& hidden, const int& num_topk,
+                                                  const int& num_scaleout_ranks, const bool& allow_multiple_reduction) {
+        const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
+        return layout::BufferLayout<false>(
+            token_layout, allow_multiple_reduction ? std::min(num_scaleout_ranks, num_topk) : num_topk,
+            num_max_tokens_per_rank).get_num_bytes();
+    }
+
     // afdEP single-FFN collect view: one FFN rank, one NVLink domain, rank layout.
     bool afd_single_ffn_collect_rows(const bool& afd_direct_nvlink, const int& num_topk) const {
         return afd_direct_nvlink and afd_ffn_ranks == 1 and allow_multiple_reduction and
@@ -691,6 +708,16 @@ public:
             num_max_tokens_per_rank, hidden, num_topk,
             num_scaleout_ranks, num_scaleup_ranks,
             is_scaleup_nvlink, allow_multiple_reduction, afd_role_ffn_ranks);
+
+        // afdEP mixed-role hybrid (afdep_roles.hpp): the reply inbox and the combine staging of every
+        // rank get slices past both layouts.
+        if (afd_ffn_ranks > 0 and afdep_mixed_hybrid(afd_ffn_ranks, num_scaleout_ranks, num_scaleup_ranks) > 0) {
+            return std::max(num_dispatch_bytes, num_combine_bytes) +
+                get_hybrid_combine_reply_bytes(num_max_tokens_per_rank, hidden, num_topk, num_scaleout_ranks,
+                                               allow_multiple_reduction) +
+                get_hybrid_combine_send_bytes(num_max_tokens_per_rank, hidden, num_topk, num_scaleout_ranks,
+                                              allow_multiple_reduction);
+        }
 
         // afdEP directional hybrid with two or more Attention domains: FFN combine staging must not
         // overlap any inbox another role or domain writes (the dispatch inboxes), so it gets its
@@ -827,7 +854,10 @@ public:
         // All new tensor allocations should happen after this
         const auto compute_stream = stream_control_prologue(previous_event, allocate_on_comm_stream, async_with_compute_stream);
 
-        const int afd_ffn_scaleout_ranks = afd_role_aware and not deterministic ?
+        // afdEP mixed-role hybrid (afdep_roles.hpp): one FFN-holding domain shared with Attention ranks.
+        const int afd_mixed_ffn_ranks = afd_role_aware and not deterministic ?
+            afdep_mixed_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks) : 0;
+        const int afd_ffn_scaleout_ranks = afd_mixed_ffn_ranks > 0 ? 1 : afd_role_aware and not deterministic ?
             afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
                                      nccl_context->num_scaleup_ranks) : 0;
         const bool afd_hybrid_routes_in_kernel = afd_ffn_scaleout_ranks > 0 and afdep_hybrid_routes_in_kernel();
@@ -1009,6 +1039,20 @@ public:
                        num_max_tokens_per_rank, hidden, num_sf_packs, num_topk, x.element_size(),
                        nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks,
                        nccl_context->is_scaleup_nvlink, afd_role_buffers ? afd_ffn_ranks : 0) <= num_buffer_bytes);
+        // afdEP mixed-role hybrid: this call's dispatch layout ends below the reply and staging slices
+        // its combine places at the window end (same bucket and top-k).
+        if (afd_ffn_ranks > 0 and afdep_mixed_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
+                                                     nccl_context->num_scaleup_ranks) > 0) {
+            EP_HOST_ASSERT(get_dispatch_buffer_size(
+                               num_max_tokens_per_rank, hidden, num_sf_packs, num_topk, x.element_size(),
+                               nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks,
+                               nccl_context->is_scaleup_nvlink, 0) +
+                           get_hybrid_combine_reply_bytes(num_max_tokens_per_rank, hidden, num_topk,
+                                                          nccl_context->num_scaleout_ranks, allow_multiple_reduction) +
+                           get_hybrid_combine_send_bytes(num_max_tokens_per_rank, hidden, num_topk,
+                                                         nccl_context->num_scaleout_ranks, allow_multiple_reduction)
+                           <= num_buffer_bytes);
+        }
 
         // afdEP count-first (afdep_suites.hpp): one decision per exchange from the constructor latch
         // and the bucket, which every rank passes identically. The environment is re-read on every
@@ -1050,9 +1094,11 @@ public:
         else if (afd_direct_nvlink and not afd_source and afdep_skip_entry_barriers() and afdep_directional_notify() and
                  afdep_directed_exit() and afdep_ffn_receive_kernels())
             afd_dispatch_shape = AfdLaunchShape::kRoleKernel;
-        else if (afd_ffn_scaleout_ranks > 0 and afd_source and afdep_hybrid_send_blocks())
+        else if (afd_ffn_scaleout_ranks > 0 and afd_source and afdep_hybrid_send_blocks() and
+                 (afd_mixed_ffn_ranks == 0 or nccl_context->scaleout_rank_idx >= afd_ffn_scaleout_ranks))
             afd_dispatch_shape = AfdLaunchShape::kSendBlock;
-        else if (afd_ffn_scaleout_ranks > 0 and not afd_source and afdep_hybrid_forward_kernels())
+        else if (afd_ffn_scaleout_ranks > 0 and not afd_source and afdep_hybrid_forward_kernels() and
+                 afd_mixed_ffn_ranks == 0)
             afd_dispatch_shape = AfdLaunchShape::kRoleKernel;
         launch_dispatch(x.data_ptr(), sf_ptr,
                         topk_idx.data_ptr<topk_idx_t>(), topk_weights_ptr,
@@ -1087,7 +1133,8 @@ public:
                         afd_source and afd_single_ffn_collect_rows(afd_direct_nvlink, num_topk) ?
                             get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk).get_num_bytes<false>() : 0,
                         afd_dispatch_shape,
-                        afdep_count_first_ungated_tokens(), afdep_count_first_thread_count());
+                        afdep_count_first_ungated_tokens(), afdep_count_first_thread_count(),
+                        afd_mixed_ffn_ranks);
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
@@ -1402,11 +1449,25 @@ public:
         const int transport_reduced_tokens = afd_ffn_ranks > 0 ?
             num_max_tokens_per_rank * nccl_context->num_ranks : num_reduced_tokens;
         // afdEP directional hybrid: FFN combine staging uses the slice reserved at the window end.
-        const int afd_ffn_scaleout_ranks = afd_ffn_ranks > 0 and not deterministic ?
+        const int afd_mixed_ffn_ranks = afd_ffn_ranks > 0 and not deterministic ?
+            afdep_mixed_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks) : 0;
+        const int afd_ffn_scaleout_ranks = afd_mixed_ffn_ranks > 0 ? 1 : afd_ffn_ranks > 0 and not deterministic ?
             afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
                                      nccl_context->num_scaleup_ranks) : 0;
         void* afd_scaleout_send_base = nullptr;
-        if (afd_ffn_scaleout_ranks > 0 and nccl_context->num_scaleout_ranks - afd_ffn_scaleout_ranks >= 2) {
+        if (afd_mixed_ffn_ranks > 0) {
+            // afdEP mixed-role hybrid: staging slice at the window end, every rank's reply inbox before it,
+            // both past this call's combine layout.
+            const auto num_send_bytes = get_hybrid_combine_send_bytes(
+                num_max_tokens_per_rank, hidden, num_topk, nccl_context->num_scaleout_ranks, allow_multiple_reduction);
+            const auto num_reply_bytes = get_hybrid_combine_reply_bytes(
+                num_max_tokens_per_rank, hidden, num_topk, nccl_context->num_scaleout_ranks, allow_multiple_reduction);
+            EP_HOST_ASSERT(get_combine_buffer_size(num_max_tokens_per_rank, hidden, num_topk,
+                                                   nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks,
+                                                   nccl_context->is_scaleup_nvlink, allow_multiple_reduction, 0) +
+                           num_reply_bytes + num_send_bytes <= num_buffer_bytes);
+            afd_scaleout_send_base = math::advance_ptr(buffer, num_buffer_bytes - num_send_bytes);
+        } else if (afd_ffn_scaleout_ranks > 0 and nccl_context->num_scaleout_ranks - afd_ffn_scaleout_ranks >= 2) {
             const auto num_send_bytes = get_hybrid_combine_send_bytes(
                 num_max_tokens_per_rank, hidden, num_topk, nccl_context->num_scaleout_ranks, allow_multiple_reduction);
             // calculate_buffer_size reserved this slice past both layouts (sized for top-k 32).
@@ -1416,7 +1477,8 @@ public:
         // afdEP role suites (afdep_suites.hpp): in directional hybrid the Attention receive runs
         // the one-CTA collect kernel.
         auto afd_combine_shape = AfdLaunchShape::kShared;
-        if (afd_ffn_scaleout_ranks > 0 and not afd_worker and afdep_hybrid_collect_kernels())
+        if (afd_ffn_scaleout_ranks > 0 and not afd_worker and afdep_hybrid_collect_kernels() and
+            (afd_mixed_ffn_ranks == 0 or nccl_context->scaleout_rank_idx >= afd_ffn_scaleout_ranks))
             afd_combine_shape = AfdLaunchShape::kRoleKernel;
         const auto reduce_buffer = launch_combine(
             x.data_ptr(),
@@ -1443,7 +1505,8 @@ public:
             afd_ffn_scaleout_ranks,
             afd_direct and afd_ffn_ranks == 1 and afdep_single_ffn_reduce(),
             afd_scaleout_send_base,
-            afd_combine_shape);
+            afd_combine_shape,
+            afd_mixed_ffn_ranks);
 
         // Allocate output tensors
         // afdEP single-FFN collect view: with one FFN rank in one NVLink domain (rank layout), each

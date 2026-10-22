@@ -121,6 +121,8 @@ public:
         int afd_stagger_max_tokens;
         bool afd_sparse_dispatch;
         bool afd_sparse_combine;
+        // afdEP mixed-role hybrid only (afdep_mixed_hybrid_dispatch.cuh): F, or 0
+        int afd_mixed_ffn_ranks;
 
         // Parameters
         void* x; sf_pack_t* sf; topk_idx_t* topk_idx; float* topk_weights;
@@ -294,6 +296,33 @@ static void __instantiate_kernel() {{
     }
 };
 
+// afdEP mixed-role hybrid dispatch (afdep_roles.hpp): the shared argument list, with the entry-sync
+// flag always explicit, then F, through a generated copy of hybrid_dispatch.cuh. Domain 0 launches
+// the full shape and pure-Attention domains the send block.
+class AfdepMixedHybridDispatchRuntime final : public jit::LaunchRuntime<AfdepMixedHybridDispatchRuntime> {
+public:
+    using Args = DispatchRuntime::Args;
+
+    static std::string generate_impl(const Args& args) {
+        EP_HOST_ASSERT(args.afd_ffn_scaleout_ranks == 1 and args.afd_mixed_ffn_ranks > 0);
+        auto shared = DispatchRuntime::get_hybrid_template_args(args);
+        shared.pop_back();
+        return fmt::format(R"(
+#include <deep_ep/impls/afdep_mixed_hybrid_dispatch.cuh>
+
+using namespace deep_ep::elastic;
+
+static void __instantiate_kernel() {{
+    auto ptr = reinterpret_cast<void*>(&afdep_mixed_hybrid_dispatch_impl{}{}, {}>);
+}}
+)", shared, args.afd_skip_attention_entry_sync ? "" : ", false", args.afd_mixed_ffn_ranks);
+    }
+
+    static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
+        DispatchRuntime::launch_impl(kernel, config, args);
+    }
+};
+
 // afdEP FFN directional hybrid dispatch whose forwarders retire unused channels by source
 // token count (afdep_suites.hpp): the FFN copy's shape.
 class AfdepFfnSparseHybridDispatchRuntime final : public jit::LaunchRuntime<AfdepFfnSparseHybridDispatchRuntime> {
@@ -448,7 +477,8 @@ static void launch_dispatch(void* x, void* sf,
                             const int afd_zero_collect_row_bytes = 0,
                             const AfdLaunchShape afd_shape = AfdLaunchShape::kShared,
                             const int afd_ungated_tokens = 0,
-                            const bool afd_thread_count = true) {
+                            const bool afd_thread_count = true,
+                            const int afd_mixed_ffn_ranks = 0) {
     // Cached mode does not support expert token counting
     if (cached_mode)
         EP_HOST_ASSERT(cumulative_local_expert_recv_stats == nullptr);
@@ -517,6 +547,7 @@ static void launch_dispatch(void* x, void* sf,
                                          afd_skip_attention_entry_sync,
         .afd_ungated_tokens = afd_ungated_tokens,
         .afd_thread_count = afd_thread_count,
+        .afd_mixed_ffn_ranks = num_scaleout_ranks > 1 and afd_ffn_scaleout_ranks == 1 ? afd_mixed_ffn_ranks : 0,
         .x = x, .sf = static_cast<sf_pack_t*>(sf), .topk_idx = topk_idx, .topk_weights = topk_weights,
         .copied_topk_idx = copied_topk_idx,
         .cumulative_local_expert_recv_stats = cumulative_local_expert_recv_stats,
@@ -548,6 +579,23 @@ static void launch_dispatch(void* x, void* sf,
             const auto role_runtime = jit::compiler->build("afdep_source_dispatch", role_code);
             AfdepSourceDispatchRuntime::launch(role_runtime, args, stream);
         }
+        return;
+    }
+    if (args.afd_mixed_ffn_ranks > 0) {
+        // afdEP mixed-role hybrid (afdep_roles.hpp): one generated copy for every role; pure-Attention
+        // domains launch it without the forward warps (the directional send block).
+        EP_HOST_ASSERT(args.afd_ffn_scaleout_ranks == 1 and num_notify_warps > 0 and
+                       (afd_shape == AfdLaunchShape::kShared or afd_shape == AfdLaunchShape::kSendBlock));
+        auto role_args = args;
+        if (afd_shape == AfdLaunchShape::kSendBlock) {
+            EP_HOST_ASSERT(scaleout_rank_idx >= args.afd_ffn_scaleout_ranks and
+                           num_scaleup_ranks <= (num_notify_warps + num_scaleout_warps) * 32);
+            role_args.launch_args = jit::LaunchArgs(num_sms, (num_notify_warps + num_scaleout_warps) * 32,
+                                                    num_smem_bytes, 2 - (num_sms % 2), true);
+        }
+        const auto role_code = AfdepMixedHybridDispatchRuntime::generate(role_args);
+        const auto role_runtime = jit::compiler->build("afdep_mixed_hybrid_dispatch", role_code);
+        AfdepMixedHybridDispatchRuntime::launch(role_runtime, role_args, stream);
         return;
     }
     if (afd_shape == AfdLaunchShape::kRoleKernel and num_scaleout_ranks == 1) {

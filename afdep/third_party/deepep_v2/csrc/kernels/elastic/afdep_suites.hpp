@@ -205,6 +205,10 @@ static bool afdep_hybrid_sparse_combine() {
         deep_ep::get_env<int>("AFDEP_HYBRID_SPARSE_COMBINE", 0) != 0;
 }
 
+// Mixed-role hybrid (AFDEP_MIXED_HYBRID=1, afdep_roles.hpp): when FFN ranks fill only part of
+// NVLink domain 0, every rank runs the generated afdep_mixed_hybrid_dispatch/combine copies with
+// per-rank roles; pure-Attention domains keep the send block and the collect, domain 0 the full
+// shapes (its Attention GPUs send, forward and reduce). The sparse switches do not apply yet.
 // - Attention combine: a receive-only phase. Its scale-up warps return at once and
 //   its forward warps only clear their channel's scale-up tails and wait for, then
 //   clear, each FFN domain's finish signal, holding 24 SMs for the whole combine.
