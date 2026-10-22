@@ -115,8 +115,11 @@ def test_role_suite_shapes_are_host_launch_overrides():
     controls = ("ROLE_KERNELS", "FFN_RECEIVE", "HYBRID_SEND", "HYBRID_FORWARD")
     for control in (*controls, "HYBRID_COLLECT"):
         assert f'"AFDEP_SHARED_{control}", 0) == 0' in suites
-    # Count-first dispatch keeps the payload-first kernels as its control.
+    # Count-first dispatch keeps the payload-first kernels as its control; stage B's
+    # batched flag release and the post-gate slot order keep stage A's as theirs.
     assert '"AFDEP_PAYLOAD_FIRST", 0) == 0' in suites
+    for control in ("LANE_RELEASE", "SLOT_BEFORE_GATE"):
+        assert f'"AFDEP_COUNT_FIRST_{control}", 0) != 0' in suites
     dispatch = (elastic / "dispatch.hpp").read_text()
     generate = dispatch.index("const auto code = DispatchRuntime::generate(args);")
     assert generate < dispatch.index("shaped_args.launch_args = jit::LaunchArgs(")
@@ -176,6 +179,111 @@ def test_count_first_host_flag_geometry_mirrors_the_header():
         assert constant(suites, host) == constant(header, device), host
     # kNumMaxRanks x kNumMaxChannels int64 words (1024 x 1024).
     assert "kAfdepCountFirstRegionWords = 1 << 20;" in suites
+
+
+def test_count_first_host_mailbox_bytes_mirror_the_header():
+    """Stage B sources size dispatch warps around the header's mailbox layout: one
+    int64 per (dispatch warp, FFN rank), then the finished-warp int."""
+    impls = VENDOR_ROOT / "deep_ep/include/deep_ep/impls"
+    header = (impls / "afdep_count_first.cuh").read_text()
+    assert "    int64_t* rows;\n" in header
+    assert "    int* warps_done;\n" in header
+    assert "reinterpret_cast<int*>(rows + kNumDispatchWarps * kFfnRanks)" in header
+    suites = (VENDOR_ROOT / "csrc/kernels/elastic/afdep_suites.hpp").read_text()
+    assert (
+        "return num_dispatch_warps * num_ffn_ranks * static_cast<int>(sizeof(int64_t))"
+        " + static_cast<int>(sizeof(int));" in suites
+    )
+    dispatch = (VENDOR_ROOT / "csrc/kernels/elastic/dispatch.hpp").read_text()
+    assert "afdep_count_first_mailbox_bytes(num_dispatch_warps, afd_ffn_ranks)" in (
+        dispatch
+    )
+
+
+# Explicit template parameter -> runtime argument field, in template order. Several
+# trailing parameters share a type (bool), so a swap would still compile: pin the order.
+SOURCE_DISPATCH_TEMPLATE_ARGS = {
+    "kIsScaleupNVLink": "is_scaleup_nvlink",
+    "kDoCPUSync": "do_cpu_sync",
+    "kReuseSlotIndices": "reuse_slot_indices",
+    "kNumSMs": "launch_args.grid_dim.first",
+    "kNumNotifyWarps": "num_notify_warps",
+    "kNumDispatchWarps": "num_dispatch_warps",
+    "kNumRanks": "num_scaleup_ranks",
+    "kNumHiddenBytes": "num_hidden_bytes",
+    "kNumSFPacks": "num_sf_packs",
+    "kNumMaxTokensPerRank": "num_max_tokens_per_rank",
+    "kNumExperts": "num_experts",
+    "kNumTopk": "num_topk",
+    "kExpertAlignment": "expert_alignment",
+    "kNumQPs": "num_qps",
+    "kNumTimeoutCycles": "num_timeout_cycles",
+    "kAfdFfnRanks": "afd_ffn_ranks",
+    "kAfdSkipEntryBarrier": "afd_skip_entry_barrier",
+    "kAfdDirectionalNotify": "afd_directional_notify",
+    "kAfdDirectedExit": "afd_directed_exit",
+    "kAfdRoleBuffers": "afd_role_buffers",
+    "kAfdPerCtaExit": "afd_per_cta_exit",
+    "kAfdZeroCollectRowBytes": "afd_zero_collect_row_bytes",
+    "kAfdUngatedTokens": "afd_ungated_tokens",
+    "kAfdThreadCount": "afd_thread_count",
+    "kAfdLaneRelease": "afd_lane_release",
+    "kAfdSlotBeforeGate": "afd_slot_before_gate",
+}
+FFN_STREAM_EPILOGUE_TEMPLATE_ARGS = {
+    "kDoExpand": "do_expand",
+    "kCachedMode": "cached_mode",
+    "kReadDeviceCount": "read_device_count",
+    "kNumSMs": "launch_args.grid_dim.first",
+    "kNumChannels": "num_channels",
+    "kNumWarps": "num_warps",
+    "kNumScaleoutRanks": "num_scaleout_ranks",
+    "kNumScaleupRanks": "num_scaleup_ranks",
+    "kNumHiddenBytes": "num_hidden_bytes",
+    "kNumSFPacks": "num_sf_packs",
+    "kNumMaxTokensPerRank": "num_max_tokens_per_rank",
+    "kNumExperts": "num_experts",
+    "kNumTopk": "num_topk",
+    "kAfdRegionOffset": "afd_region_offset",
+    "kAfdTimeoutCycles": "afd_timeout_cycles",
+    "kAfdUnitMinRows": "afd_unit_min_rows",
+}
+
+
+def test_count_first_runtimes_format_every_template_argument():
+    """No local CUDA compiler: each count-first runtime formats exactly its kernel's
+    explicit template parameters, in order, each from its own argument field (the
+    derived ones after them keep their defaults)."""
+    from tests import role_kernels as rk
+
+    dispatch = (VENDOR_ROOT / "csrc/kernels/elastic/dispatch.hpp").read_text()
+    for runtime, name, derived, expected in (
+        (
+            "AfdepSourceDispatchRuntime",
+            rk.SOURCE_DISPATCH,
+            "int kNumNotifyThreads",
+            SOURCE_DISPATCH_TEMPLATE_ARGS,
+        ),
+        (
+            "AfdepFfnStreamEpilogueRuntime",
+            rk.FFN_STREAM_EPILOGUE,
+            "int kNumRanks",
+            FFN_STREAM_EPILOGUE_TEMPLATE_ARGS,
+        ),
+    ):
+        kernel = (rk.IMPLS / name).read_text()
+        head = kernel[kernel.index("template <") + 10 : kernel.index(derived)]
+        params = [p for p in re.sub(r"//[^\n]*", "", head).split(",") if p.strip()]
+        names = [re.search(r"(\w+)\s*(?:=[^=]*)?$", p.strip()).group(1) for p in params]
+        body = dispatch[dispatch.index(f"class {runtime} final") :]
+        body = body[: body.index("static void launch_impl")]
+        code, arguments = body.split(')",', 1)
+        fields = re.findall(r"\bargs\.([\w.]+)", arguments)
+        assert names == list(expected), runtime
+        assert code.count("{}") == len(expected), runtime
+        assert fields == list(expected.values()), runtime
+    source = (rk.IMPLS / rk.SOURCE_DISPATCH).read_text()
+    assert "bool kAfdLaneRelease = false, bool kAfdSlotBeforeGate = false," in source
 
 
 def test_runtime_header_contents_invalidate_build(tmp_path):

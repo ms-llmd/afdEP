@@ -1,6 +1,7 @@
 // Copyright (c) 2026 afdEP contributors. SPDX-License-Identifier: MIT
 // afdEP count-first dispatch (role path, one NVLink domain): epoch-tagged source counts, per-row
-// readiness flags and a claimed streaming copy epilogue. Only the generated copies use it:
+// readiness flags (released by a per-CTA signaller warp in batches, stage B, or by each storing
+// lane, stage A) and a claimed streaming copy epilogue. Only the generated copies use it:
 // afdep_source_dispatch.cuh, afdep_ffn_stream_dispatch.cuh and afdep_ffn_stream_epilogue.cuh
 // (tests/role_kernels.py). AFDEP_PAYLOAD_FIRST=1 keeps the payload-first kernels.
 #pragma once
@@ -91,6 +92,51 @@ __device__ __forceinline__ void afdep_cf_st_release_gpu(int64_t* ptr, const int6
 
 __device__ __forceinline__ void afdep_cf_st_release_sys(int64_t* ptr, const int64_t value) {
     asm volatile("st.release.sys.global.b64 [%0], %1;" :: "l"(ptr), "l"(value) : "memory");
+}
+
+__device__ __forceinline__ void afdep_cf_st_relaxed_sys(int64_t* ptr, const int64_t value) {
+    asm volatile("st.relaxed.sys.global.b64 [%0], %1;" :: "l"(ptr), "l"(value) : "memory");
+}
+
+__device__ __forceinline__ void afdep_cf_fence_acq_rel_sys() {
+    asm volatile("fence.acq_rel.sys;" ::: "memory");
+}
+
+// Shared-memory accesses of the stage B mailboxes (CTA scope)
+__device__ __forceinline__ int64_t afdep_cf_ld_relaxed_cta_shared(const int64_t* ptr) {
+    int64_t value;
+    asm volatile("ld.relaxed.cta.shared.b64 %0, [%1];"
+                 : "=l"(value) : "r"(static_cast<uint32_t>(__cvta_generic_to_shared(ptr))) : "memory");
+    return value;
+}
+
+__device__ __forceinline__ int64_t afdep_cf_ld_acquire_cta_shared(const int64_t* ptr) {
+    int64_t value;
+    asm volatile("ld.acquire.cta.shared.b64 %0, [%1];"
+                 : "=l"(value) : "r"(static_cast<uint32_t>(__cvta_generic_to_shared(ptr))) : "memory");
+    return value;
+}
+
+__device__ __forceinline__ int afdep_cf_ld_acquire_cta_shared_s32(const int* ptr) {
+    int value;
+    asm volatile("ld.acquire.cta.shared.b32 %0, [%1];"
+                 : "=r"(value) : "r"(static_cast<uint32_t>(__cvta_generic_to_shared(ptr))) : "memory");
+    return value;
+}
+
+__device__ __forceinline__ void afdep_cf_st_relaxed_cta_shared(int64_t* ptr, const int64_t value) {
+    asm volatile("st.relaxed.cta.shared.b64 [%0], %1;"
+                 :: "r"(static_cast<uint32_t>(__cvta_generic_to_shared(ptr))), "l"(value) : "memory");
+}
+
+__device__ __forceinline__ void afdep_cf_st_release_cta_shared(int64_t* ptr, const int64_t value) {
+    asm volatile("st.release.cta.shared.b64 [%0], %1;"
+                 :: "r"(static_cast<uint32_t>(__cvta_generic_to_shared(ptr))), "l"(value) : "memory");
+}
+
+__device__ __forceinline__ void afdep_cf_red_release_cta_shared_add(int* ptr, const int value) {
+    asm volatile("red.release.cta.shared.add.s32 [%0], %1;"
+                 :: "r"(static_cast<uint32_t>(__cvta_generic_to_shared(ptr))), "r"(value) : "memory");
 }
 
 __device__ __forceinline__ int64_t afdep_cf_atom_acq_rel_gpu_add(int64_t* ptr, const int64_t value) {
@@ -223,6 +269,118 @@ __device__ __forceinline__ void afdep_cf_release_row(const handle::NCCLGin& gin,
         afdep_cf_st_release_sys(gin.get_sym_ptr<team_t>(afdep_cf_flag_ptr<kBucket>(workspace, source, slot_idx),
                                                         dst_rank_idx), epoch);
         slot_idx = -1;
+    }
+}
+
+// Stage B (the default; AFDEP_COUNT_FIRST_LANE_RELEASE=1 keeps the per-row release above): a storing
+// lane no longer pays a system-scope release per row. It posts the row's slot into its warp's mailbox
+// for the row's FFN rank, and notify warp 0 (idle once the counts are published) releases the flags of
+// each batch of posts behind one fence. Shared memory after the TMA buffers: kNumDispatchWarps x
+// kFfnRanks int64 mailboxes, then the finished-warp count (afdep_count_first_mailbox_bytes on the host).
+// A flag still follows its row's completed store:
+//   - the storing lane's cp.async.bulk.wait_group (not .read) completes the row's writes, followed by
+//     an implicit generic-async proxy fence; then that lane st.release.cta posts the slot;
+//   - the signaller's ld.acquire.cta reads the post (synchronizes-with it), then fence.acq_rel.sys,
+//     cumulative over everything that happens-before it, then st.relaxed.sys stores the epoch into the
+//     flag, which the epilogue's ld.acquire.sys reads.
+// A mailbox holds one post: its warp spins until the signaller cleared the previous one. The
+// signaller re-reads only mailboxes it acquired as posted before its fence, which cannot change until
+// it clears them, so the fence covers every flag it stores.
+struct AfdCfMailboxes {
+    // [dispatch warp][FFN rank]: the posted slot plus one (0: empty)
+    int64_t* rows;
+    // Payload warps whose last row is posted
+    int* warps_done;
+};
+
+template <bool kLaneRelease, int kNumThreads, int kNumDispatchWarps, int kFfnRanks>
+__device__ __forceinline__ AfdCfMailboxes afdep_cf_init_mailboxes(const layout::TokenLayout& token_layout,
+                                                                  void* tma_buffers, const int thread_idx) {
+    // The TMA buffers (one token per dispatch warp) end 32-byte aligned
+    const auto rows = static_cast<int64_t*>(
+        layout::BufferLayout<true>(token_layout, kNumDispatchWarps, 1, tma_buffers).get_buffer_end_ptr());
+    const AfdCfMailboxes mailboxes = {rows, reinterpret_cast<int*>(rows + kNumDispatchWarps * kFfnRanks)};
+    if constexpr (not kLaneRelease) {
+        // No CTA barrier precedes the warp roles: clear before any post or scan
+        for (int i = thread_idx; i < kNumDispatchWarps * kFfnRanks; i += kNumThreads)
+            mailboxes.rows[i] = 0;
+        if (thread_idx == 0)
+            *mailboxes.warps_done = 0;
+        __syncthreads();
+    }
+    return mailboxes;
+}
+
+// At the loop top, once this lane's wait_group completed its previous row (and after the last row):
+// stage A releases the row's flag, stage B posts the row to the warp's mailbox for its FFN rank.
+template <bool kLaneRelease, int kNumRanks, int kBucket, int kFfnRanks, int64_t kNumTimeoutCycles, typename team_t>
+__device__ __forceinline__ void afdep_cf_finish_row(const handle::NCCLGin& gin, const layout::WorkspaceLayout& workspace,
+                                                    const AfdCfMailboxes& mailboxes, const int dispatch_warp_idx,
+                                                    int& dst_rank_idx, int& slot_idx,
+                                                    const int source, const int64_t epoch, const int rank_idx) {
+    if constexpr (kLaneRelease) {
+        afdep_cf_release_row<kNumRanks, kBucket, team_t>(gin, workspace, dst_rank_idx, slot_idx, source, epoch);
+    } else if (slot_idx >= 0) {
+        const auto mailbox = mailboxes.rows + dispatch_warp_idx * kFfnRanks + dst_rank_idx;
+        comm::timeout_while<kNumTimeoutCycles>([=](const bool& is_last_check) {
+            const auto unconsumed = afdep_cf_ld_relaxed_cta_shared(mailbox);
+            if (unconsumed == 0)
+                return true;
+            if (is_last_check)
+                printf("afdEP count-first mailbox timeout, rank: %d, warp: %d, FFN: %d, slot: %d, unconsumed: %lld\n",
+                       rank_idx, dispatch_warp_idx, dst_rank_idx, slot_idx, static_cast<long long>(unconsumed));
+            return false;
+        });
+        afdep_cf_st_release_cta_shared(mailbox, slot_idx + 1);
+        slot_idx = -1;
+    }
+}
+
+// After the last post: every lane's post precedes the warp's release of warps_done (bar.warp.sync
+// orders the participating lanes' memory operations).
+template <bool kLaneRelease>
+__device__ __forceinline__ void afdep_cf_finish_warp(const AfdCfMailboxes& mailboxes, const int lane_idx) {
+    if constexpr (not kLaneRelease) {
+        __syncwarp();
+        if (lane_idx == 0)
+            afdep_cf_red_release_cta_shared_add(mailboxes.warps_done, 1);
+    }
+}
+
+// Notify warp 0's signaller. Lane l scans mailboxes l, l + 32, ...; per batch, a lane that found posts
+// executes one fence.acq_rel.sys, then stores the epoch into each posted row's flag. It exits after a
+// pass that began with every payload warp finished (on every lane) and found nothing: each warp posts
+// all of its rows before its release of warps_done, so that pass saw every post. The per-CTA arrival
+// release (afdep_signal_receivers) follows the signaller through its __syncthreads.
+template <bool kLaneRelease, int kBucket, int kNumDispatchWarps, int kFfnRanks, typename team_t>
+__device__ __forceinline__ void afdep_cf_signal_rows(const handle::NCCLGin& gin, const layout::WorkspaceLayout& workspace,
+                                                     const AfdCfMailboxes& mailboxes, const int source,
+                                                     const int64_t epoch, const int lane_idx) {
+    if constexpr (not kLaneRelease) {
+        constexpr int kNumMailboxes = kNumDispatchWarps * kFfnRanks;
+        EP_STATIC_ASSERT(kNumMailboxes > 0 and kNumMailboxes <= 32 * 64, "Count-first mailboxes: one 64-bit mask per lane");
+        while (true) {
+            const bool finished = afdep_cf_ld_acquire_cta_shared_s32(mailboxes.warps_done) == kNumDispatchWarps;
+            uint64_t posted = 0;
+            for (int i = lane_idx, k = 0; i < kNumMailboxes; i += 32, ++ k) {
+                if (afdep_cf_ld_acquire_cta_shared(mailboxes.rows + i) != 0)
+                    posted |= 1ull << k;
+            }
+            if (posted != 0) {
+                // One fence for the batch, after every acquire it covers
+                afdep_cf_fence_acq_rel_sys();
+                for (auto rest = posted; rest != 0; rest &= rest - 1) {
+                    const int i = lane_idx + 32 * (__ffsll(static_cast<long long>(rest)) - 1);
+                    // Unchanged since the acquire: its warp posts again only after this clear
+                    const auto slot = static_cast<int>(afdep_cf_ld_relaxed_cta_shared(mailboxes.rows + i)) - 1;
+                    afdep_cf_st_relaxed_cta_shared(mailboxes.rows + i, 0);
+                    afdep_cf_st_relaxed_sys(gin.get_sym_ptr<team_t>(afdep_cf_flag_ptr<kBucket>(workspace, source, slot),
+                                                                    i % kFfnRanks), epoch);
+                }
+            }
+            if (__all_sync(0xffffffff, finished and posted == 0))
+                break;
+        }
     }
 }
 

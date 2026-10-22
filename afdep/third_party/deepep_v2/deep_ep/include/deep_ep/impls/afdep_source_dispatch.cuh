@@ -42,6 +42,9 @@ template <bool kIsScaleupNVLink,
           int kAfdZeroCollectRowBytes = 0,
           // afdEP count-first: tokens stored before the counts are issued, and one token per notify thread
           int kAfdUngatedTokens = 0, bool kAfdThreadCount = true,
+          // afdEP count-first: each storing lane releases its row's flag (stage A), and every token takes
+          // its slots before the gate
+          bool kAfdLaneRelease = false, bool kAfdSlotBeforeGate = false,
           int kNumNotifyThreads = kNumNotifyWarps * 32,
           int kNumDispatchThreads = kNumDispatchWarps * 32,
           int kNumThreads = kNumNotifyThreads + kNumDispatchThreads,
@@ -117,6 +120,12 @@ afdep_source_dispatch_impl(
 
     // Named barrier indices
     constexpr int kNotifyBarrierIndex = 1;
+
+    // afdEP count-first (stage B): a row mailbox per (dispatch warp, FFN rank) and the finished-warp
+    // count, after the TMA buffers (AFDEP_COUNT_FIRST_LANE_RELEASE=1: none)
+    const auto afd_mailboxes = afdep_cf_init_mailboxes<kAfdLaneRelease, kNumThreads, kNumDispatchWarps, kAfdFfnRanks>(
+        layout::TokenLayout(kNumHiddenBytes, kNumSFPacks * sizeof(sf_pack_t), kNumTopk, true),
+        math::advance_ptr<int>(smem, kNumSmemBytesForNotify), thread_idx);
 
     // Gin handle
     // We treat each warp as a "channel"
@@ -360,6 +369,13 @@ afdep_source_dispatch_impl(
                 do_psum(expert_count, psum_num_recv_tokens_per_expert, kNumExpertsPerRank, 1);
             }
         }
+
+        // afdEP count-first (stage B): notify warp 0, idle once the counts are published, releases the
+        // flags of the rows the payload lanes post until every payload warp has finished
+        if (warp_idx == 0) {
+            afdep_cf_signal_rows<kAfdLaneRelease, kNumMaxTokensPerRank, kNumDispatchWarps, kAfdFfnRanks, team_t>(
+                gin, workspace_layout, afd_mailboxes, rank_idx - kAfdFfnRanks, afd_epoch, lane_idx);
+        }
     } else {
         const int dispatch_warp_idx = warp_idx - kNumNotifyWarps;
 
@@ -401,8 +417,10 @@ afdep_source_dispatch_impl(
             __syncwarp();
 
             // afdEP count-first: the wait above completed this lane's previous row; release its flag
-            afdep_cf_release_row<kNumRanks, kNumMaxTokensPerRank, team_t>(
-                gin, workspace_layout, afd_pending_dst, afd_pending_slot, rank_idx - kAfdFfnRanks, afd_epoch);
+            // (stage A) or post it to this warp's mailbox (stage B)
+            afdep_cf_finish_row<kAfdLaneRelease, kNumRanks, kNumMaxTokensPerRank, kAfdFfnRanks, kNumTimeoutCycles, team_t>(
+                gin, workspace_layout, afd_mailboxes, dispatch_warp_idx, afd_pending_dst, afd_pending_slot,
+                rank_idx - kAfdFfnRanks, afd_epoch, rank_idx);
 
             // Issue SF TMA or cp.async
             if constexpr (kNumSFPacks > 0) {
@@ -469,6 +487,11 @@ afdep_source_dispatch_impl(
 
             // Deduplicate ranks and assign slots
             int stored_dst_slot_idx = -1;
+            // afdEP count-first: only a warp's first gated token (the gate still closed for it) takes its
+            // slots after the gate, so the burst the gate releases gets slots in post-gate issue order (the
+            // copy epilogue's unit order); ungated tokens, the warp's later tokens (issued after its gate)
+            // and, with AFDEP_COUNT_FIRST_SLOT_BEFORE_GATE=1, every token take them here
+            const auto afd_assign_slots = [&]() {
             if constexpr (kReuseSlotIndices) {
                 if (lane_idx < kNumTopk)
                     stored_dst_slot_idx = __ldg(dst_buffer_slot_idx + token_idx * kNumTopk + lane_idx);
@@ -484,6 +507,11 @@ afdep_source_dispatch_impl(
                 }
             }
             __syncwarp();
+            };
+            const bool afd_slots_at_issue = not kAfdSlotBeforeGate and not afd_gate_open and
+                                            token_idx >= kAfdUngatedTokens;
+            if (not afd_slots_at_issue)
+                afd_assign_slots();
 
             // Wait TMA load arrival
             // NOTES: this arrive must be after the `ptx::cp_async_mbarrier_arrive`
@@ -507,6 +535,9 @@ afdep_source_dispatch_impl(
                 afdep_cf_wait_gate<kNumTimeoutCycles>(workspace_layout, afd_epoch, lane_idx, rank_idx);
                 afd_gate_open = true;
             }
+            // afdEP count-first: a token the gate held takes its slots now, in post-gate issue order
+            if (afd_slots_at_issue)
+                afd_assign_slots();
 
             // Issue TMA NVLink stores
             EP_STATIC_ASSERT(kNumTopk <= 32, "Invalid top-k selection");
@@ -535,11 +566,14 @@ afdep_source_dispatch_impl(
             }
         }
 
-        // afdEP count-first: complete and release this lane's last row before the arrival release
+        // afdEP count-first: complete and release (or post) this lane's last row, then count the warp
+        // finished, before the arrival release
         ptx::tma_store_wait();
         __syncwarp();
-        afdep_cf_release_row<kNumRanks, kNumMaxTokensPerRank, team_t>(
-            gin, workspace_layout, afd_pending_dst, afd_pending_slot, rank_idx - kAfdFfnRanks, afd_epoch);
+        afdep_cf_finish_row<kAfdLaneRelease, kNumRanks, kNumMaxTokensPerRank, kAfdFfnRanks, kNumTimeoutCycles, team_t>(
+            gin, workspace_layout, afd_mailboxes, dispatch_warp_idx, afd_pending_dst, afd_pending_slot,
+            rank_idx - kAfdFfnRanks, afd_epoch, rank_idx);
+        afdep_cf_finish_warp<kAfdLaneRelease>(afd_mailboxes, lane_idx);
     }
 
     // Barrier to ensure data arrival

@@ -117,6 +117,8 @@ public:
         // afdEP count-first source only (AfdepSourceDispatchRuntime)
         int afd_ungated_tokens;
         bool afd_thread_count;
+        bool afd_lane_release;
+        bool afd_slot_before_gate;
 
         // Parameters
         void* x; sf_pack_t* sf; topk_idx_t* topk_idx; float* topk_weights;
@@ -282,7 +284,7 @@ static void __instantiate_kernel() {{
 
 // afdEP count-first Attention source of one NVLink domain (afdep_suites.hpp): the shared argument
 // list and launch shape, through a generated copy of dispatch.cuh whose template always takes the
-// collect row bytes, the ungated tokens and the counting loop.
+// collect row bytes, the ungated tokens, the counting loop, the flag release and the slot order.
 class AfdepSourceDispatchRuntime final : public jit::LaunchRuntime<AfdepSourceDispatchRuntime> {
 public:
     using Args = DispatchRuntime::Args;
@@ -294,7 +296,7 @@ public:
 using namespace deep_ep::elastic;
 
 static void __instantiate_kernel() {{
-    auto ptr = reinterpret_cast<void*>(&afdep_source_dispatch_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}>);
+    auto ptr = reinterpret_cast<void*>(&afdep_source_dispatch_impl<{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}>);
 }}
 )",
                            args.is_scaleup_nvlink,
@@ -309,7 +311,8 @@ static void __instantiate_kernel() {{
                            args.num_qps, args.num_timeout_cycles, args.afd_ffn_ranks,
                            args.afd_skip_entry_barrier, args.afd_directional_notify, args.afd_directed_exit,
                            args.afd_role_buffers, args.afd_per_cta_exit,
-                           args.afd_zero_collect_row_bytes, args.afd_ungated_tokens, args.afd_thread_count);
+                           args.afd_zero_collect_row_bytes, args.afd_ungated_tokens, args.afd_thread_count,
+                           args.afd_lane_release, args.afd_slot_before_gate);
     }
 
     static void launch_impl(const jit::KernelHandle& kernel, const jit::LaunchConfigHandle& config, Args args) {
@@ -388,7 +391,9 @@ static void launch_dispatch(void* x, void* sf,
                             const int afd_zero_collect_row_bytes = 0,
                             const AfdLaunchShape afd_shape = AfdLaunchShape::kShared,
                             const int afd_ungated_tokens = 0,
-                            const bool afd_thread_count = true) {
+                            const bool afd_thread_count = true,
+                            const bool afd_lane_release = false,
+                            const bool afd_slot_before_gate = false) {
     // Cached mode does not support expert token counting
     if (cached_mode)
         EP_HOST_ASSERT(cumulative_local_expert_recv_stats == nullptr);
@@ -412,9 +417,21 @@ static void launch_dispatch(void* x, void* sf,
     if (num_scaleout_ranks == 1) {
         // Too many warps may cause performance degrade, so we limit the total warps into 512
         const auto token_layout = get_dispatch_token_layout(hidden, elem_size, num_sf_packs, num_topk);
+        // afdEP count-first stage B: a source keeps a row mailbox per (dispatch warp, FFN rank) and a
+        // finished-warp count after its TMA buffers (zero for every other kernel)
+        const bool afd_mailboxes = afd_shape == AfdLaunchShape::kCountFirst and not afd_lane_release and
+                                   scaleup_rank_idx >= afd_ffn_ranks;
+        const int afd_mailbox_bytes = afd_mailboxes ? afdep_count_first_mailbox_bytes(0, afd_ffn_ranks) : 0;
+        const int afd_mailbox_warp_bytes = afd_mailboxes ?
+            afdep_count_first_mailbox_bytes(1, afd_ffn_ranks) - afd_mailbox_bytes : 0;
         num_dispatch_warps = std::min<int>(std::min<int>(
-            (num_smem_bytes - num_notify_smem_bytes) / token_layout.get_num_bytes<true>(), 32 - num_notify_warps),
+            (num_smem_bytes - num_notify_smem_bytes - afd_mailbox_bytes) /
+                (token_layout.get_num_bytes<true>() + afd_mailbox_warp_bytes), 32 - num_notify_warps),
             math::ceil_div(512, num_sms));
+        if (afd_mailboxes)
+            EP_HOST_ASSERT(num_dispatch_warps > 0 and
+                           num_notify_smem_bytes + num_dispatch_warps * token_layout.get_num_bytes<true>() +
+                           afdep_count_first_mailbox_bytes(num_dispatch_warps, afd_ffn_ranks) <= num_smem_bytes);
         num_threads = (num_notify_warps + num_dispatch_warps) * 32;
     } else {
         // Hybrid kernels
@@ -457,6 +474,8 @@ static void launch_dispatch(void* x, void* sf,
                                          afd_skip_attention_entry_sync,
         .afd_ungated_tokens = afd_ungated_tokens,
         .afd_thread_count = afd_thread_count,
+        .afd_lane_release = afd_lane_release,
+        .afd_slot_before_gate = afd_slot_before_gate,
         .x = x, .sf = static_cast<sf_pack_t*>(sf), .topk_idx = topk_idx, .topk_weights = topk_weights,
         .copied_topk_idx = copied_topk_idx,
         .cumulative_local_expert_recv_stats = cumulative_local_expert_recv_stats,

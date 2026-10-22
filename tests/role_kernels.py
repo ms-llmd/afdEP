@@ -11,7 +11,8 @@ generated-file banner) are the whole difference.
 
 Count-first dispatch (afdep_count_first.cuh; AFDEP_PAYLOAD_FIRST=1 is the
 control) adds three copies: the Attention source dispatch (dispatch.cuh with
-epoch-tagged counts, a payload gate and per-row flags), the FFN stream receive
+epoch-tagged counts, a payload gate, slots taken after the gate and per-row
+flags that a signaller warp releases in batches), the FFN stream receive
 (dispatch.cuh that records the epochs, triggers after the count wait and
 releases P after the prefix sums) and the FFN stream copy epilogue
 (dispatch_copy_epilogue.cuh with claimed units of flag-guarded rows).
@@ -119,10 +120,17 @@ SLOT_RESET = (
     "        workspace_layout.get_scaleup_atomic_sender_counter()[thread_idx] = 0;"
     "\n"
 )
-RELEASE_ROW = (
-    "afdep_cf_release_row<kNumRanks, kNumMaxTokensPerRank, team_t>(\n"
-    "{0}    gin, workspace_layout, afd_pending_dst, afd_pending_slot, "
-    "rank_idx - kAfdFfnRanks, afd_epoch);\n"
+FINISH_ROW = (
+    "afdep_cf_finish_row<kAfdLaneRelease, kNumRanks, kNumMaxTokensPerRank, "
+    "kAfdFfnRanks, kNumTimeoutCycles, team_t>(\n"
+    "{0}    gin, workspace_layout, afd_mailboxes, dispatch_warp_idx, "
+    "afd_pending_dst, afd_pending_slot,\n"
+    "{0}    rank_idx - kAfdFfnRanks, afd_epoch, rank_idx);\n"
+)
+NOTIFY_END = (
+    "                do_psum(expert_count, psum_num_recv_tokens_per_expert, "
+    "kNumExpertsPerRank, 1);\n"
+    "            }\n        }\n    } else {\n"
 )
 
 # Attention source: epoch-tagged rank counts, the payload gate and per-row flags.
@@ -134,7 +142,11 @@ SOURCE_DISPATCH_EDITS = (
         "          int kAfdZeroCollectRowBytes = 0,\n"
         "          // afdEP count-first: tokens stored before the counts are issued, "
         "and one token per notify thread\n"
-        "          int kAfdUngatedTokens = 0, bool kAfdThreadCount = true,\n",
+        "          int kAfdUngatedTokens = 0, bool kAfdThreadCount = true,\n"
+        "          // afdEP count-first: each storing lane releases its row's flag "
+        "(stage A), and every token takes\n"
+        "          // its slots before the gate\n"
+        "          bool kAfdLaneRelease = false, bool kAfdSlotBeforeGate = false,\n",
     ),
     ("dispatch_impl(\n", "afdep_source_dispatch_impl(\n"),
     (
@@ -159,6 +171,18 @@ SOURCE_DISPATCH_EDITS = (
         "    const int64_t afd_epoch = afdep_cf_source_epoch(workspace_layout);\n",
     ),
     (
+        "    // Named barrier indices\n    constexpr int kNotifyBarrierIndex = 1;\n",
+        "    // Named barrier indices\n    constexpr int kNotifyBarrierIndex = 1;\n\n"
+        "    // afdEP count-first (stage B): a row mailbox per (dispatch warp, "
+        "FFN rank) and the finished-warp\n"
+        "    // count, after the TMA buffers (AFDEP_COUNT_FIRST_LANE_RELEASE=1: none)\n"
+        "    const auto afd_mailboxes = afdep_cf_init_mailboxes<kAfdLaneRelease, "
+        "kNumThreads, kNumDispatchWarps, kAfdFfnRanks>(\n"
+        "        layout::TokenLayout(kNumHiddenBytes, kNumSFPacks * sizeof(sf_pack_t), "
+        "kNumTopk, true),\n"
+        "        math::advance_ptr<int>(smem, kNumSmemBytesForNotify), thread_idx);\n",
+    ),
+    (
         "static_cast<int64_t>(rank_count[i]), i,",
         "afdep_cf_tag_count(rank_count[i], afd_epoch), i,",
     ),
@@ -168,6 +192,21 @@ SOURCE_DISPATCH_EDITS = (
         "open the payload gate\n"
         "            if (thread_idx == 0)\n"
         "                afdep_cf_open_gate(workspace_layout, afd_epoch);\n",
+    ),
+    (
+        NOTIFY_END,
+        NOTIFY_END.removesuffix("    } else {\n") + "\n"
+        "        // afdEP count-first (stage B): notify warp 0, idle once the counts "
+        "are published, releases the\n"
+        "        // flags of the rows the payload lanes post until every payload warp "
+        "has finished\n"
+        "        if (warp_idx == 0) {\n"
+        "            afdep_cf_signal_rows<kAfdLaneRelease, kNumMaxTokensPerRank, "
+        "kNumDispatchWarps, kAfdFfnRanks, team_t>(\n"
+        "                gin, workspace_layout, afd_mailboxes, "
+        "rank_idx - kAfdFfnRanks, afd_epoch, lane_idx);\n"
+        "        }\n"
+        "    } else {\n",
     ),
     (
         "        // Iterate all tokens\n",
@@ -181,7 +220,8 @@ SOURCE_DISPATCH_EDITS = (
         "            // Issue SF TMA or cp.async\n",
         "            // afdEP count-first: the wait above completed this lane's "
         "previous row; release its flag\n"
-        "            " + RELEASE_ROW.format("            ") + "\n"
+        "            // (stage A) or post it to this warp's mailbox (stage B)\n"
+        "            " + FINISH_ROW.format("            ") + "\n"
         "            // Issue SF TMA or cp.async\n",
     ),
     (
@@ -192,7 +232,11 @@ SOURCE_DISPATCH_EDITS = (
         "                afdep_cf_wait_gate<kNumTimeoutCycles>(workspace_layout, "
         "afd_epoch, lane_idx, rank_idx);\n"
         "                afd_gate_open = true;\n"
-        "            }\n\n"
+        "            }\n"
+        "            // afdEP count-first: a token the gate held takes its slots now, "
+        "in post-gate issue order\n"
+        "            if (afd_slots_at_issue)\n"
+        "                afd_assign_slots();\n\n"
         "            // Issue TMA NVLink stores\n",
     ),
     (
@@ -204,11 +248,14 @@ SOURCE_DISPATCH_EDITS = (
     (
         "        }\n    }\n\n    // Barrier to ensure data arrival\n",
         "        }\n\n"
-        "        // afdEP count-first: complete and release this lane's last row "
-        "before the arrival release\n"
+        "        // afdEP count-first: complete and release (or post) this lane's last "
+        "row, then count the warp\n"
+        "        // finished, before the arrival release\n"
         "        ptx::tma_store_wait();\n"
         "        __syncwarp();\n"
-        "        " + RELEASE_ROW.format("        ") + "    }\n\n"
+        "        " + FINISH_ROW.format("        ") + "        "
+        "afdep_cf_finish_warp<kAfdLaneRelease>(afd_mailboxes, lane_idx);\n"
+        "    }\n\n"
         "    // Barrier to ensure data arrival\n",
     ),
     (
@@ -235,6 +282,28 @@ SOURCE_COUNT_SPAN = (
     "expert_count);\n"
     "        } else {\n",
     "        }\n",
+)
+# Gated tokens take their slots after the gate; the shared slot block stays verbatim.
+SOURCE_SLOT_SPAN = (
+    "            if constexpr (kReuseSlotIndices) {\n"
+    "                if (lane_idx < kNumTopk)\n",
+    "                    dst_buffer_slot_idx[token_idx * kNumTopk + lane_idx] = "
+    "value;\n                }\n            }\n            __syncwarp();\n",
+    "            // afdEP count-first: only a warp's first gated token (the gate "
+    "still closed for it) takes its\n"
+    "            // slots after the gate, so the burst the gate releases gets slots "
+    "in post-gate issue order (the\n"
+    "            // copy epilogue's unit order); ungated tokens, the warp's later "
+    "tokens (issued after its gate)\n"
+    "            // and, with AFDEP_COUNT_FIRST_SLOT_BEFORE_GATE=1, every token take "
+    "them here\n"
+    "            const auto afd_assign_slots = [&]() {\n",
+    "            };\n"
+    "            const bool afd_slots_at_issue = not kAfdSlotBeforeGate and not "
+    "afd_gate_open and\n"
+    "                                            token_idx >= kAfdUngatedTokens;\n"
+    "            if (not afd_slots_at_issue)\n"
+    "                afd_assign_slots();\n",
 )
 
 # FFN receive: record each source's epoch, trigger after the count wait, release P.
@@ -434,9 +503,11 @@ def ffn_dispatch(shared: str) -> str:
 
 
 def source_dispatch(shared: str) -> str:
-    """Count-first Attention source: the shared template plus the ungated-token and
-    counting arguments; every other statement is the shared kernel's."""
-    return wrap_span(apply_edits(shared, SOURCE_DISPATCH_EDITS), *SOURCE_COUNT_SPAN)
+    """Count-first Attention source: the shared template plus the ungated-token,
+    counting, lane-release and slot-order arguments; the counting loop and the slot
+    block keep the shared kernel's statements verbatim."""
+    text = wrap_span(apply_edits(shared, SOURCE_DISPATCH_EDITS), *SOURCE_COUNT_SPAN)
+    return wrap_span(text, *SOURCE_SLOT_SPAN)
 
 
 def ffn_stream_dispatch(shared: str) -> str:

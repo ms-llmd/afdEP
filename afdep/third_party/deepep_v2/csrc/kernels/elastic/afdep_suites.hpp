@@ -64,13 +64,13 @@ static bool afdep_ffn_receive_kernels() {
 
 // Count-first dispatch (one NVLink domain). Payload-first, the FFN copy epilogue starts only
 // after every source's payload has arrived. Count-first issues each source's counts before
-// its payload (a source-local gate) and tags the rank count word with the source's epoch; the
-// source lane that stored a row then releases that row's flag, set to the epoch, in the FFN
-// workspace. The FFN receive records the epochs, triggers the copy epilogue after the count
-// wait and releases a prefix-ready word P after the prefix sums. The epilogue waits on P
-// instead of dispatch completion, and its CTAs claim units of rows that each wait for their
-// own flag, so the copy streams behind the ingress. Flags are never cleared: epochs strictly
-// grow, so only this exchange's write of a row matches.
+// its payload (a source-local gate) and tags the rank count word with the source's epoch; once
+// a row's store completes, its flag in the FFN workspace is released, set to the epoch (by the
+// source CTA's signaller warp in batches, or by the storing lane). The FFN receive records the
+// epochs, triggers the copy epilogue after the count wait and releases a prefix-ready word P
+// after the prefix sums. The epilogue waits on P instead of dispatch completion, and its CTAs
+// claim units of rows that each wait for their own flag, so the copy streams behind the ingress.
+// Flags are never cleared: epochs strictly grow, so only this exchange's write of a row matches.
 // The decision is uniform per exchange: the Buffer latches the minimum bucket at construction
 // (afdep/deepep.py checks it agrees on every rank) and every rank passes the same bucket.
 // Below it every kernel, cubin and wire word is the payload-first one, so small buckets pay
@@ -111,8 +111,8 @@ static bool afdep_count_first_arm_valid(const std::string& arm) {
     return arm == "full" or arm == "source";
 }
 
-// Screen knobs, read per exchange. None reaches the wire: the gate and counting loop are
-// source-local, the unit size and epilogue grid FFN-local.
+// Screen knobs, read per exchange. None reaches the wire: the gate, counting loop, flag release
+// and slot order are source-local, the unit size and epilogue grid FFN-local.
 // Tokens a source stores before the gate (AFDEP_COUNT_FIRST_UNGATE=1: every token).
 static int afdep_count_first_ungated_tokens() {
     if (deep_ep::get_env<int>("AFDEP_COUNT_FIRST_UNGATE", 0) != 0)
@@ -123,6 +123,31 @@ static int afdep_count_first_ungated_tokens() {
 // AFDEP_COUNT_FIRST_WARP_COUNT=1 keeps one token per notify warp in the source's counting loop.
 static bool afdep_count_first_thread_count() {
     return deep_ep::get_env<int>("AFDEP_COUNT_FIRST_WARP_COUNT", 0) == 0;
+}
+
+// Row flag release (stage B by default): each storing lane posts its completed row to a shared-memory
+// mailbox and notify warp 0 releases the flags of each batch of posts behind one system-scope fence.
+// AFDEP_COUNT_FIRST_LANE_RELEASE=1 keeps stage A, where each storing lane releases its row's flag
+// itself (one system-scope release per row). Source-local like the other knobs: it changes when a
+// flag is stored, never its word or value, so each rank may read it on its own (no agreement check).
+static bool afdep_count_first_lane_release() {
+    return deep_ep::get_env<int>("AFDEP_COUNT_FIRST_LANE_RELEASE", 0) != 0;
+}
+
+// Stage B source shared memory after the TMA buffers (afdep_count_first.cuh, AfdCfMailboxes): one
+// int64 mailbox per (dispatch warp, FFN rank), then the finished-warp count. The source sizes its
+// dispatch warps around it; stage A and every other kernel keep their sizing.
+static int afdep_count_first_mailbox_bytes(const int num_dispatch_warps, const int num_ffn_ranks) {
+    return num_dispatch_warps * num_ffn_ranks * static_cast<int>(sizeof(int64_t)) + static_cast<int>(sizeof(int));
+}
+
+// Slot order: a token the gate still holds takes its destination slots after the gate, so slot order
+// (the copy epilogue's unit order) follows post-gate issue order instead of the order the payload
+// warps reached the gate. AFDEP_COUNT_FIRST_SLOT_BEFORE_GATE=1 keeps stage A's order (every token
+// takes its slots before the gate). Source-local: the FFN finds any slot order through the counts and
+// flags, and the combine handle (dst_buffer_slot_idx) is the source's own.
+static bool afdep_count_first_slot_before_gate() {
+    return deep_ep::get_env<int>("AFDEP_COUNT_FIRST_SLOT_BEFORE_GATE", 0) != 0;
 }
 
 // Fewest rows per claimed epilogue unit (1 spreads rows over every SM).

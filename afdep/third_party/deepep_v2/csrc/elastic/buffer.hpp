@@ -1076,7 +1076,8 @@ public:
                         afd_source and afd_single_ffn_collect_rows(afd_direct_nvlink, num_topk) ?
                             get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk).get_num_bytes<false>() : 0,
                         afd_dispatch_shape,
-                        afdep_count_first_ungated_tokens(), afdep_count_first_thread_count());
+                        afdep_count_first_ungated_tokens(), afdep_count_first_thread_count(),
+                        afdep_count_first_lane_release(), afdep_count_first_slot_before_gate());
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
