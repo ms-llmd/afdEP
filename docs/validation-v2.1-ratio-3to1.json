@@ -3051,6 +3051,2349 @@
    }
   }
  },
+ "per_source_cost": {
+  "native_source_sha256": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+  "layout": "statler s8c (FFN domain), s8d, s4e; 4 GPUs per domain",
+  "channel_sweep_1_vs_2_sources": [
+   "#### 4F:4A num-sms 8",
+   "{\"tokens\": 1, \"afd\": [73.88, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [77.34, 0.0, 0]}",
+   "#### 4F:8A num-sms 8",
+   "{\"tokens\": 1, \"afd\": [83.11, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [92.01, 0.0, 0]}",
+   "#### 4F:4A num-sms 16",
+   "{\"tokens\": 1, \"afd\": [76.13, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [79.21, 0.0, 0]}",
+   "#### 4F:8A num-sms 16",
+   "{\"tokens\": 1, \"afd\": [83.93, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [95.63, 0.0, 0]}",
+   "#### 4F:4A num-sms 24",
+   "{\"tokens\": 1, \"afd\": [77.41, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [84.34, 0.0, 0]}",
+   "#### 4F:8A num-sms 24",
+   "{\"tokens\": 1, \"afd\": [88.72, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [103.39, 0.0, 0]}",
+   "#### 4F:4A num-sms 32",
+   "{\"tokens\": 1, \"afd\": [81.16, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [87.89, 0.0, 0]}",
+   "#### 4F:8A num-sms 32",
+   "{\"tokens\": 1, \"afd\": [95.62, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [108.36, 0.0, 0]}",
+   "#### 4F:4A num-sms 48",
+   "{\"tokens\": 1, \"afd\": [93.41, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [99.24, 0.0, 0]}",
+   "#### 4F:8A num-sms 48",
+   "{\"tokens\": 1, \"afd\": [112.79, 0.0, 0]}",
+   "{\"tokens\": 8, \"afd\": [128.03, 0.0, 0]}"
+  ],
+  "direct_vs_hybrid": [
+   "#### 4f4a hybrid on",
+   "{\"tokens\": 1, \"afd\": [77.65, 0.0, 0], \"masked\": [95.53, 23.02, 0]}",
+   "{\"tokens\": 8, \"afd\": [84.21, 0.0, 0], \"masked\": [104.29, 23.7, 0]}",
+   "{\"tokens\": 32, \"afd\": [86.62, 0.0, 0], \"masked\": [109.89, 26.89, 0]}",
+   "{\"tokens\": 128, \"afd\": [108.38, 0.0, 0], \"masked\": [127.63, 17.91, 0]}",
+   "{\"tokens\": 512, \"afd\": [215.79, 0.0, 0], \"masked\": [232.88, 7.89, 0]}",
+   "#### 4f4a hybrid off",
+   "{\"tokens\": 1, \"afd\": [92.7, 0.0, 0], \"masked\": [92.38, -0.33, 3]}",
+   "{\"tokens\": 8, \"afd\": [95.85, 0.0, 0], \"masked\": [96.17, 0.27, 0]}",
+   "{\"tokens\": 32, \"afd\": [110.99, 0.0, 0], \"masked\": [111.04, 0.13, 0]}",
+   "{\"tokens\": 128, \"afd\": [176.56, 0.0, 0], \"masked\": [176.56, 0.05, 2]}",
+   "{\"tokens\": 512, \"afd\": [431.02, 0.0, 0], \"masked\": [431.27, 0.1, 0]}",
+   "#### 4f8a hybrid on",
+   "{\"tokens\": 1, \"afd\": [88.84, 0.0, 0], \"masked\": [116.6, 31.34, 0]}",
+   "{\"tokens\": 8, \"afd\": [103.67, 0.0, 0], \"masked\": [127.2, 22.86, 0]}",
+   "{\"tokens\": 32, \"afd\": [108.14, 0.0, 0], \"masked\": [136.38, 26.0, 0]}",
+   "{\"tokens\": 128, \"afd\": [145.32, 0.0, 0], \"masked\": [168.0, 15.6, 0]}",
+   "{\"tokens\": 512, \"afd\": [350.79, 0.0, 0], \"masked\": [369.92, 5.42, 0]}",
+   "#### 4f8a hybrid off",
+   "{\"tokens\": 1, \"afd\": [96.01, 0.0, 0], \"masked\": [95.07, -0.78, 3]}",
+   "{\"tokens\": 8, \"afd\": [99.65, 0.0, 0], \"masked\": [98.83, -0.85, 3]}",
+   "{\"tokens\": 32, \"afd\": [131.4, 0.0, 0], \"masked\": [131.14, -0.16, 3]}",
+   "{\"tokens\": 128, \"afd\": [257.16, 0.0, 0], \"masked\": [257.07, -0.05, 2]}",
+   "{\"tokens\": 512, \"afd\": [760.75, 0.0, 0], \"masked\": [760.81, 0.02, 0]}"
+  ],
+  "screens": {
+   "x31c-4f4a-sms16": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "4",
+     "--num-sms",
+     "16"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 77.01080083847046,
+        "8": 80.45704364776611
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 74.95448112487793,
+        "8": 78.49751949310303
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 76.13168001174927,
+        "8": 79.21463966369629
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 76.13168001174927,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 79.21463966369629,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d"
+    ],
+    "topology": "2 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31c-4f4a-sms24": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "4",
+     "--num-sms",
+     "24"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 77.18735933303833,
+        "8": 84.3064022064209
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 77.40535974502563,
+        "8": 84.43256378173828
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 77.76895999908447,
+        "8": 84.34216022491455
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 77.40535974502563,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 84.34216022491455,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d"
+    ],
+    "topology": "2 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31c-4f4a-sms32": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "4",
+     "--num-sms",
+     "32"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 80.95128059387207,
+        "8": 87.86279678344727
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 81.15855693817139,
+        "8": 87.89263725280762
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 81.16543769836426,
+        "8": 88.33008289337158
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 81.15855693817139,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 87.89263725280762,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d"
+    ],
+    "topology": "2 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31c-4f4a-sms48": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "4",
+     "--num-sms",
+     "48"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 93.84511947631836,
+        "8": 99.40567970275879
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 93.30880165100098,
+        "8": 99.2416000366211
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 93.41344356536865,
+        "8": 98.86951923370361
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 93.41344356536865,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 99.2416000366211,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d"
+    ],
+    "topology": "2 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31c-4f4a-sms8": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "4",
+     "--num-sms",
+     "8"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 73.8759994506836,
+        "8": 77.33976125717163
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 73.84920120239258,
+        "8": 77.32951879501343
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 74.55503940582275,
+        "8": 77.62920141220093
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 73.8759994506836,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 77.33976125717163,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d"
+    ],
+    "topology": "2 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31c-4f8a-sms16": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "8",
+     "--num-sms",
+     "16"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 83.93367767333984,
+        "8": 95.84240436553955
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 83.53568077087402,
+        "8": 95.35920143127441
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 83.99680137634277,
+        "8": 95.63360214233398
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 83.93367767333984,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 95.63360214233398,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d",
+     "afdep-v21-s4e"
+    ],
+    "topology": "3 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31c-4f8a-sms24": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "8",
+     "--num-sms",
+     "24"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 88.6736011505127,
+        "8": 103.39024066925049
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 88.72048377990723,
+        "8": 103.29583644866943
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 89.11040306091309,
+        "8": 103.96135807037354
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 88.72048377990723,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 103.39024066925049,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d",
+     "afdep-v21-s4e"
+    ],
+    "topology": "3 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31c-4f8a-sms32": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "8",
+     "--num-sms",
+     "32"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 95.39015769958496,
+        "8": 107.92976379394531
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 96.01655960083008,
+        "8": 108.36120128631592
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 95.6167984008789,
+        "8": 108.43984127044678
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 95.6167984008789,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 108.36120128631592,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d",
+     "afdep-v21-s4e"
+    ],
+    "topology": "3 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31c-4f8a-sms48": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "8",
+     "--num-sms",
+     "48"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 112.62367725372314,
+        "8": 128.0296802520752
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 113.72680187225342,
+        "8": 127.71071910858154
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 112.79016017913818,
+        "8": 128.16815853118896
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 112.79016017913818,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 128.0296802520752,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d",
+     "afdep-v21-s4e"
+    ],
+    "topology": "3 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31c-4f8a-sms8": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "8",
+     "--num-sms",
+     "8"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 83.11295986175537,
+        "8": 92.0139217376709
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 82.85016059875488,
+        "8": 91.91184043884277
+       }
+      }
+     },
+     {
+      "order": [
+       "afd"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 83.60527992248535,
+        "8": 93.056640625
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 83.11295986175537,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 92.0139217376709,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d",
+     "afdep-v21-s4e"
+    ],
+    "topology": "3 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31d-4f4a-off": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     "masked": {
+      "role_aware": false
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "32",
+     "128",
+     "512",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "off",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "4"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd",
+       "masked"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 92.70583629608154,
+        "8": 96.02752208709717,
+        "32": 110.78199863433838,
+        "128": 176.5615940093994,
+        "512": 431.01903915405273
+       },
+       "masked": {
+        "1": 92.47264385223389,
+        "8": 96.05800151824951,
+        "32": 111.04440212249756,
+        "128": 176.89976692199707,
+        "512": 431.7108154296875
+       }
+      }
+     },
+     {
+      "order": [
+       "masked",
+       "afd"
+      ],
+      "median_us": {
+       "masked": {
+        "1": 92.37760066986084,
+        "8": 96.1732816696167,
+        "32": 111.03447914123535,
+        "128": 176.5564727783203,
+        "512": 431.1301612854004
+       },
+       "afd": {
+        "1": 92.6801586151123,
+        "8": 95.77591896057129,
+        "32": 110.99160194396973,
+        "128": 176.57519340515137,
+        "512": 430.78439712524414
+       }
+      }
+     },
+     {
+      "order": [
+       "afd",
+       "masked"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 92.6969575881958,
+        "8": 95.84856033325195,
+        "32": 111.11855983734131,
+        "128": 176.4138412475586,
+        "512": 431.0523223876953
+       },
+       "masked": {
+        "1": 92.31783866882324,
+        "8": 96.20503902435303,
+        "32": 111.22944355010986,
+        "128": 176.33471488952637,
+        "512": 431.2709426879883
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 92.6969575881958,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 92.37760066986084,
+       "paired_change_pct": [
+        -0.2515401976450504,
+        -0.3264538492083746,
+        -0.4089874460139087
+       ],
+       "geomean_change_pct": -0.32901457388814226,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 95.84856033325195,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 96.1732816696167,
+       "paired_change_pct": [
+        0.0317403078720524,
+        0.41488791061248254,
+        0.37191867030830217
+       ],
+       "geomean_change_pct": 0.2727023777972182,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 32,
+      "afd": {
+       "median_us": 110.99160194396973,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 111.04440212249756,
+       "paired_change_pct": [
+        0.2368647356014053,
+        0.03863102839731791,
+        0.09978865180657603
+       ],
+       "geomean_change_pct": 0.1250605081300149,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 128,
+      "afd": {
+       "median_us": 176.5615940093994,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 176.5564727783203,
+       "paired_change_pct": [
+        0.19153254392325625,
+        -0.010602070692966592,
+        -0.04485269266439884
+       ],
+       "geomean_change_pct": 0.04530491523657698,
+       "repeats_faster": 2
+      }
+     },
+     {
+      "tokens": 512,
+      "afd": {
+       "median_us": 431.01903915405273,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 431.2709426879883,
+       "paired_change_pct": [
+        0.1604978464507134,
+        0.08026385413761883,
+        0.050717810562295185
+       ],
+       "geomean_change_pct": 0.09714909241109737,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ],
+     "masked": [
+      {
+       "repeat": 0,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d"
+    ],
+    "topology": "2 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31d-4f4a-on": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     "masked": {
+      "role_aware": false
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "32",
+     "128",
+     "512",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "4"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd",
+       "masked"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 77.65031814575195,
+        "8": 84.5682430267334,
+        "32": 86.61856174468994,
+        "128": 108.38367938995361,
+        "512": 215.81975936889648
+       },
+       "masked": {
+        "1": 95.5519962310791,
+        "8": 104.28783893585205,
+        "32": 109.88711833953857,
+        "128": 127.64632225036621,
+        "512": 233.1441593170166
+       }
+      }
+     },
+     {
+      "order": [
+       "masked",
+       "afd"
+      ],
+      "median_us": {
+       "masked": {
+        "1": 95.5293607711792,
+        "8": 104.27000045776367,
+        "32": 109.63647842407227,
+        "128": 127.57544040679932,
+        "512": 232.87960052490234
+       },
+       "afd": {
+        "1": 77.57319927215576,
+        "8": 84.12655830383301,
+        "32": 86.6594409942627,
+        "128": 108.42504024505615,
+        "512": 215.7927131652832
+       }
+      }
+     },
+     {
+      "order": [
+       "afd",
+       "masked"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 77.69272089004517,
+        "8": 84.21264171600342,
+        "32": 86.40640258789062,
+        "128": 107.89072036743164,
+        "512": 215.7327175140381
+       },
+       "masked": {
+        "1": 95.44944286346436,
+        "8": 104.29880142211914,
+        "32": 109.98191833496094,
+        "128": 127.6308012008667,
+        "512": 232.4118423461914
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 77.65031814575195,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 95.5293607711792,
+       "paired_change_pct": [
+        23.054223746675675,
+        23.14737778962359,
+        22.85506514638538
+       ],
+       "geomean_change_pct": 23.018828458681995,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 84.21264171600342,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 104.28783893585205,
+       "paired_change_pct": [
+        23.317968073293137,
+        23.944212814674092,
+        23.851715486914404
+       ],
+       "geomean_change_pct": 23.704323914499437,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 32,
+      "afd": {
+       "median_us": 86.61856174468994,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 109.88711833953857,
+       "paired_change_pct": [
+        26.86324515919949,
+        26.514176835424962,
+        27.284454671156855
+       ],
+       "geomean_change_pct": 26.88690148656494,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 128,
+      "afd": {
+       "median_us": 108.38367938995361,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 127.6308012008667,
+       "paired_change_pct": [
+        17.772641571898973,
+        17.66234083792868,
+        18.29636577289355
+       ],
+       "geomean_change_pct": 17.91012533882299,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 512,
+      "afd": {
+       "median_us": 215.7927131652832,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 232.87960052490234,
+       "paired_change_pct": [
+        8.027253852372173,
+        7.918194784701416,
+        7.731384012750864
+       ],
+       "geomean_change_pct": 7.892208364425013,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ],
+     "masked": [
+      {
+       "repeat": 0,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 8,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d"
+    ],
+    "topology": "2 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31d-4f8a-off": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     "masked": {
+      "role_aware": false
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "32",
+     "128",
+     "512",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "off",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "8"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd",
+       "masked"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 95.71327686309814,
+        "8": 99.38231945037842,
+        "32": 131.2443208694458,
+        "128": 256.9492816925049,
+        "512": 760.6512069702148
+       },
+       "masked": {
+        "1": 95.07015705108643,
+        "8": 98.82927894592285,
+        "32": 131.12792015075684,
+        "128": 256.98351860046387,
+        "512": 760.6865692138672
+       }
+      }
+     },
+     {
+      "order": [
+       "masked",
+       "afd"
+      ],
+      "median_us": {
+       "masked": {
+        "1": 95.43375968933105,
+        "8": 98.8976001739502,
+        "32": 131.211519241333,
+        "128": 257.0737648010254,
+        "512": 761.1559295654297
+       },
+       "afd": {
+        "1": 96.00759983062744,
+        "8": 99.90320205688477,
+        "32": 131.44752025604248,
+        "128": 257.1559143066406,
+        "512": 760.8594512939453
+       }
+      }
+     },
+     {
+      "order": [
+       "afd",
+       "masked"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 96.0374402999878,
+        "8": 99.6500015258789,
+        "32": 131.40143871307373,
+        "128": 257.4836730957031,
+        "512": 760.7535171508789
+       },
+       "masked": {
+        "1": 95.02039909362793,
+        "8": 98.67736339569092,
+        "32": 131.1409616470337,
+        "128": 257.1573543548584,
+        "512": 760.8099365234375
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 96.00759983062744,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 95.07015705108643,
+       "paired_change_pct": [
+        -0.6719233037351668,
+        -0.5977028300975462,
+        -1.0590049080681174
+       ],
+       "geomean_change_pct": -0.7764166483872792,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 99.6500015258789,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 98.82927894592285,
+       "paired_change_pct": [
+        -0.55647775933797,
+        -1.0065762280191848,
+        -0.9760543053633497
+       ],
+       "geomean_change_pct": -0.8465818964002891,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 32,
+      "afd": {
+       "median_us": 131.40143871307373,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 131.1409616470337,
+       "paired_change_pct": [
+        -0.08869009944038053,
+        -0.179540104103737,
+        -0.19822999549404807
+       ],
+       "geomean_change_pct": -0.15549819411080357,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 128,
+      "afd": {
+       "median_us": 257.1559143066406,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 257.0737648010254,
+       "paired_change_pct": [
+        0.013324383603441348,
+        -0.031945407842060014,
+        -0.12673376021143934
+       ],
+       "geomean_change_pct": -0.04846863377586663,
+       "repeats_faster": 2
+      }
+     },
+     {
+      "tokens": 512,
+      "afd": {
+       "median_us": 760.7535171508789,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 760.8099365234375,
+       "paired_change_pct": [
+        0.004648943343332768,
+        0.03896623364278984,
+        0.007416248664871006
+       ],
+       "geomean_change_pct": 0.01700926398984226,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ],
+     "masked": [
+      {
+       "repeat": 0,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d",
+     "afdep-v21-s4e"
+    ],
+    "topology": "3 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   },
+   "x31d-4f8a-on": {
+    "arms": {
+     "afd": {
+      "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     "masked": {
+      "role_aware": false
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "8",
+     "32",
+     "128",
+     "512",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "8"
+    ],
+    "processes": [
+     {
+      "order": [
+       "afd",
+       "masked"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 89.03575897216797,
+        "8": 103.47799777984619,
+        "32": 108.04415702819824,
+        "128": 145.32024383544922,
+        "512": 351.33121490478516
+       },
+       "masked": {
+        "1": 116.99888229370117,
+        "8": 128.17216396331787,
+        "32": 136.37919902801514,
+        "128": 168.25312614440918,
+        "512": 370.29296875
+       }
+      }
+     },
+     {
+      "order": [
+       "masked",
+       "afd"
+      ],
+      "median_us": {
+       "masked": {
+        "1": 116.60128116607666,
+        "8": 127.20096111297607,
+        "32": 136.54256343841553,
+        "128": 168.0018424987793,
+        "512": 369.6453666687012
+       },
+       "afd": {
+        "1": 88.74567985534668,
+        "8": 103.6678409576416,
+        "32": 108.30440044403076,
+        "128": 145.44800281524658,
+        "512": 350.7935905456543
+       }
+      }
+     },
+     {
+      "order": [
+       "afd",
+       "masked"
+      ],
+      "median_us": {
+       "afd": {
+        "1": 88.84168148040771,
+        "8": 103.73895645141602,
+        "32": 108.14016342163086,
+        "128": 145.23680210113525,
+        "512": 350.71935653686523
+       },
+       "masked": {
+        "1": 116.5715217590332,
+        "8": 126.58712387084961,
+        "32": 135.94200134277344,
+        "128": 167.74575233459473,
+        "512": 369.92143630981445
+       }
+      }
+     }
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "afd": {
+       "median_us": 88.84168148040771,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 116.60128116607666,
+       "paired_change_pct": [
+        31.406620940103736,
+        31.38812092727661,
+        31.21264683035154
+       ],
+       "geomean_change_pct": 31.335767138271375,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 8,
+      "afd": {
+       "median_us": 103.6678409576416,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 127.20096111297607,
+       "paired_change_pct": [
+        23.864170851092005,
+        22.7005018508585,
+        22.024674433788107
+       ],
+       "geomean_change_pct": 22.86076980892966,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 32,
+      "afd": {
+       "median_us": 108.14016342163086,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 136.37919902801514,
+       "paired_change_pct": [
+        26.22542743558245,
+        26.072959989264334,
+        25.70907703620271
+       ],
+       "geomean_change_pct": 26.002301872091206,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 128,
+      "afd": {
+       "median_us": 145.32024383544922,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 168.0018424987793,
+       "paired_change_pct": [
+        15.780927490685738,
+        15.506462273106237,
+        15.498103722901746
+       ],
+       "geomean_change_pct": 15.595089854134315,
+       "repeats_faster": 0
+      }
+     },
+     {
+      "tokens": 512,
+      "afd": {
+       "median_us": 350.7935905456543,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "masked": {
+       "median_us": 369.92143630981445,
+       "paired_change_pct": [
+        5.397116180056383,
+        5.374036650362735,
+        5.475055600739509
+       ],
+       "geomean_change_pct": 5.415393951529346,
+       "repeats_faster": 0
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "afd": [
+      {
+       "repeat": 0,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ],
+     "masked": [
+      {
+       "repeat": 0,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 1,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      },
+      {
+       "repeat": 2,
+       "ranks": 12,
+       "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+      }
+     ]
+    },
+    "pods": [
+     "afdep-v21-s8c",
+     "afdep-v21-s8d",
+     "afdep-v21-s4e"
+    ],
+    "topology": "3 pods (soc) x 4 GPUs, InfiniBand, GIN"
+   }
+  },
+  "code_model": {
+   "cost_model": "Paths are relative to afdep/third_party/deepep_v2/ (impls/ = deep_ep/include/deep_ep/impls, common/ = deep_ep/include/deep_ep/common). Setup: T=1, F_d=1, N_up=4, C = 8 x SMs (192 at 24 SMs), S = number of Attention domains. Everything below was read from code; nothing was run.\n\nROUND-TRIP OPS PER FFN GPU. The FFN GPU's NIC is the only resource whose op count grows with S.\n\nDispatch, inbound:\n- C*S RDMA ATOMIC_FA finish tails, 8 B each, one per (channel, source).\n  - Every Attention channel always runs update_scaleout_tail(true) (hybrid_dispatch.cuh:383-395, 515-516).\n  - The rail peer is remote (handle.cuh:66-69), so red_add_rel becomes gin.signal VASignalAdd (handle.cuh:98-116), which posts an mlx5 ATOMIC_FA WQE (gin_gdaki_gin_gdaki.h:116-118; doca onesided.cuh:469-486).\n  - General T: sum over (c,s) of floor(n_cs/3)+1, from kScaleoutUpdateInterval=3 (:34, :385).\n- S payload WRITEs of 4096 + align32(12*topk+4) B each (4224 B at topk 8). All are on channel 0, because token t rides channel t mod C (:434). Each is aggregated, so it rides the doorbell of the following finish atomic (:501-508).\n- 2S count WRITEs (:214-226).\n\nCombine, outbound:\n- C*S ATOMIC_FA finish signals pack2(1,0), one per channel per Attention domain, each with its own WQE, doorbell and CQE (hybrid_combine.cuh:610-619).\n- S payload WRITEs of 4160 B, each with its own doorbell (:389-405, :594-595; metadata[1]=1 at hybrid_dispatch.cuh:678).\n\nZero: put_value, flushes and gin barrier signals (both entry barriers drop the scale-out half: hybrid_dispatch.cuh:103, hybrid_combine.cuh:116).\n\nTotals at C=192:\n- 2*C*S atomics: 384 at 4F:4A, 1152 at 4F:12A. Of these, 2*(C-1)*S (99.5%) carry no data.\n- Payload is at most 2*S*4.2 KB, about 0.5 us of port time.\n\nQPs (comm.cuh:71-80, kNumQPs = min(16*SMs+1, 129), afdep/deepep.py:386-388):\n- Dispatch: 128*S responder data QPs plus S on context 0.\n- Combine: 129*S requester QPs.\n- This stays constant from 16 to 48 SMs.\n\nPER ATTENTION GPU (independent of S):\n- Dispatch out: C*F_d atomics, k payloads, 2F_d counts.\n- Combine in: C*F_d atomics, at most F_d payloads. Collect waits on C*F_d words (afdep_hybrid_collect.cuh:40-60).\n- Doorbells: C*F_d + F_d.\n- Both halves of the dispatch exit barrier are off, there is no flush, and the kernel never waits for completion (hybrid_dispatch.cuh:100, 720-723).\n\nSystem-wide: 2*N_up*F_d*C*S atomics per round trip (1536 vs 4608).\n\nSender-side cost per post, omitted by every reader: GIN_GDAKI_QP_DEPTH defaults to 128 (gdaki_gin_host_gdaki.cc:55, 580, 585). Once a QP has passed 128 WQEs, every reserve polls the CQ entry 128 back (doca qp.cuh:77-81, 95-101). Each submit then takes a lock, does an atomic_max, and makes 2 MMIO doorbell writes plus a DBR update (qp.cuh:443-470).\n\nSERIAL WORK PER SOURCE (independent of C). At T=1, FFN channel 0 carries every source's token:\n- Dispatch: S forward chains, each waiting for full completion of the previous NVLink TMA store (cp.async.bulk.wait_group 0, ptx.cuh:96-99; afdep_ffn_hybrid_dispatch.cuh:595-690). The round-robin is readiness-blind (:552-561).\n- Combine expert side: the channel-0 scale-up warp sends up to 4S rows. Tails go out once per 3 linked-list rounds or at finish, so for S<=3 the forwarder waits for all rows (hybrid_combine.cuh:152-153, 181-365, 368).\n- Combine forward: S serial tail-wait, reduce, staging and put steps (:410-595).\n- The FFN exit NVLink barrier waits for the slowest of N_up*S sources (afdep_ffn_hybrid_dispatch.cuh:720-723).\n\nWork that does not scale with S:\n- An empty source costs the FFN one loop iteration with no memory traffic (:550-595).\n- All S tails are polled in one warp instruction (:575-581).\n- FFN combine posting runs S lanes in parallel on S different peer QPs, and each SM always has 8 warps.\n\nLATENCY FIT (an inference from the data). T(C,S) = a + b*C*S + d*S, assuming the S-independent per-channel term e is 0:\n- a = 59.8 us.\n- b = 56.4 ns per (channel, source) per round trip. That is about 28 ns per FFN-NIC finish atomic, or about 36 Mops/s through one NIC, counting both phases.\n- d = 5.7 us per source.\n- Basis: the S=3 sweep slope of 0.1693 us/ch (intercept 76.8) plus 4F:4A = 76.3.\n- 4F:12A at 16/24/32/48 SMs: predicted 98.5/109.3/120.1/141.8 vs measured 99.7/108.8/118.4/142.8 (residuals at most 1.7 us).\n- Per extra Attention domain at C=192: +10.8 us (b*C, i.e. 384 more FFN-NIC atomics) + 5.7 us (d) = 16.5 us, vs 16.2 measured.\n- Budget at 4F:12A: about 32 us is the 1152 finish atomics, about 17 us is serial per-source work, about 60 us is fixed. The fixed part includes 4 FFN grid syncs and 3 NVLink barriers (afdep_ffn_hybrid_dispatch.cuh:100-105, 720-723; hybrid_combine.cuh:114-117), notify, epilogues and wire latency.\n- Caveats:\n  - The split of b between dispatch-inbound and combine-outbound is unknown.\n  - The FFN combine kernel never waits on its RDMA (hybrid_combine.cuh:611, 623 with comm.cuh:37, :644). Its 46 us is therefore SM-side (entry barrier, channel-0 chain, posting); the outbound drain appears only in (collect end - FFN combine end).",
+   "predicted_slopes": "These predictions are for the running sweep: 4F:4A (S=1) vs 4F:8A (S=2) at 8/16/24/32/48 SMs, i.e. C = 64/128/192/256/384.\n\nH_A: per-op cost at the FFN NIC, cost proportional to C*S, e=0 (my primary hypothesis).\n- Latency slope per added channel: S=1 0.056 us/ch (0.45 us/SM), S=2 0.113 us/ch (0.90 us/SM), S=3 0.169 us/ch (1.35 us/SM, as measured). Ratio 1:2:3.\n- S=1 absolute: 69.1 / 72.7 / 76.3 / 79.9 / 87.1 us.\n- S=2 absolute: 78.3 / 85.6 / 92.8 / 100.0 / 114.5 us.\n- Gap S2-S1 = 5.7 + 0.056*C, which grows with C: 9.3 / 12.9 / 16.5 / 20.1 / 27.3 us.\n\nH_B: S-independent cost per channel plus a fixed cost per source. This covers SM-side or grid-sync costs, Attention-NIC C*F_d (hidden under max() anyway), and channel-0 chain only.\n- Equal slopes for S=1 and S=2: 0.169 us/ch (1.35 us/SM).\n- S=1: 54.6 / 65.5 / 76.3 / 87.1 / 108.8 us.\n- S=2 = S=1 + 16.2 at every C (constant gap).\n\nMixed model, solved from the sweep (s1 and s2 are the fitted slopes in us/ch):\n- b = s2 - s1 and e = 2*s1 - s2. Check that e + 3b is about 0.169, the S=3 slope.\n- d = gap(C) - b*C must come out independent of C. Extrapolating the gap to C=0 gives the per-source serial term. Under H_A it is about 5.7 us, which is the part that per-source rotation (fix 4) targets.\n\nH_QP: cost set by active QPs (128 or 129 data contexts per peer from 16 to 48 SMs, comm.cuh:79-80).\n- Predicts flat from 16 to 48 SMs and a drop only at 8 SMs, where 64 contexts are used.\n- Already contradicted by the S=3 slope of 0.17 us/ch at fixed QP count.\n\n48-SM upturn: S=3 shows 0.191 us/ch for 32 to 48 SMs vs about 0.146 for 16 to 32.\n- At 48 SMs each dispatch context carries up to 4 channels, vs at most 2 at 24 or 32 SMs (comm.cuh:79-80).\n- If the excess, about 5.7 us at S=3, is the same at S=1 and S=2, it is sender-side context sharing or grid-sync cost (an e-type term).\n- If it scales with S (about 1.9 us at S=1, 3.8 us at S=2), it is FFN-NIC.\n\nPer-kernel signatures under H_A:\n- FFN dispatch end minus Attention send end grows with C*S.\n- Collect end minus FFN combine end grows with C*S.\n- The FFN combine kernel time and the Attention send time (about 10 us) do not grow with C*S.\n- The FFN combine kernel time grows only by d-type chain work, about 2-3 us per source.\n\nSame-cluster cross-check:\n- 2F:1A and 1F:2A have mirror-image NIC op loads, yet measure 77.7 vs 85.4 us (docs/v2.1.md:531-532).\n- This supports a real per-source term on the FFN side beyond raw NIC op count.",
+   "diagnosis": "Most likely cause: the per-channel finish protocol concentrated on the FFN GPU. A second, smaller part comes from all sources' tokens serializing on channel 0.\n\n(1) About two thirds (about 10.8 of 16.2 us): each extra Attention domain adds 2*C finish ATOMIC_FA ops per round trip to each FFN GPU's NIC.\n- There are C inbound tails in dispatch (hybrid_dispatch.cuh:383-395, 515-516) and C outbound signals in combine (hybrid_combine.cuh:610-619).\n- At T=1, all but S of those 2*C*S ops come from channels that carry no data: the token loop starts at token_idx=channel_idx (:434), yet the finish and signal are sent unconditionally.\n\nWhy it must be the FFN NIC/PCIe path, by elimination:\n- Each Attention NIC handles 2*C*F_d ops, independent of S.\n- FFN SM-side work per empty source is one loop iteration (afdep_ffn_hybrid_dispatch.cuh:550-595).\n- Discovery is parallel across lanes (:575-581).\n- Combine posting runs S lanes in parallel on different peer QPs, with a constant 8 warps per SM.\n- So the only serial resource whose load is C*S is the FFN NIC: responder atomic RMW into HBM in dispatch, and requester WQE fetch, doorbells and CQEs in combine.\n- The fit gives about 28 ns per such op. This is consistent with both measured slopes, within 1.7 us.\n\n(2) About one third (about 5.7 us per source): a cost independent of C.\n- Best explained by channel 0 carrying every source's token at T=1. Dispatch forwards S tokens serially, waiting for full TMA completion between them (afdep_ffn_hybrid_dispatch.cuh:599). Combine's expert warp sends 4S rows, with tails only at finish for S<=3 (hybrid_combine.cuh:152-153, 359, 368), then S serial reduce+put steps (:410-595).\n- Possibly also straggler wait across the N_up*S sources behind the FFN exit NVLink barrier (afdep_ffn_hybrid_dispatch.cuh:720-723).\n\nConfidence:\n- High that the S-scaling is C*S control-op count at the FFN GPU (exact code counts, plus two independent slopes fitted by one model).\n- Medium on where inside the NIC/PCIe path, and on the dispatch vs combine split.\n- Low-medium on what makes up the 5.7 us per-source term.\n\nOpen issues:\n- NCCL_GIN_GDAKI_NIC_HANDLER defaults to AUTO (gdaki_gin_host_gdaki.cc:54, 586) and resolves host-side. If it fell back to the CPU proxy (doca qp.cuh:557-566, 585-586), doorbells would be serialized through a host thread. Set it to 2 (GPU_SM_DB) once to rule this out.\n- The 2-GPU-domain +14.2 us is cross-topology and should not be used as a slope.\n\nCheapest locator: timestamp each word match in afdep_hybrid_collect.cuh:43-48 and in the FFN tail poll (afdep_ffn_hybrid_dispatch.cuh:576-580).\n- A linear arrival ramp of about 28 ns per op over 191*S signals would directly confirm NIC drain.\n- A burst followed by one late channel-0 signal would mean the chain is critical.",
+   "forwarder_split_verdict": "No. It would not measurably reduce the T=1 cost per source.\n\n(0) There are no idle scale-out warps in the FFN role kernel.\n- It launches (notify + forward) x 32 threads with num_scaleout_warps = 0 (csrc/kernels/elastic/dispatch.hpp:425-428).\n- It statically asserts kNumScaleoutWarps == 0 (afdep_ffn_hybrid_dispatch.cuh:61).\n- They exist only in the shared shape, where they take an empty branch (hybrid_dispatch.cuh:372-373).\n- Re-adding them is resource-feasible: the launch bound is notify + 2*forward (afdep_ffn_hybrid_dispatch.cuh:40), and TMA slots 0..7 are reserved and unused (:109-110).\n\n(1) An empty source costs the forward warp one loop iteration with no memory traffic: ballot, ffs, about 3 shfl, a zero-trip slot loop (afdep_ffn_hybrid_dispatch.cuh:550-595). That is tens of ns.\n\n(2) Waiting is already parallel. Every source lane re-reads its tail in the same warp instruction (:575-581), and the exit test checks registers first (:558-561). So the channel's wait is the maximum over arrivals, which a split cannot shorten.\n\n(3) The dominant term is untouched. The same C*S atomics still land on the same FFN NIC (hybrid_dispatch.cuh:383-395, 516).\n\n(4) Only channel 0 moves data at T=1. Splitting its S=3 sources 2+1 saves at most one forward chain (about 1-2 us, dispatch only), but channel state has a single writer:\n- linked-list counters (afdep_ffn_hybrid_dispatch.cuh:544, 619-628, 666-667);\n- the metadata cursor (:672-688), which combine replays strictly in order (hybrid_combine.cuh:410-421) and which feeds the expert warps' channel_linked_list (:181-190);\n- end-of-list tails (:699-709);\n- tail clears (:713-714).\nTwo warps per channel would need merged counters plus changes to combine replay and the copy epilogue.\n\n(5) Source-side channel rotation (fix 4) gets the same parallelism, S tokens on S different FFN warps in both dispatch and combine, with no FFN change.",
+   "fixes": [
+    {
+     "name": "Early empty-channel combine release (FFN side)",
+     "mechanism": "After channel c's FFN forward loop ends and its tails are cleared (afdep_ffn_hybrid_dispatch.cuh:713-714), the warp already knows from stored_scaleout_tail_idx, per source, which (c,s) received nothing. Post the combine-N finish pack2(1,0) for those pairs early. The word is the same one the FFN combine writes today (get_scaleout_channel_signaled_tail_ptr(c, own idx) on Attention s), with the same value. Have the FFN combine skip them at hybrid_combine.cuh:610-619; channels whose metadata[0] == -1 are empty for every source (:411-421). Keep at least one combine-time signal per (FFN GPU, Attention GPU), on channel 0 or a designated channel when that source sent nothing. That preserves the release in afdep_roles.hpp:48-52, which requires the FFN dispatch-N kernel to be complete before the Attention starts dispatch N+1. Minimal variant: post them at FFN combine entry, before the entry barrier (hybrid_combine.cuh:114-117). Serving variant: post them after the FFN dispatch exit barrier, so they drain during expert GEMMs.",
+     "protocol_change": "role-path-internal (same words, values and writers; only timing and the posting gin context change; channels without puts need no same-QP ordering; Attention collect unchanged)",
+     "afd_specific_reason": "It relies on the directional ordering argument: the FFN never receives in combine, and Attention reuse is gated by FFN signals (afdep_roles.hpp:44-55). It also relies on the FFN role's NIC being idle between dispatch and combine. Union/Masked keeps a scale-out entry barrier in combine (hybrid_combine.cuh:116), and every rank both sends and receives there.",
+     "expected_effect": "Moves (C-1)*S outbound FFN-NIC atomics (573 at 4F:12A, 191 at 4F:4A) out of the post-barrier combine window. Saves up to about 16 us at 4F:12A and about 5.4 us at 4F:4A if the outbound drain sets the collect end; this also removes about 5.4 us from the per-source slope. Saves about 0 if the channel-0 chain sets the end, and it pairs with fix 4. In serving, the drain hides completely behind expert compute.",
+     "risk": "The reuse ordering must be re-proved, including zero-token sources and the designated channel, and checked with deferred-put fault injection. Dispatch-time placement may contend with inbound dispatch atomics on the same NIC. Needs an FFN copy of hybrid_combine (it is shared today)."
+    },
+    {
+     "name": "Skip the FFN per-SM zero-count notify reduction",
+     "mechanism": "FFN domains always have num_tokens == 0 (dispatch.hpp:421-424). Even so, every FFN CTA red_adds zero counts, and SM0 waits for all kNumSMs arrivals before it reads source counts (afdep_ffn_hybrid_dispatch.cuh:174-208). Skip both in the FFN role copy.",
+     "protocol_change": "role-path-internal",
+     "afd_specific_reason": "Only the directional FFN role originates no tokens.",
+     "expected_effect": "Small: at most 1-2 us, and likely 0 because the count path is usually hidden behind tail arrival. It removes a cross-CTA dependency from FFN notify.",
+     "risk": "Low. The reduction workspace must stay clean for any shared-shape fallback."
+    },
+    {
+     "name": "Smaller channel count for the role path, chosen by Attention:FFN ratio",
+     "mechanism": "Run directional hybrid at 8-16 transport SMs, or at 4 channels per SM (buffer.hpp:847), instead of 24 x 8. The T=1 cost is about b*C*S, so the best C shrinks as the S:F fan-in grows.",
+     "protocol_change": "none (launch parameter both roles already share; combine.hpp:214-221 requires matching channels)",
+     "afd_specific_reason": "Weak. The optimum depends on the AFD fan-in ratio, but Masked would also gain at T=1, so it is not AFD-specific by the strict test.",
+     "expected_effect": "Measured at 4F:12A: 24 to 16 SMs saves 9.1 us. The model predicts about 87.6 us at 8 SMs for S=3 (-21 us) and about 69 us for S=1 (-7 us). T=512 is flat from 16 to 48 SMs (479/493/463/483 us, docs/v2.1.md:719-721). It also frees 8-16 SMs.",
+     "risk": "8 SMs is untested at T>=512, and per-channel capacity ceil(maxT/C) grows. The setting is static per build, because per-exchange switching would need agreement between roles."
+    },
+    {
+     "name": "Rotate token-to-channel placement per Attention source",
+     "mechanism": "On the Attention send, iterate tokens with (t + r) mod C == channel_idx (hybrid_dispatch.cuh:433-434), with for example r = ((a*N_up + j)*8) mod C, where a = scaleout_rank_idx - F_d and j = scaleup rank. At small T, each of the N_up*S sources' tokens then lands on a different FFN channel and SM. FFN forwarders, linked lists, the copy epilogue (dispatch_copy_epilogue.cuh:219-230), combine replay, and reply placement by src_token_idx (hybrid_combine.cuh:572) assume no token-to-channel map. Per-(source, channel) occupancy stays at most ceil(T/C), which is at most kNumMaxTokensPerChannel.",
+     "protocol_change": "none (source-side placement only; every word and every receiver unchanged; gate on kAfdDirectional in the shared kernel)",
+     "afd_specific_reason": "Not AFD-specific by the strict test: a union-hybrid forwarder with the same fan-in also piles every source onto channel 0. The cost it removes scales with the S:F ratio.",
+     "expected_effect": "Parallelizes the per-source chain: S dispatch forwards, 4S expert rows and S reduce+put steps spread over S or N_up*S warps. Removes most of d, about 5.7 us per extra source (about 11 us at 4F:12A, 0 at 4F:4A), if d is the channel-0 chain rather than straggler wait. The sweep's gap-at-C=0 intercept tests this.",
+     "risk": "Low. Audit host code for any channel-0 assumption. No gain if d is launch skew."
+    },
+    {
+     "name": "Batch empty-channel signals per (CTA, peer)",
+     "mechanism": "Channels that carried no data post their signal for peer s on one gin context per CTA, with ncclGinOptFlagsAggregateRequests on all but the last, so there is one doorbell per CTA and peer instead of up to 8. Channels with puts keep their own QP for ordering. Applies to the FFN combine and to the Attention dispatch.",
+     "protocol_change": "role-path-internal (QP choice is invisible to the receiver for data-less channels)",
+     "afd_specific_reason": "Not AFD-specific.",
+     "expected_effect": "Cuts doorbells and touched QPs by up to 8x. That helps only if per-doorbell, WQE-fetch or QP-context cost dominates b; it does nothing for responder atomic-RMW cost.",
+     "risk": "Atomics on one QP execute in order at the responder and may serialize. Measure, or combine with fix 9."
+    },
+    {
+     "name": "Readiness-aware forward pick",
+     "mechanism": "In the FFN forward loop, pick the next lane among those already arrived or finished, not round-robin regardless of readiness (afdep_ffn_hybrid_dispatch.cuh:552-561).",
+     "protocol_change": "role-path-internal",
+     "afd_specific_reason": "Not AFD-specific (same loop in Masked hybrid).",
+     "expected_effect": "Less than 1 us at T=1, where only channel 0 has data. More at moderate T, where head-of-line blocking delays ready chunks.",
+     "risk": "Low. Must keep the per-lane old-tail bookkeeping."
+    },
+    {
+     "name": "Elide empty-channel combine signals on both roles",
+     "mechanism": "The FFN signals (c,s) in combine only if it received tokens from s on c; it knows this from its dispatch tails and metadata. It also sends one designated release signal per (FFN GPU, Attention GPU). The Attention collect waits only on channels where its own dispatch sent tokens to that FFN domain, plus the designated channel. It records this from its scale-out warps' final stored_scaleout_tail (hybrid_dispatch.cuh:382, 473) in local workspace. Both sides derive the same set from the same counters.",
+     "protocol_change": "wire-visible (signal set only; no new words or formats)",
+     "afd_specific_reason": "The release argument needs directional roles (afdep_roles.hpp:48-52), and only the FFN fans in S sources.",
+     "expected_effect": "Removes (C-1)*S outbound FFN-NIC atomics (573 at 4F:12A) and C-1 inbound atomics per Attention GPU. Saves up to about 16 us at 4F:12A and 5.4 us at 4F:4A if the combine drain is critical. Supersedes fix 1.",
+     "risk": "Re-prove reuse and staging ordering (the collect clears words with a plain store, afdep_hybrid_collect.cuh:47). Requires fault injection."
+    },
+    {
+     "name": "Count-first dispatch with channel occupancy",
+     "mechanism": "The Attention count put carries a C-bit map of non-empty channels per FFN domain, or the token count. Sources skip empty-channel finish atomics. Each FFN forward warp reads the S maps and waits only for sources that used its channel. The count put itself serves as the release, because it is issued after the source's combine-N reduce. Includes fix 7 for combine.",
+     "protocol_change": "wire-visible (new count field plus a reduced signal set)",
+     "afd_specific_reason": "Counts flow Attention to FFN only (hybrid_dispatch.cuh:213-215), and the FFN can gate forwarding on them because it never sends in dispatch. Masked would need all-to-all counts. Matches pending task #8.",
+     "expected_effect": "Removes about 2*(C-1)*S of the 2*C*S FFN-NIC atomics per round trip: about -32 us at 4F:12A (to about 77 us) and about -10.8 us at 4F:4A. The per-source slope falls to d (about 5.7 us), and to about 0 with fix 4.",
+     "risk": "Count arrival becomes critical. It is currently posted after the cross-SM notify reduction (hybrid_dispatch.cuh:186-226), so it must be published before payload. Re-prove ordering and run fault injection."
+    },
+    {
+     "name": "Inline RDMA WRITE for data-less finishes",
+     "mechanism": "Each tail or signal word has one writer per exchange. For channels with no payload, send put_value(pack2(1,0)) (handle.cuh:191-211), an inline WRITE, instead of red_add_rel/ATOMIC_FA (handle.cuh:98-116). The final word value is the same, and receivers are unchanged.",
+     "protocol_change": "wire-visible (opcode only; words, values and receivers unchanged)",
+     "afd_specific_reason": "Not AFD-specific.",
+     "expected_effect": "Large if b is responder atomic RMW over PCIe into HBM plus atomic ACKs: up to the dispatch share of b, about 16 us at 4F:12A. Near 0 if the cost is per WQE. It is also the cheapest experiment to locate the cost.",
+     "risk": "Do not use on channels with payload: there the atomic orders the tail behind the data (hybrid_dispatch.cuh:390-391). Within one exchange each word gets only one op kind (handle.cuh:95)."
+    }
+   ],
+   "refuted_claims": [
+    "Reader 2 (claim 9, per_exchange_ops 6) cites the wrong mechanism for the +0.8 us/node direct-path contrast (afdep_roles.cuh:39-61). afdep_signal_receivers is the one-NVLink-domain directed exit: it stores through get_sym_ptr with ptx::red_add_rel_sys (afdep_roles.cuh:56-59) and is static_asserted to kIsScaleupNVLink (combine.cuh:249-250). The cross-node direct Masked path that measured +0.8 us/node exits through comm::gpu_barrier (combine.cuh:262-264; dispatch.cuh:516) and then gin_barrier_wo_local_sync: flush every QP, grid sync, one SignalInc per world rank on context 0 (comm.cuh:143-158). Reader 3 cites this correctly.",
+    "Readers 2 (claim 9) and 3 (claim 8) derive a per-atomic cost from 1F:1A 71.2 us vs 1F:2A 85.4 us (+14.2). That is not a controlled S step. The rows come from different topologies and builds: 'Two nodes, 1F:1A (2 x H200 each)' at docs/v2.1.md:530 vs 'Three pods, 1F:2A' at :532, whose footnote at :535 marks a development digest. The only same-topology pair, 2F:1A 77.7 vs 1F:2A 85.4 (:531-532), has mirror-image NIC op loads, which argues for an FFN-side per-source term beyond op count.",
+    "Reader 3 (serial_costs c, claim 7) says tails are published every kNumScaleupUpdateInterval=3 rows. The granularity is wrong. update_tails() runs once per outer linked-list round (hybrid_combine.cuh:359), and each round sends one row to every active destination rank (inner loop :208-355). The counter (:152-153) counts rounds, so tails go out every 3 rounds of up to 4 rows (up to 12 rows), or at finish (:368). The conclusion for S<=3 (the forwarder waits for all rows) still holds.",
+    "Reader 1 (claim 12) and Reader 2 (claim 9) say the scaling tracks atomics arriving at the FFN NIC, or that the atomic count 'matches the measurements'. This is overstated. Half of the S-scaling atomics leave the FFN NIC in combine (hybrid_combine.cuh:610-619); they do not arrive there. The per-atomic cost implied by the S step (about 42 ns) does not match the channel sweep (24-32 ns), so pure op count leaves a C-independent per-source term of about 5.7 us. The SM sweep alone also cannot separate FFN-NIC cost from S-independent per-channel costs: Attention-NIC C*F_d atomics, grid syncs over more CTAs, and up to 4 channels per gin context at 48 SMs (comm.cuh:79-80).",
+    "Reader 2 (claim 8) says count puts are issued at the start of the Attention kernel. They are not. SM0 posts them only after every CTA's notify reduction has arrived (hybrid_dispatch.cuh:174-208, puts at :214-226). What goes out immediately is the empty-channel finish atomics (the loop is skipped at :433-434, and :516 runs at once). 'Likely hidden' remains plausible but unproven.",
+    "Readers 2 (claim 10) and 3 (claim 10) say the FFN could simply skip combine signals on empty channels. As stated, this is incomplete. Those signals are also the release for exchange N+1 cross-domain writes (afdep_roles.hpp:48-52), and the FFN clears tail[c][s] with a plain store (afdep_ffn_hybrid_dispatch.cuh:713-714). So each (FFN GPU, Attention GPU) pair must keep at least one signal sent after the FFN dispatch-N kernel completes, and the Attention collect must stop waiting on the skipped words. Otherwise a zero-token source's dispatch N+1 atomic can race the clear.",
+    "All readers state per-signal sender cost as reserve, WQE, ready, submit. They omit the SQ availability check. With GIN_GDAKI_QP_DEPTH=128 (gdaki_gin_host_gdaki.cc:55, 580, 585), every reserve after a QP's first 128 WQEs polls the CQ entry 128 back (doca_gpunetio_dev_verbs_qp.cuh:77-81, 95-101). That is steady state in a benchmark loop. Reader 1's SM-doorbell submit chain is also only conditional: the handler is AUTO (gdaki_gin_host_gdaki.cc:54, 586), resolved host-side, and on the CPU-proxy path a submit only fetch_maxes a proxy counter (qp.cuh:557-566, 585-586)."
+   ],
+   "_note": "read-only code analysis (workflow wf_930aa5c2-bdd, 3 readers + skeptical synthesizer); predictions, not measurements"
+  }
+ },
  "cross_node_4f12a": {
   "native_source_sha256": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
   "layout": "statler pods s8b (FFN domain), s8c, s8d, s4e; 4 GPUs per domain (XNPROC=4), H100, 8 x 400 Gb/s NDR per node",
