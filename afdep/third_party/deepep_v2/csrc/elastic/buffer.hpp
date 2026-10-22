@@ -195,8 +195,13 @@ public:
     }
 
     // afdEP sparse directional hybrid (afdep_suites.hpp): (stagger bound, sparse dispatch, sparse
-    // combine) as this rank resolves them, which must agree on every rank.
+    // combine) as this rank resolves them, which must agree on every rank. Only the directional
+    // hybrid reads them, so any other topology (one NVLink domain, mixed-role domains) reports
+    // them off and never rejects ranks that set them differently.
     std::tuple<int, bool, bool> get_afd_sparse_hybrid_config() const {
+        if (afd_ffn_ranks <= 0 or afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
+                                                           nccl_context->num_scaleup_ranks) == 0)
+            return {0, false, false};
         return {afdep_hybrid_stagger_max_tokens(), afdep_hybrid_sparse_dispatch(), afdep_hybrid_sparse_combine()};
     }
 
