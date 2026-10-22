@@ -1,7 +1,7 @@
 {
  "date": "2026-10-22",
  "change": "opt-in sparse directional hybrid across NVLink domains: AFDEP_HYBRID_STAGGER, AFDEP_HYBRID_SPARSE_DISPATCH, AFDEP_HYBRID_SPARSE_COMBINE (docs/v2.1.md section 17); off by default",
- "decision": "opt-in until reviewed; recommended setting: all three switches. Communication-only evidence, no serving claim. Open: whether the same idea would speed up Masked (union hybrid) as well (unmeasured), and two or more FFN domains (unscreened).",
+ "decision": "opt-in until reviewed; recommended setting: all three switches. Communication-only evidence, no serving claim. Open: whether the same idea would speed up Masked (union hybrid) as well (unmeasured).",
  "native_source_sha256": {
   "control_v2_1": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
   "stagger_only": "e551ab70f1ec7398fa1667f82150b72a2578e8c1ba5cb6acb79472ac1f64a2b7",
@@ -1492,6 +1492,391 @@
      "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663"
     ]
    }
+  },
+  "two_ffn_domains": {
+   "arms": {
+    "v21": {
+     "_label": "cf"
+    },
+    "sparse": {
+     "_label": "xd",
+     "_env": {
+      "AFDEP_HYBRID_STAGGER": "1",
+      "AFDEP_HYBRID_SPARSE_DISPATCH": "1",
+      "AFDEP_HYBRID_SPARSE_COMBINE": "1"
+     }
+    }
+   },
+   "table": [
+    {
+     "tokens": 1,
+     "v21": {
+      "median_us": 207.86468029022217,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 68.46835970878601,
+      "paired_change_pct": [
+       -67.04622744277302,
+       -67.0759835682158
+      ],
+      "geomean_change_pct": -67.0611088656066,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 8,
+     "v21": {
+      "median_us": 220.96491813659668,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 78.99164080619812,
+      "paired_change_pct": [
+       -64.25518792279118,
+       -64.24781000305724
+      ],
+      "geomean_change_pct": -64.25149915325981,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 16,
+     "v21": {
+      "median_us": 224.3644380569458,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 90.94912052154541,
+      "paired_change_pct": [
+       -59.48524043588029,
+       -59.4420261686304
+      ],
+      "geomean_change_pct": -59.46363906089005,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 32,
+     "v21": {
+      "median_us": 239.97948169708252,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 127.15180158615112,
+      "paired_change_pct": [
+       -47.22571499226424,
+       -46.804428531950556
+      ],
+      "geomean_change_pct": -47.01549047311829,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 64,
+     "v21": {
+      "median_us": 288.72931957244873,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 209.03496265411377,
+      "paired_change_pct": [
+       -27.65501362885128,
+       -27.54834724582316
+      ],
+      "geomean_change_pct": -27.601700081644708,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 128,
+     "v21": {
+      "median_us": 403.46635818481445,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 368.8234519958496,
+      "paired_change_pct": [
+       -8.527028576271622,
+       -8.645554670460243
+      ],
+      "geomean_change_pct": -8.586310833335542,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 256,
+     "v21": {
+      "median_us": 615.0772094726562,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 604.6146392822266,
+      "paired_change_pct": [
+       -1.78966118848074,
+       -1.6122643284527616
+      ],
+      "geomean_change_pct": -1.7010027762192625,
+      "repeats_faster": 2
+     }
+    }
+   ],
+   "passthrough": [
+    "--payload",
+    "fp8",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--experts",
+    "128",
+    "--top-k",
+    "8",
+    "--tokens",
+    "1",
+    "8",
+    "16",
+    "32",
+    "64",
+    "128",
+    "256",
+    "--capacity",
+    "2048",
+    "--hybrid",
+    "on",
+    "--ffn-ranks",
+    "4",
+    "--attention-ranks",
+    "20"
+   ]
+  },
+  "three_attention_domains": {
+   "arms": {
+    "v21": {
+     "_label": "cf"
+    },
+    "sparse": {
+     "_label": "xd",
+     "_env": {
+      "AFDEP_HYBRID_STAGGER": "1",
+      "AFDEP_HYBRID_SPARSE_DISPATCH": "1",
+      "AFDEP_HYBRID_SPARSE_COMBINE": "1"
+     }
+    }
+   },
+   "table": [
+    {
+     "tokens": 1,
+     "v21": {
+      "median_us": 99.68000173568726,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 65.90444087982178,
+      "paired_change_pct": [
+       -34.22563071123894,
+       -33.54259458383133
+      ],
+      "geomean_change_pct": -33.884994700023,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 8,
+     "v21": {
+      "median_us": 115.73772192001343,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 74.44916129112244,
+      "paired_change_pct": [
+       -35.87319450229381,
+       -35.47650172910549
+      ],
+      "geomean_change_pct": -35.67515391663005,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 16,
+     "v21": {
+      "median_us": 118.83692264556885,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 76.97927951812744,
+      "paired_change_pct": [
+       -35.48096185392949,
+       -34.964262491426354
+      ],
+      "geomean_change_pct": -35.22312735880582,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 32,
+     "v21": {
+      "median_us": 121.21760129928589,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 85.47927856445312,
+      "paired_change_pct": [
+       -29.457238964615186,
+       -29.508086391085484
+      ],
+      "geomean_change_pct": -29.48266726087375,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 64,
+     "v21": {
+      "median_us": 132.1267604827881,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 103.23364019393921,
+      "paired_change_pct": [
+       -21.904332200465284,
+       -21.831275299254916
+      ],
+      "geomean_change_pct": -21.867812288771336,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 128,
+     "v21": {
+      "median_us": 166.7775583267212,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 156.82976007461548,
+      "paired_change_pct": [
+       -6.134456561360069,
+       -5.79584371998394
+      ],
+      "geomean_change_pct": -5.965302555906138,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 256,
+     "v21": {
+      "median_us": 244.3905210494995,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "sparse": {
+      "median_us": 235.56015968322754,
+      "paired_change_pct": [
+       -3.641881040303341,
+       -3.584599546191325
+      ],
+      "geomean_change_pct": -3.613244548460459,
+      "repeats_faster": 2
+     }
+    }
+   ],
+   "passthrough": [
+    "--payload",
+    "fp8",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--experts",
+    "128",
+    "--top-k",
+    "8",
+    "--tokens",
+    "1",
+    "8",
+    "16",
+    "32",
+    "64",
+    "128",
+    "256",
+    "--capacity",
+    "2048",
+    "--hybrid",
+    "on",
+    "--ffn-ranks",
+    "2",
+    "--attention-ranks",
+    "6"
+   ],
+   "pods": 4
   }
  },
  "gpu_suite": {
@@ -1503,11 +1888,13 @@
   ],
   "passed_200944ce": [
    "all three, capacity 8",
-   "all three, capacity 64"
+   "all three, capacity 64",
+   "two FFN domains (--ffn-ranks 4), all three, capacity 8",
+   "two FFN domains (--ffn-ranks 4), all three, capacity 64"
   ],
   "rejected_200944ce": "all three with FFN-only AFDEP_SHARED_HYBRID_FORWARD=1: ValueError 'Every DeepEP rank must use the same sparse hybrid configuration' on all 24 ranks (no hang)",
   "negative_control_f92c479c": "collect waiting only for channel 0: fails with 'Tensor-likes are not equal' on Attention ranks (the comm screen's own check cannot see this, since every exchange returns the same values)"
  },
  "unit": "tests/unit 41/41 on the final tree; Ruff check and format clean",
- "scope": "Directional hybrid only (one role per NVLink domain, afd_ffn_scaleout_ranks > 0). Not screened: two or more FFN domains, union hybrid, BF16, other hidden sizes. Shared kernels and every default unchanged."
+ "scope": "Directional hybrid only (one role per NVLink domain, afd_ffn_scaleout_ranks > 0). Not screened: union hybrid, BF16, other hidden sizes. Shared kernels and every default unchanged."
 }
