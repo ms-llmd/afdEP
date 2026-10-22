@@ -50,6 +50,12 @@ class ElasticBuffer {
     // Zero preserves the original symmetric DeepEP allocation/epilogues.
     int afd_ffn_ranks;
 
+    // afdEP count-first (afdep_suites.hpp), latched at construction: the minimum bucket (0: off)
+    // and the raw screen arm ("source": sources only, against the payload-first FFN receive).
+    int afd_cf_min_bucket = 0;
+    std::string afd_cf_arm = "full";
+    bool afd_cf_source_only = false;
+
     // Timeout settings
     int num_cpu_timeout_secs;
     int64_t num_gpu_timeout_cycles;
@@ -102,12 +108,26 @@ public:
         prefer_overlap_with_compute(prefer_overlap_with_compute),
         afd_ffn_ranks(afd_ffn_ranks) {
         EP_HOST_ASSERT(afd_ffn_ranks >= 0 and afd_ffn_ranks < num_ranks);
+
         // Init NCCL runtime
         static constexpr int kBufferAlignment = 16;
         this->nccl_context = std::make_shared<nccl::NCCLSymmetricMemoryContext>(
             nccl_comm, num_ranks, rank_idx,
             layout::WorkspaceLayout::get_num_bytes() + num_buffer_bytes, kBufferAlignment,
             allow_hybrid_mode, sl_idx, num_allocated_qps);
+
+        // afdEP count-first: the role path of one NVLink domain with every v2.1 role protocol;
+        // afdep/deepep.py checks that every rank latched the same configuration and a valid arm.
+        // Nothing is checked here: one rank throwing would leave its peers in the collective
+        // window registration above. Generic buffers never read the screen arm.
+        if (afd_ffn_ranks > 0) {
+            afd_cf_arm = afdep_count_first_arm();
+            afd_cf_source_only = afd_cf_arm == "source";
+        }
+        if (afd_ffn_ranks > 0 and nccl_context->num_scaleout_ranks == 1 and nccl_context->is_scaleup_nvlink and
+            not deterministic and afdep_skip_entry_barriers() and afdep_directional_notify() and
+            afdep_directed_exit() and afdep_per_cta_exit() and afdep_role_buffers())
+            afd_cf_min_bucket = afdep_count_first_min_bucket();
 
         // Timeout
         this->num_cpu_timeout_secs = num_cpu_timeout_secs;
@@ -167,6 +187,11 @@ public:
 
     std::tuple<int, int> get_logical_domain_size() const {
         return {nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks};
+    }
+
+    // afdEP count-first: (minimum bucket, arm), which must agree on every rank.
+    std::tuple<int, std::string> get_afd_count_first_config() const {
+        return {afd_cf_min_bucket, afd_cf_arm};
     }
 
     // ReSharper disable once CppMemberFunctionMayBeStatic
@@ -974,6 +999,20 @@ public:
                        nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks,
                        nccl_context->is_scaleup_nvlink, afd_role_buffers ? afd_ffn_ranks : 0) <= num_buffer_bytes);
 
+        // afdEP count-first (afdep_suites.hpp): one decision per exchange from the constructor latch
+        // and the bucket, which every rank passes identically. The environment is re-read on every
+        // call, so a control flipped after construction fails here instead of splitting the ranks.
+        if (afd_cf_min_bucket > 0)
+            EP_HOST_ASSERT(afdep_count_first_min_bucket() > 0 and afdep_skip_entry_barriers() and
+                           afdep_directional_notify() and afdep_directed_exit() and afdep_per_cta_exit() and
+                           afdep_role_buffers() and afdep_count_first_arm_valid(afd_cf_arm) and
+                           afdep_count_first_arm() == afd_cf_arm);
+        const int afd_cf_sources = nccl_context->num_ranks - afd_ffn_ranks;
+        const bool afd_count_first = afd_cf_min_bucket > 0 and afd_direct_nvlink and
+            num_max_tokens_per_rank >= afd_cf_min_bucket and afd_ffn_ranks <= kAfdepCountFirstMaxFfnRanks and
+            afd_cf_sources <= kAfdepCountFirstMaxSources and
+            afdep_count_first_flags_fit(afd_cf_sources, num_max_tokens_per_rank);
+
         // Ready and clean host workspace for this round
         const auto host_workspace_layout = layout::WorkspaceLayout(
             host_workspace,
@@ -992,11 +1031,13 @@ public:
         // Do dispatch into the buffers (with SM limitation)
         EP_HOST_ASSERT(num_sms <= jit::device_runtime->get_num_sms());
         // afdEP role suites (afdep_suites.hpp): in one NVLink domain the FFN receive triggers its
-        // copy epilogue after the arrival wait; in directional hybrid each role launches only
-        // the warp classes it uses.
+        // copy epilogue after the arrival wait (or, count-first, streams it behind the payload);
+        // in directional hybrid each role launches only the warp classes it uses.
         auto afd_dispatch_shape = AfdLaunchShape::kShared;
-        if (afd_direct_nvlink and not afd_source and afdep_skip_entry_barriers() and afdep_directional_notify() and
-            afdep_directed_exit() and afdep_ffn_receive_kernels())
+        if (afd_count_first and (afd_source or not afd_cf_source_only))
+            afd_dispatch_shape = AfdLaunchShape::kCountFirst;
+        else if (afd_direct_nvlink and not afd_source and afdep_skip_entry_barriers() and afdep_directional_notify() and
+                 afdep_directed_exit() and afdep_ffn_receive_kernels())
             afd_dispatch_shape = AfdLaunchShape::kRoleKernel;
         else if (afd_ffn_scaleout_ranks > 0 and afd_source and afdep_hybrid_send_blocks())
             afd_dispatch_shape = AfdLaunchShape::kSendBlock;
@@ -1034,7 +1075,8 @@ public:
                         afd_ffn_scaleout_ranks > 0 and afdep_skip_attention_entry_sync(),
                         afd_source and afd_single_ffn_collect_rows(afd_direct_nvlink, num_topk) ?
                             get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk).get_num_bytes<false>() : 0,
-                        afd_dispatch_shape);
+                        afd_dispatch_shape,
+                        afdep_count_first_ungated_tokens(), afdep_count_first_thread_count());
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
@@ -1194,7 +1236,9 @@ public:
                                       jit::device_runtime->get_num_smem_bytes(),
                                       num_channels,
                                       do_expand, cached_mode, afd_role_aware and not do_cpu_sync,
-                                      comm_stream, afd_role_buffers ? afd_ffn_ranks : 0);
+                                      comm_stream, afd_role_buffers ? afd_ffn_ranks : 0,
+                                      afd_count_first and not afd_cf_source_only, num_gpu_timeout_cycles,
+                                      afdep_count_first_unit_min_rows(), afdep_count_first_epilogue_sms());
         }
 
         // Stream control
@@ -1459,6 +1503,7 @@ static void register_apis(pybind11::module_& m) {
         .def("get_comm_stream", &ElasticBuffer::get_comm_stream)
         .def("get_physical_domain_size", &ElasticBuffer::get_physical_domain_size)
         .def("get_logical_domain_size", &ElasticBuffer::get_logical_domain_size)
+        .def("get_afd_count_first_config", &ElasticBuffer::get_afd_count_first_config)
         .def("barrier", &ElasticBuffer::barrier)
         .def("engram_write", &ElasticBuffer::engram_write)
         .def("engram_fetch", &ElasticBuffer::engram_fetch)

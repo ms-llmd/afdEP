@@ -364,6 +364,22 @@ class ElasticBuffer:
         dist.barrier(group=group)
         self._runtime.barrier(True, False)
         torch.cuda.synchronize(self.device)
+        # Count-first dispatch changes the wire protocol (afdep_suites.hpp), so every
+        # rank must latch the same configuration: mixed role-kernel runs set
+        # AFDEP_PAYLOAD_FIRST=1 on every rank. Checked once every workspace is ready,
+        # so the collective close is safe.
+        count_first = self._gather(tuple(self._runtime.get_afd_count_first_config()))
+        if any(value != count_first[0] for value in count_first):
+            self.close()
+            raise ValueError(
+                "Every DeepEP rank must use the same count-first configuration"
+            )
+        # The native constructor latches the screen arm unchecked (one rank throwing
+        # there would leave its peers in the collective window registration); every
+        # rank sees the same gathered value, so every rank rejects it here together.
+        if count_first[0][1] not in ("full", "source"):
+            self.close()
+            raise ValueError("AFDEP_COUNT_FIRST_ARM must be full or source")
 
     def _gather(self, value) -> list:
         values = [None] * self._group.size()

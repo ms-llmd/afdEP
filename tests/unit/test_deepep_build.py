@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -114,6 +115,8 @@ def test_role_suite_shapes_are_host_launch_overrides():
     controls = ("ROLE_KERNELS", "FFN_RECEIVE", "HYBRID_SEND", "HYBRID_FORWARD")
     for control in (*controls, "HYBRID_COLLECT"):
         assert f'"AFDEP_SHARED_{control}", 0) == 0' in suites
+    # Count-first dispatch keeps the payload-first kernels as its control.
+    assert '"AFDEP_PAYLOAD_FIRST", 0) == 0' in suites
     dispatch = (elastic / "dispatch.hpp").read_text()
     generate = dispatch.index("const auto code = DispatchRuntime::generate(args);")
     assert generate < dispatch.index("shaped_args.launch_args = jit::LaunchArgs(")
@@ -128,6 +131,51 @@ def test_ffn_role_kernels_are_the_generated_copies():
     )
     direct = (rk.IMPLS / "dispatch.cuh").read_text()
     assert (rk.IMPLS / rk.FFN_DISPATCH).read_text() == rk.ffn_dispatch(direct)
+    assert (rk.IMPLS / rk.SOURCE_DISPATCH).read_text() == rk.source_dispatch(direct)
+    stream = (rk.IMPLS / rk.FFN_STREAM_DISPATCH).read_text()
+    assert stream == rk.ffn_stream_dispatch(direct)
+    epilogue = (rk.IMPLS / "dispatch_copy_epilogue.cuh").read_text()
+    assert (rk.IMPLS / rk.FFN_STREAM_EPILOGUE).read_text() == rk.ffn_stream_epilogue(
+        epilogue
+    )
+
+
+def test_count_first_kernels_stay_out_of_shared_runtimes():
+    """Each count-first copy has one runtime; no shared runtime includes the header."""
+    from tests import role_kernels as rk
+
+    dispatch = (VENDOR_ROOT / "csrc/kernels/elastic/dispatch.hpp").read_text()
+    for name in (rk.SOURCE_DISPATCH, rk.FFN_STREAM_DISPATCH, rk.FFN_STREAM_EPILOGUE):
+        assert dispatch.count(f"#include <deep_ep/impls/{name}>") == 1, name
+    assert "afdep_count_first.cuh" not in dispatch
+    for name in (
+        "dispatch.cuh",
+        "dispatch_copy_epilogue.cuh",
+        "afdep_ffn_dispatch.cuh",
+    ):
+        assert "afdep_count_first.cuh" not in (rk.IMPLS / name).read_text(), name
+
+
+def test_count_first_host_flag_geometry_mirrors_the_header():
+    """The host's flag bound uses the device header's wire constants."""
+
+    def constant(text, name):
+        return int(re.search(rf"\b{name} = (\d+);", text).group(1))
+
+    impls = VENDOR_ROOT / "deep_ep/include/deep_ep/impls"
+    header = (impls / "afdep_count_first.cuh").read_text()
+    suites = (VENDOR_ROOT / "csrc/kernels/elastic/afdep_suites.hpp").read_text()
+    assert "kAfdCfFlags = kAfdCfBase + 128;" in header
+    flags = constant(header, "kAfdCfBase") + 128
+    assert constant(suites, "kAfdepCountFirstFlagBase") == flags
+    for host, device in (
+        ("kAfdepCountFirstFlagStride", "kAfdepFlagStride"),
+        ("kAfdepCountFirstMaxSources", "kAfdCfMaxSources"),
+        ("kAfdepCountFirstMaxFfnRanks", "kAfdCfMaxFfnRanks"),
+    ):
+        assert constant(suites, host) == constant(header, device), host
+    # kNumMaxRanks x kNumMaxChannels int64 words (1024 x 1024).
+    assert "kAfdepCountFirstRegionWords = 1 << 20;" in suites
 
 
 def test_runtime_header_contents_invalidate_build(tmp_path):

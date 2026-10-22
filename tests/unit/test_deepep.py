@@ -74,6 +74,7 @@ def runtime(monkeypatch):
     group = SimpleNamespace(rank=lambda: 2, size=lambda: 4)
     native = Mock()
     native.get_logical_domain_size.return_value = (1, 4)
+    native.get_afd_count_first_config.return_value = (0, "full")
     native.combine.return_value = (Tensor((2, 256)), None, None)
 
     def dispatch(*args):
@@ -176,6 +177,31 @@ def test_role_aware_requires_explicit_geometry_and_preserves_generic_ctor(runtim
     assert runtime.module.ElasticBuffer.call_args.args[-1] == 2
     assert runtime.module.calculate_elastic_buffer_size.call_args.args[-1] == 2
     roles.close()
+
+
+def test_count_first_configuration_must_agree(runtime):
+    gather = runtime.dist.all_gather_object
+
+    def split(values, value, group):
+        gather(values, value, group)
+        if isinstance(value, tuple):
+            values[1] = (1, "full")
+
+    runtime.dist.all_gather_object = split
+    with pytest.raises(ValueError, match="same count-first configuration"):
+        elastic(runtime, role_aware=True, ffn_ranks=2)
+    runtime.native.destroy.assert_called_once()
+    runtime.module.destroy_nccl_comm.assert_called_once_with(17)
+
+
+def test_count_first_arm_is_rejected_collectively(runtime):
+    runtime.native.get_afd_count_first_config.return_value = (1, "both")
+    with pytest.raises(
+        ValueError, match="AFDEP_COUNT_FIRST_ARM must be full or source"
+    ):
+        elastic(runtime, role_aware=True, ffn_ranks=2)
+    runtime.native.destroy.assert_called_once()
+    runtime.module.destroy_nccl_comm.assert_called_once_with(17)
 
 
 def test_role_aware_source_owns_no_dummy_payload_arena(runtime):

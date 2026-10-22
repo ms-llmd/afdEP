@@ -4,7 +4,7 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "0206eb3f9118f93059333bb77dbef360709f0d4d5caa54cbcd3e8d56ddd25588"
+      "sha256": "86f3a2777982458c37a9f531ca15c184353d188422487a543cfec8e2fc2976d4"
     },
     "csrc/kernels/elastic/combine.hpp": {
       "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
@@ -12,7 +12,7 @@
     },
     "csrc/kernels/elastic/dispatch.hpp": {
       "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
-      "sha256": "0dff473289d1ba2973f766e9b73fdcfb7b33c8737b5438ab87412f9de88d52f3"
+      "sha256": "1f87dd0f69ab50aeb442375ca768343558b9bb7921dd7fd4b860935a8fdf96da"
     },
     "csrc/python_api.cpp": {
       "upstream_sha256": "64b6041b75c1027c9f7f16b236e1fb037f0838f5338020804035e8e39d5710ba",
@@ -44,7 +44,10 @@
       "sha256": "af22ad6a205d994645700bf5d3ac3f921cf51b5bf426a7190a0b8f3600b3eb92"
     },
     "csrc/kernels/elastic/afdep_suites.hpp": {
-      "sha256": "5b3c9527647f47da1aac1108e52018d706c4aa76fd449dc780b4effcd4e0f3b8"
+      "sha256": "dbaa59f65cd1e0cd4bb21f9f3d356c23baf2f6534385003b6f77897db63d9fc3"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_count_first.cuh": {
+      "sha256": "a7779f4bf9c270f2b6af935ec012b104a1968d4e71c989dad1c054a60a317694"
     },
     "deep_ep/include/deep_ep/impls/afdep_ffn_dispatch.cuh": {
       "sha256": "06761dee7ff8559fc6587d3fad597314138cc0a277c2b64c84eef4199fee3e90"
@@ -52,11 +55,20 @@
     "deep_ep/include/deep_ep/impls/afdep_ffn_hybrid_dispatch.cuh": {
       "sha256": "2e6002f532be2269a7878c1d67d7a74d6eaf5d3eb5493f40270863e01550c1e5"
     },
+    "deep_ep/include/deep_ep/impls/afdep_ffn_stream_dispatch.cuh": {
+      "sha256": "882e306502ed48236af76bf8f0de02a25e2795f8373314b086addc4fb1840c80"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_ffn_stream_epilogue.cuh": {
+      "sha256": "40f9f963bcbca7b914f929a5a21895269a6192c658fc61a1bccb0d1d244d9ee7"
+    },
     "deep_ep/include/deep_ep/impls/afdep_hybrid_collect.cuh": {
       "sha256": "92b0b5a514e3f5e409934c7851ccd5faf07357453c402985f651e7c9692309ce"
     },
     "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
       "sha256": "4f7ed0d81d7215753c99dfe1364e4ba6e707101cb5ede0d1b139e8b1923e937a"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_source_dispatch.cuh": {
+      "sha256": "11f7cb52282262888876c2e33b6c007e649a82f15ce19d7e6523d2536e558d8a"
     }
   },
   "scope": [

@@ -1,6 +1,10 @@
 // Copyright (c) 2026 afdEP contributors. SPDX-License-Identifier: MIT
 #pragma once
 
+#include <algorithm>
+#include <climits>
+#include <string>
+
 #include "../../utils/system.hpp"
 
 namespace deep_ep::elastic {
@@ -12,8 +16,9 @@ namespace deep_ep::elastic {
 // launch arguments (same code, include hash, cache key and cubin; kSendBlock only
 // launches fewer threads). kRoleKernel runs a separate kernel: the FFN dispatch is a
 // generated copy of hybrid_dispatch.cuh (the edits in tests/role_kernels.py) and the
-// Attention collect is new code (afdep_hybrid_collect.cuh). Shapes are invisible on
-// the wire: no rank reads a peer's grid, and every protocol word is unchanged.
+// Attention collect is new code (afdep_hybrid_collect.cuh). These shapes are invisible
+// on the wire: no rank reads a peer's grid, and every protocol word is unchanged.
+// kCountFirst is not: its count words carry an epoch and its sources write row flags.
 enum class AfdLaunchShape {
     // v2.1's launch, identical on every role.
     kShared,
@@ -22,6 +27,10 @@ enum class AfdLaunchShape {
     // A role kernel of its own: the FFN dispatch receive (one NVLink domain and directional
     // hybrid) and the directional hybrid Attention combine.
     kRoleKernel,
+    // Count-first dispatch of one NVLink domain (afdep_count_first.cuh): visible on the wire,
+    // as the high half of each source's rank count word carries its epoch and the sources
+    // write per-row flags into the FFN workspace.
+    kCountFirst,
 };
 
 // AFDEP_SHARED_ROLE_KERNELS=1 launches every role kernel in v2.1's shared shape:
@@ -51,6 +60,79 @@ static bool afdep_role_suites() {
 // AFDEP_ALL_RANK_EXIT imply it.
 static bool afdep_ffn_receive_kernels() {
     return afdep_role_suites() and deep_ep::get_env<int>("AFDEP_SHARED_FFN_RECEIVE", 0) == 0;
+}
+
+// Count-first dispatch (one NVLink domain). Payload-first, the FFN copy epilogue starts only
+// after every source's payload has arrived. Count-first issues each source's counts before
+// its payload (a source-local gate) and tags the rank count word with the source's epoch; the
+// source lane that stored a row then releases that row's flag, set to the epoch, in the FFN
+// workspace. The FFN receive records the epochs, triggers the copy epilogue after the count
+// wait and releases a prefix-ready word P after the prefix sums. The epilogue waits on P
+// instead of dispatch completion, and its CTAs claim units of rows that each wait for their
+// own flag, so the copy streams behind the ingress. Flags are never cleared: epochs strictly
+// grow, so only this exchange's write of a row matches.
+// The decision is uniform per exchange: the Buffer latches the minimum bucket at construction
+// (afdep/deepep.py checks it agrees on every rank) and every rank passes the same bucket.
+// Below it every kernel, cubin and wire word is the payload-first one, so small buckets pay
+// nothing. AFDEP_COUNT_FIRST_MIN_BUCKET sets it (0, the default here, is off until the screen
+// picks one). AFDEP_PAYLOAD_FIRST=1 keeps the payload-first kernels; so do
+// AFDEP_SHARED_ROLE_KERNELS, AFDEP_SHARED_FFN_RECEIVE and every control that implies it.
+constexpr int kAfdepCountFirstDefaultMinBucket = 0;
+static int afdep_count_first_min_bucket() {
+    return afdep_ffn_receive_kernels() and deep_ep::get_env<int>("AFDEP_PAYLOAD_FIRST", 0) == 0 ?
+        std::max(0, deep_ep::get_env<int>("AFDEP_COUNT_FIRST_MIN_BUCKET", kAfdepCountFirstDefaultMinBucket)) : 0;
+}
+
+// Flag geometry, mirrored from afdep_count_first.cuh (pinned by a unit test): flags start at
+// int64 word kAfdepCountFirstFlagBase of the directed-exit region, one per source slot.
+constexpr int kAfdepCountFirstMaxSources = 32;
+constexpr int kAfdepCountFirstMaxFfnRanks = 64;
+constexpr int kAfdepCountFirstFlagBase = 4238;
+constexpr int kAfdepCountFirstFlagStride = 1;
+constexpr int64_t kAfdepCountFirstRegionWords = 1 << 20;
+// The copy epilogue keeps its double-buffered unit claim after the TMA buffers.
+constexpr int kAfdepCountFirstClaimBytes = 128;
+static bool afdep_count_first_flags_fit(const int num_sources, const int bucket) {
+    return kAfdepCountFirstFlagBase + static_cast<int64_t>(num_sources) * bucket * kAfdepCountFirstFlagStride <=
+        kAfdepCountFirstRegionWords;
+}
+
+// Screen arm, latched with the minimum bucket: "source" runs count-first sources against the
+// payload-first FFN receive (the count low halves decode unchanged and the flags go unread),
+// isolating the sender's cost. The Buffer latches the raw value unchecked, because a throw in
+// one rank's constructor would leave its peers in the collective window registration;
+// afdep/deepep.py rejects any other value on every rank after its agreement gather, and every
+// dispatch asserts it while the minimum bucket is on.
+static std::string afdep_count_first_arm() {
+    return deep_ep::get_env<std::string>("AFDEP_COUNT_FIRST_ARM", "full");
+}
+
+static bool afdep_count_first_arm_valid(const std::string& arm) {
+    return arm == "full" or arm == "source";
+}
+
+// Screen knobs, read per exchange. None reaches the wire: the gate and counting loop are
+// source-local, the unit size and epilogue grid FFN-local.
+// Tokens a source stores before the gate (AFDEP_COUNT_FIRST_UNGATE=1: every token).
+static int afdep_count_first_ungated_tokens() {
+    if (deep_ep::get_env<int>("AFDEP_COUNT_FIRST_UNGATE", 0) != 0)
+        return INT_MAX;
+    return std::max(0, deep_ep::get_env<int>("AFDEP_COUNT_FIRST_UNGATED_TOKENS", 0));
+}
+
+// AFDEP_COUNT_FIRST_WARP_COUNT=1 keeps one token per notify warp in the source's counting loop.
+static bool afdep_count_first_thread_count() {
+    return deep_ep::get_env<int>("AFDEP_COUNT_FIRST_WARP_COUNT", 0) == 0;
+}
+
+// Fewest rows per claimed epilogue unit (1 spreads rows over every SM).
+static int afdep_count_first_unit_min_rows() {
+    return std::max(1, deep_ep::get_env<int>("AFDEP_COUNT_FIRST_UNIT_MIN_ROWS", 1));
+}
+
+// Copy epilogue CTAs (0: every SM).
+static int afdep_count_first_epilogue_sms() {
+    return std::max(0, deep_ep::get_env<int>("AFDEP_COUNT_FIRST_EPILOGUE_SMS", 0));
 }
 
 // Directional hybrid (every NVLink domain holds one role). The shared kernels launch
