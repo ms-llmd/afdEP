@@ -1,0 +1,3118 @@
+{
+ "date": "2026-10-22",
+ "scope": "communication only; synthetic GEMM load for the overlap runs; no serving claim",
+ "setup": "one NVLink domain, 4 x H200 (kermit), BF16, hidden 2048, top-k 8 of 128 experts (96 for 1A:3F), capacity 2048, CUDA graphs, 24 transport SMs unless noted; 3A:1F = --ffn-ranks 1 --attention-ranks 3",
+ "kernel_timelines": {
+  "native_source_sha256": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+  "method": "nsys --cuda-graph-trace=node; prof-timeline.py medians over the last 150 exchanges, common clock anchored at the first Attention device's dispatch; no collect view",
+  "traces": {
+   "1a3f-t1-afd": [
+    "## 1a3f T=1 afd",
+    "anchor device 3 dispatch start = 0; period median 20.10 us",
+    "  dev0 0:dispatch_impl              start    -7.08  end     4.49  dur   11.58",
+    "  dev0 1:dispatch_copy_epilogue     start     3.51  end     6.39  dur    2.91",
+    "  dev0 2:combine_impl               start     6.52  end    11.16  dur    4.64",
+    "  dev1 0:dispatch_impl              start    -6.99  end     4.47  dur   11.49",
+    "  dev1 1:dispatch_copy_epilogue     start     3.35  end     6.43  dur    3.10",
+    "  dev1 2:combine_impl               start     6.58  end    11.16  dur    4.61",
+    "  dev2 0:dispatch_impl              start    -5.30  end     4.43  dur    9.73",
+    "  dev2 1:dispatch_copy_epilogue     start     3.31  end     6.41  dur    3.10",
+    "  dev2 2:combine_impl               start     6.54  end    12.88  dur    6.30",
+    "  dev3 0:dispatch_impl              start     0.00  end     4.80  dur    4.80",
+    "  dev3 1:combine_impl               start     5.34  end    12.89  dur    7.55",
+    "  dev3 2:combine_reduce_epilogue    start    12.90  end    17.95  dur    5.04"
+   ],
+   "1a3f-t1-masked": [
+    "## 1a3f T=1 masked",
+    "anchor device 3 dispatch start = 0; period median 29.18 us",
+    "  dev0 0:dispatch_impl              start    -3.72  end     9.95  dur   13.60",
+    "  dev0 1:dispatch_copy_epilogue     start     9.56  end    11.74  dur    2.18",
+    "  dev0 2:combine_impl               start    11.87  end    22.10  dur   10.21",
+    "  dev0 3:combine_reduce_epilogue    start    21.91  end    23.13  dur    1.22",
+    "  dev1 0:dispatch_impl              start    -3.85  end     9.91  dur   13.76",
+    "  dev1 1:dispatch_copy_epilogue     start     9.47  end    11.67  dur    2.14",
+    "  dev1 2:combine_impl               start    11.80  end    22.11  dur   10.34",
+    "  dev1 3:combine_reduce_epilogue    start    21.92  end    23.14  dur    1.22",
+    "  dev2 0:dispatch_impl              start    -4.18  end     9.93  dur   14.14",
+    "  dev2 1:dispatch_copy_epilogue     start     9.48  end    11.78  dur    2.27",
+    "  dev2 2:combine_impl               start    11.91  end    21.77  dur    9.92",
+    "  dev2 3:combine_reduce_epilogue    start    21.58  end    22.82  dur    1.22",
+    "  dev3 0:dispatch_impl              start     0.00  end     9.89  dur    9.89",
+    "  dev3 1:dispatch_copy_epilogue     start     9.41  end    10.85  dur    1.39",
+    "  dev3 2:combine_impl               start    10.98  end    22.08  dur   11.07",
+    "  dev3 3:combine_reduce_epilogue    start    21.92  end    26.98  dur    5.09"
+   ],
+   "1a3f-t128-afd": [
+    "## 1a3f T=128 afd",
+    "anchor device 3 dispatch start = 0; period median 29.22 us",
+    "  dev0 0:dispatch_impl              start    -4.70  end     8.80  dur   13.54",
+    "  dev0 1:dispatch_copy_epilogue     start     5.79  end    11.29  dur    5.54",
+    "  dev0 2:combine_impl               start    11.42  end    22.66  dur   11.20",
+    "  dev1 0:dispatch_impl              start    -5.91  end     8.79  dur   14.75",
+    "  dev1 1:dispatch_copy_epilogue     start     5.60  end    11.18  dur    5.66",
+    "  dev1 2:combine_impl               start    11.32  end    21.39  dur    9.95",
+    "  dev2 0:dispatch_impl              start    -5.47  end     8.76  dur   14.46",
+    "  dev2 1:dispatch_copy_epilogue     start     5.68  end    11.22  dur    5.60",
+    "  dev2 2:combine_impl               start    11.38  end    21.73  dur   10.34",
+    "  dev3 0:dispatch_impl              start     0.00  end     9.06  dur    9.06",
+    "  dev3 1:combine_impl               start     9.60  end    23.23  dur   13.54",
+    "  dev3 2:combine_reduce_epilogue    start    23.25  end    27.20  dur    3.94"
+   ],
+   "1a3f-t128-masked": [
+    "## 1a3f T=128 masked",
+    "anchor device 3 dispatch start = 0; period median 35.97 us",
+    "  dev0 0:dispatch_impl              start    -2.87  end    12.46  dur   15.33",
+    "  dev0 1:dispatch_copy_epilogue     start    12.05  end    14.96  dur    2.85",
+    "  dev0 2:combine_impl               start    15.08  end    29.61  dur   14.45",
+    "  dev0 3:combine_reduce_epilogue    start    29.46  end    30.85  dur    1.38",
+    "  dev1 0:dispatch_impl              start    -2.72  end    12.54  dur   15.26",
+    "  dev1 1:dispatch_copy_epilogue     start    11.52  end    14.91  dur    3.36",
+    "  dev1 2:combine_impl               start    15.05  end    29.86  dur   14.78",
+    "  dev1 3:combine_reduce_epilogue    start    29.70  end    31.08  dur    1.38",
+    "  dev2 0:dispatch_impl              start    -2.73  end    12.54  dur   15.30",
+    "  dev2 1:dispatch_copy_epilogue     start    11.47  end    14.97  dur    3.55",
+    "  dev2 2:combine_impl               start    15.10  end    29.83  dur   14.64",
+    "  dev2 3:combine_reduce_epilogue    start    29.67  end    31.05  dur    1.38",
+    "  dev3 0:dispatch_impl              start     0.00  end    12.48  dur   12.48",
+    "  dev3 1:dispatch_copy_epilogue     start    12.05  end    13.50  dur    1.38",
+    "  dev3 2:combine_impl               start    13.63  end    29.87  dur   16.19",
+    "  dev3 3:combine_reduce_epilogue    start    29.70  end    33.79  dur    4.10"
+   ],
+   "1a3f-t2048-afd": [
+    "## 1a3f T=2048 afd",
+    "anchor device 3 dispatch start = 0; period median 184.93 us",
+    "  dev0 0:dispatch_impl              start   -11.18  end    78.74  dur   89.87",
+    "  dev0 1:dispatch_copy_epilogue     start    33.51  end    88.82  dur   55.31",
+    "  dev0 2:combine_impl               start    88.96  end   171.05  dur   82.13",
+    "  dev1 0:dispatch_impl              start   -10.25  end    78.75  dur   89.23",
+    "  dev1 1:dispatch_copy_epilogue     start    32.70  end    88.77  dur   55.95",
+    "  dev1 2:combine_impl               start    88.90  end   171.95  dur   83.02",
+    "  dev2 0:dispatch_impl              start   -12.09  end    78.74  dur   90.82",
+    "  dev2 1:dispatch_copy_epilogue     start    32.94  end    88.84  dur   55.73",
+    "  dev2 2:combine_impl               start    88.97  end   170.77  dur   81.94",
+    "  dev3 0:dispatch_impl              start     0.00  end    79.02  dur   79.02",
+    "  dev3 1:combine_impl               start    79.57  end   173.73  dur   94.11",
+    "  dev3 2:combine_reduce_epilogue    start   173.76  end   182.82  dur    9.09"
+   ],
+   "1a3f-t2048-masked": [
+    "## 1a3f T=2048 masked",
+    "anchor device 3 dispatch start = 0; period median 192.13 us",
+    "  dev0 0:dispatch_impl              start    -7.89  end    82.40  dur   90.27",
+    "  dev0 1:dispatch_copy_epilogue     start    35.54  end    91.97  dur   56.58",
+    "  dev0 2:combine_impl               start    92.12  end   180.63  dur   88.51",
+    "  dev0 3:combine_reduce_epilogue    start   180.46  end   181.93  dur    1.47",
+    "  dev1 0:dispatch_impl              start    -7.96  end    82.38  dur   90.40",
+    "  dev1 1:dispatch_copy_epilogue     start    35.31  end    91.95  dur   56.67",
+    "  dev1 2:combine_impl               start    92.08  end   180.69  dur   88.53",
+    "  dev1 3:combine_reduce_epilogue    start   180.52  end   181.96  dur    1.44",
+    "  dev2 0:dispatch_impl              start    -7.83  end    82.34  dur   90.21",
+    "  dev2 1:dispatch_copy_epilogue     start    34.74  end    92.47  dur   57.86",
+    "  dev2 2:combine_impl               start    92.61  end   180.56  dur   88.03",
+    "  dev2 3:combine_reduce_epilogue    start   180.40  end   181.87  dur    1.47",
+    "  dev3 0:dispatch_impl              start     0.00  end    82.08  dur   82.08",
+    "  dev3 1:dispatch_copy_epilogue     start    81.95  end    83.26  dur    1.31",
+    "  dev3 2:combine_impl               start    83.42  end   180.69  dur   97.23",
+    "  dev3 3:combine_reduce_epilogue    start   180.50  end   189.79  dur    9.28"
+   ],
+   "1a3f-t512-afd": [
+    "## 1a3f T=512 afd",
+    "anchor device 3 dispatch start = 0; period median 57.49 us",
+    "  dev0 0:dispatch_impl              start    -5.11  end    22.54  dur   27.78",
+    "  dev0 1:dispatch_copy_epilogue     start    10.09  end    26.23  dur   16.21",
+    "  dev0 2:combine_impl               start    26.37  end    50.26  dur   23.76",
+    "  dev1 0:dispatch_impl              start    -6.11  end    22.53  dur   28.64",
+    "  dev1 1:dispatch_copy_epilogue     start     9.99  end    26.20  dur   16.34",
+    "  dev1 2:combine_impl               start    26.33  end    49.38  dur   22.80",
+    "  dev2 0:dispatch_impl              start    -7.02  end    22.53  dur   29.55",
+    "  dev2 1:dispatch_copy_epilogue     start     9.67  end    26.25  dur   16.62",
+    "  dev2 2:combine_impl               start    26.38  end    48.59  dur   22.14",
+    "  dev3 0:dispatch_impl              start     0.00  end    22.88  dur   22.88",
+    "  dev3 1:combine_impl               start    23.42  end    51.01  dur   27.55",
+    "  dev3 2:combine_reduce_epilogue    start    51.04  end    55.44  dur    4.42"
+   ],
+   "1a3f-t512-masked": [
+    "## 1a3f T=512 masked",
+    "anchor device 3 dispatch start = 0; period median 65.65 us",
+    "  dev0 0:dispatch_impl              start    -3.34  end    26.80  dur   30.16",
+    "  dev0 1:dispatch_copy_epilogue     start    14.70  end    30.67  dur   15.89",
+    "  dev0 2:combine_impl               start    30.80  end    58.98  dur   28.16",
+    "  dev0 3:combine_reduce_epilogue    start    58.84  end    60.26  dur    1.44",
+    "  dev1 0:dispatch_impl              start    -3.11  end    26.76  dur   29.89",
+    "  dev1 1:dispatch_copy_epilogue     start    14.40  end    30.52  dur   15.97",
+    "  dev1 2:combine_impl               start    30.66  end    58.90  dur   28.27",
+    "  dev1 3:combine_reduce_epilogue    start    58.76  end    60.16  dur    1.44",
+    "  dev2 0:dispatch_impl              start    -3.17  end    26.78  dur   29.95",
+    "  dev2 1:dispatch_copy_epilogue     start    14.81  end    30.42  dur   15.68",
+    "  dev2 2:combine_impl               start    30.55  end    59.09  dur   28.42",
+    "  dev2 3:combine_reduce_epilogue    start    58.95  end    60.36  dur    1.44",
+    "  dev3 0:dispatch_impl              start     0.00  end    26.46  dur   26.46",
+    "  dev3 1:dispatch_copy_epilogue     start    26.37  end    27.68  dur    1.31",
+    "  dev3 2:combine_impl               start    27.81  end    59.04  dur   31.28",
+    "  dev3 3:combine_reduce_epilogue    start    58.86  end    63.38  dur    4.51"
+   ],
+   "2a2f-t1-afd": [
+    "## 2a2f T=1 afd",
+    "anchor device 2 dispatch start = 0; period median 21.06 us",
+    "  dev0 0:dispatch_impl              start    -4.88  end     5.39  dur   10.27",
+    "  dev0 1:dispatch_copy_epilogue     start     3.98  end     7.50  dur    3.57",
+    "  dev0 2:combine_impl               start     7.66  end    14.14  dur    6.50",
+    "  dev1 0:dispatch_impl              start    -2.60  end     5.31  dur    7.90",
+    "  dev1 1:dispatch_copy_epilogue     start     3.93  end     7.39  dur    3.46",
+    "  dev1 2:combine_impl               start     7.52  end    16.50  dur    8.99",
+    "  dev2 0:dispatch_impl              start     0.00  end     5.44  dur    5.44",
+    "  dev2 1:combine_impl               start     5.98  end    16.48  dur   10.50",
+    "  dev2 2:combine_reduce_epilogue    start    16.48  end    18.88  dur    2.40",
+    "  dev3 0:dispatch_impl              start    -0.00  end     5.40  dur    5.38",
+    "  dev3 1:combine_impl               start     5.95  end    16.44  dur   10.50",
+    "  dev3 2:combine_reduce_epilogue    start    16.48  end    18.88  dur    2.40"
+   ],
+   "2a2f-t1-masked": [
+    "## 2a2f T=1 masked",
+    "anchor device 2 dispatch start = 0; period median 29.70 us",
+    "  dev0 0:dispatch_impl              start    -1.09  end    10.55  dur   11.71",
+    "  dev0 1:dispatch_copy_epilogue     start    10.17  end    12.44  dur    2.24",
+    "  dev0 2:combine_impl               start    12.60  end    25.27  dur   12.69",
+    "  dev0 3:combine_reduce_epilogue    start    25.08  end    26.33  dur    1.22",
+    "  dev1 0:dispatch_impl              start    -1.58  end    10.61  dur   12.19",
+    "  dev1 1:dispatch_copy_epilogue     start    10.23  end    12.63  dur    2.40",
+    "  dev1 2:combine_impl               start    12.76  end    24.95  dur   12.16",
+    "  dev1 3:combine_reduce_epilogue    start    24.75  end    25.97  dur    1.22",
+    "  dev2 0:dispatch_impl              start     0.00  end    10.59  dur   10.59",
+    "  dev2 1:dispatch_copy_epilogue     start    10.11  end    11.55  dur    1.31",
+    "  dev2 2:combine_impl               start    11.71  end    25.31  dur   13.60",
+    "  dev2 3:combine_reduce_epilogue    start    25.12  end    27.42  dur    2.30",
+    "  dev3 0:dispatch_impl              start    -0.15  end    10.60  dur   10.75",
+    "  dev3 1:dispatch_copy_epilogue     start     9.99  end    11.56  dur    1.60",
+    "  dev3 2:combine_impl               start    11.72  end    25.26  dur   13.57",
+    "  dev3 3:combine_reduce_epilogue    start    25.08  end    27.39  dur    2.30"
+   ],
+   "2a2f-t128-afd": [
+    "## 2a2f T=128 afd",
+    "anchor device 2 dispatch start = 0; period median 33.98 us",
+    "  dev0 0:dispatch_impl              start    -3.00  end     7.56  dur   10.59",
+    "  dev0 1:dispatch_copy_epilogue     start     6.38  end    10.67  dur    4.29",
+    "  dev0 2:combine_impl               start    10.83  end    29.07  dur   18.32",
+    "  dev1 0:dispatch_impl              start    -4.57  end     7.56  dur   12.21",
+    "  dev1 1:dispatch_copy_epilogue     start     6.34  end    10.59  dur    4.26",
+    "  dev1 2:combine_impl               start    10.73  end    27.33  dur   16.53",
+    "  dev2 0:dispatch_impl              start     0.00  end     7.62  dur    7.62",
+    "  dev2 1:combine_impl               start     8.19  end    29.30  dur   21.09",
+    "  dev2 2:combine_reduce_epilogue    start    29.33  end    31.95  dur    2.59",
+    "  dev3 0:dispatch_impl              start    -0.05  end     7.59  dur    7.65",
+    "  dev3 1:combine_impl               start     8.17  end    29.26  dur   21.15",
+    "  dev3 2:combine_reduce_epilogue    start    29.30  end    31.88  dur    2.59"
+   ],
+   "2a2f-t128-masked": [
+    "## 2a2f T=128 masked",
+    "anchor device 2 dispatch start = 0; period median 41.73 us",
+    "  dev0 0:dispatch_impl              start    -1.48  end    12.57  dur   14.02",
+    "  dev0 1:dispatch_copy_epilogue     start    12.06  end    15.71  dur    3.62",
+    "  dev0 2:combine_impl               start    15.85  end    36.86  dur   20.93",
+    "  dev0 3:combine_reduce_epilogue    start    36.70  end    38.14  dur    1.44",
+    "  dev1 0:dispatch_impl              start    -1.08  end    12.51  dur   13.60",
+    "  dev1 1:dispatch_copy_epilogue     start    12.14  end    15.53  dur    3.36",
+    "  dev1 2:combine_impl               start    15.66  end    37.08  dur   21.34",
+    "  dev1 3:combine_reduce_epilogue    start    36.91  end    38.36  dur    1.44",
+    "  dev2 0:dispatch_impl              start     0.00  end    12.51  dur   12.51",
+    "  dev2 1:dispatch_copy_epilogue     start    11.98  end    13.50  dur    1.57",
+    "  dev2 2:combine_impl               start    13.63  end    37.10  dur   23.42",
+    "  dev2 3:combine_reduce_epilogue    start    36.91  end    39.58  dur    2.66",
+    "  dev3 0:dispatch_impl              start     0.17  end    12.52  dur   12.32",
+    "  dev3 1:dispatch_copy_epilogue     start    11.91  end    13.48  dur    1.57",
+    "  dev3 2:combine_impl               start    13.64  end    37.11  dur   23.44",
+    "  dev3 3:combine_reduce_epilogue    start    36.92  end    39.63  dur    2.69"
+   ],
+   "2a2f-t2048-afd": [
+    "## 2a2f T=2048 afd",
+    "anchor device 2 dispatch start = 0; period median 181.60 us",
+    "  dev0 0:dispatch_impl              start    -7.74  end    56.17  dur   63.94",
+    "  dev0 1:dispatch_copy_epilogue     start    34.39  end    84.23  dur   50.13",
+    "  dev0 2:combine_impl               start    84.23  end   170.79  dur   86.46",
+    "  dev1 0:dispatch_impl              start    -8.70  end    56.20  dur   64.88",
+    "  dev1 1:dispatch_copy_epilogue     start    33.43  end    84.13  dur   50.58",
+    "  dev1 2:combine_impl               start    84.12  end   169.54  dur   85.49",
+    "  dev2 0:dispatch_impl              start     0.00  end    55.81  dur   55.81",
+    "  dev2 1:combine_impl               start    56.35  end   172.08  dur  115.68",
+    "  dev2 2:combine_reduce_epilogue    start   172.14  end   179.49  dur    7.36",
+    "  dev3 0:dispatch_impl              start     0.03  end    56.32  dur   56.26",
+    "  dev3 1:combine_impl               start    56.86  end   172.16  dur  115.33",
+    "  dev3 2:combine_reduce_epilogue    start   172.18  end   179.63  dur    7.42"
+   ],
+   "2a2f-t2048-masked": [
+    "## 2a2f T=2048 masked",
+    "anchor device 2 dispatch start = 0; period median 190.13 us",
+    "  dev0 0:dispatch_impl              start    -5.97  end    60.24  dur   66.21",
+    "  dev0 1:dispatch_copy_epilogue     start    36.40  end    88.56  dur   52.13",
+    "  dev0 2:combine_impl               start    88.56  end   180.41  dur   91.98",
+    "  dev0 3:combine_reduce_epilogue    start   180.06  end   181.64  dur    1.47",
+    "  dev1 0:dispatch_impl              start    -5.99  end    60.23  dur   66.24",
+    "  dev1 1:dispatch_copy_epilogue     start    36.08  end    88.08  dur   52.05",
+    "  dev1 2:combine_impl               start    88.04  end   180.57  dur   92.48",
+    "  dev1 3:combine_reduce_epilogue    start   180.28  end   181.77  dur    1.50",
+    "  dev2 0:dispatch_impl              start     0.00  end    60.19  dur   60.19",
+    "  dev2 1:dispatch_copy_epilogue     start    59.39  end    61.15  dur    1.76",
+    "  dev2 2:combine_impl               start    61.28  end   180.48  dur  119.17",
+    "  dev2 3:combine_reduce_epilogue    start   180.32  end   187.98  dur    7.52",
+    "  dev3 0:dispatch_impl              start    -0.12  end    60.20  dur   60.29",
+    "  dev3 1:dispatch_copy_epilogue     start    59.72  end    61.15  dur    1.31",
+    "  dev3 2:combine_impl               start    61.29  end   180.51  dur  119.30",
+    "  dev3 3:combine_reduce_epilogue    start   180.34  end   187.63  dur    7.30"
+   ],
+   "2a2f-t512-afd": [
+    "## 2a2f T=512 afd",
+    "anchor device 2 dispatch start = 0; period median 67.78 us",
+    "  dev0 0:dispatch_impl              start    -3.75  end    17.08  dur   20.86",
+    "  dev0 1:dispatch_copy_epilogue     start    11.71  end    24.82  dur   13.12",
+    "  dev0 2:combine_impl               start    24.95  end    61.78  dur   36.69",
+    "  dev1 0:dispatch_impl              start    -5.15  end    17.11  dur   22.21",
+    "  dev1 1:dispatch_copy_epilogue     start    11.43  end    24.70  dur   13.31",
+    "  dev1 2:combine_impl               start    24.85  end    60.33  dur   35.46",
+    "  dev2 0:dispatch_impl              start     0.00  end    17.18  dur   17.18",
+    "  dev2 1:combine_impl               start    17.73  end    62.32  dur   44.56",
+    "  dev2 2:combine_reduce_epilogue    start    62.35  end    65.68  dur    3.33",
+    "  dev3 0:dispatch_impl              start     0.22  end    17.30  dur   17.09",
+    "  dev3 1:combine_impl               start    17.86  end    62.31  dur   44.35",
+    "  dev3 2:combine_reduce_epilogue    start    62.34  end    65.81  dur    3.46"
+   ],
+   "2a2f-t512-masked": [
+    "## 2a2f T=512 masked",
+    "anchor device 2 dispatch start = 0; period median 74.45 us",
+    "  dev0 0:dispatch_impl              start    -2.22  end    21.00  dur   23.20",
+    "  dev0 1:dispatch_copy_epilogue     start    16.78  end    28.36  dur   11.52",
+    "  dev0 2:combine_impl               start    28.49  end    68.65  dur   40.22",
+    "  dev0 3:combine_reduce_epilogue    start    68.50  end    69.98  dur    1.47",
+    "  dev1 0:dispatch_impl              start    -2.08  end    21.01  dur   23.07",
+    "  dev1 1:dispatch_copy_epilogue     start    16.64  end    28.24  dur   11.50",
+    "  dev1 2:combine_impl               start    28.37  end    68.87  dur   40.51",
+    "  dev1 3:combine_reduce_epilogue    start    68.71  end    70.18  dur    1.47",
+    "  dev2 0:dispatch_impl              start     0.00  end    20.94  dur   20.94",
+    "  dev2 1:dispatch_copy_epilogue     start    20.38  end    21.92  dur    1.54",
+    "  dev2 2:combine_impl               start    22.05  end    68.94  dur   46.91",
+    "  dev2 3:combine_reduce_epilogue    start    68.77  end    72.30  dur    3.52",
+    "  dev3 0:dispatch_impl              start    -0.07  end    20.94  dur   20.99",
+    "  dev3 1:dispatch_copy_epilogue     start    20.53  end    21.91  dur    1.31",
+    "  dev3 2:combine_impl               start    22.05  end    68.95  dur   46.90",
+    "  dev3 3:combine_reduce_epilogue    start    68.79  end    72.19  dur    3.42"
+   ],
+   "3a1f-t1-afd": [
+    "## 3a1f T=1 afd",
+    "anchor device 1 dispatch start = 0; period median 20.93 us",
+    "  dev0 0:dispatch_impl              start    -2.64  end     5.55  dur    8.18",
+    "  dev0 1:dispatch_copy_epilogue     start     4.56  end     7.83  dur    3.26",
+    "  dev0 2:combine_impl               start     7.96  end    16.56  dur    8.59",
+    "  dev1 0:dispatch_impl              start     0.00  end     5.34  dur    5.34",
+    "  dev1 1:combine_impl               start     5.89  end    16.54  dur   10.65",
+    "  dev1 2:combine_reduce_epilogue    start    16.54  end    18.85  dur    2.24",
+    "  dev2 0:dispatch_impl              start    -0.16  end     4.65  dur    4.77",
+    "  dev2 1:combine_impl               start     5.20  end    16.55  dur   11.30",
+    "  dev2 2:combine_reduce_epilogue    start    16.58  end    18.82  dur    2.24",
+    "  dev3 0:dispatch_impl              start    -0.05  end     4.88  dur    4.77",
+    "  dev3 1:combine_impl               start     5.44  end    16.53  dur   11.04",
+    "  dev3 2:combine_reduce_epilogue    start    16.55  end    18.80  dur    2.27"
+   ],
+   "3a1f-t1-masked": [
+    "## 3a1f T=1 masked",
+    "anchor device 1 dispatch start = 0; period median 33.68 us",
+    "  dev0 0:dispatch_impl              start    -1.18  end    11.97  dur   13.15",
+    "  dev0 1:dispatch_copy_epilogue     start    11.62  end    14.31  dur    2.67",
+    "  dev0 2:combine_impl               start    14.43  end    29.16  dur   14.78",
+    "  dev0 3:combine_reduce_epilogue    start    28.98  end    30.25  dur    1.25",
+    "  dev1 0:dispatch_impl              start     0.00  end    11.97  dur   11.97",
+    "  dev1 1:dispatch_copy_epilogue     start    11.46  end    12.90  dur    1.54",
+    "  dev1 2:combine_impl               start    13.02  end    29.52  dur   16.51",
+    "  dev1 3:combine_reduce_epilogue    start    29.33  end    31.55  dur    2.21",
+    "  dev2 0:dispatch_impl              start     0.00  end    12.00  dur   11.97",
+    "  dev2 1:dispatch_copy_epilogue     start    11.48  end    12.92  dur    1.54",
+    "  dev2 2:combine_impl               start    13.05  end    29.55  dur   16.51",
+    "  dev2 3:combine_reduce_epilogue    start    29.36  end    31.55  dur    2.21",
+    "  dev3 0:dispatch_impl              start     0.09  end    12.03  dur   11.97",
+    "  dev3 1:dispatch_copy_epilogue     start    11.43  end    13.03  dur    1.60",
+    "  dev3 2:combine_impl               start    13.15  end    29.53  dur   16.42",
+    "  dev3 3:combine_reduce_epilogue    start    29.34  end    31.50  dur    2.18"
+   ],
+   "3a1f-t128-afd": [
+    "## 3a1f T=128 afd",
+    "anchor device 1 dispatch start = 0; period median 38.62 us",
+    "  dev0 0:dispatch_impl              start    -2.65  end     9.67  dur   12.32",
+    "  dev0 1:dispatch_copy_epilogue     start     8.70  end    14.73  dur    6.05",
+    "  dev0 2:combine_impl               start    14.86  end    34.17  dur   19.28",
+    "  dev1 0:dispatch_impl              start     0.00  end     8.88  dur    8.88",
+    "  dev1 1:combine_impl               start     9.44  end    34.13  dur   24.67",
+    "  dev1 2:combine_reduce_epilogue    start    34.14  end    36.64  dur    2.53",
+    "  dev2 0:dispatch_impl              start     0.01  end     8.86  dur    8.83",
+    "  dev2 1:combine_impl               start     9.40  end    34.17  dur   24.77",
+    "  dev2 2:combine_reduce_epilogue    start    34.18  end    36.69  dur    2.50",
+    "  dev3 0:dispatch_impl              start     0.16  end     9.05  dur    8.90",
+    "  dev3 1:combine_impl               start     9.59  end    34.15  dur   24.59",
+    "  dev3 2:combine_reduce_epilogue    start    34.16  end    36.69  dur    2.50"
+   ],
+   "3a1f-t128-masked": [
+    "## 3a1f T=128 masked",
+    "anchor device 1 dispatch start = 0; period median 52.74 us",
+    "  dev0 0:dispatch_impl              start    -1.28  end    15.01  dur   16.29",
+    "  dev0 1:dispatch_copy_epilogue     start    14.66  end    20.01  dur    5.34",
+    "  dev0 2:combine_impl               start    20.16  end    47.89  dur   27.74",
+    "  dev0 3:combine_reduce_epilogue    start    47.72  end    49.22  dur    1.50",
+    "  dev1 0:dispatch_impl              start     0.00  end    15.02  dur   15.02",
+    "  dev1 1:dispatch_copy_epilogue     start    13.87  end    15.94  dur    2.05",
+    "  dev1 2:combine_impl               start    16.06  end    48.26  dur   32.19",
+    "  dev1 3:combine_reduce_epilogue    start    48.06  end    50.66  dur    2.59",
+    "  dev2 0:dispatch_impl              start     0.20  end    15.01  dur   14.85",
+    "  dev2 1:dispatch_copy_epilogue     start    14.44  end    16.00  dur    1.60",
+    "  dev2 2:combine_impl               start    16.13  end    48.26  dur   32.13",
+    "  dev2 3:combine_reduce_epilogue    start    48.08  end    50.74  dur    2.66",
+    "  dev3 0:dispatch_impl              start     0.23  end    15.03  dur   14.83",
+    "  dev3 1:dispatch_copy_epilogue     start    14.35  end    16.02  dur    1.60",
+    "  dev3 2:combine_impl               start    16.16  end    48.28  dur   32.14",
+    "  dev3 3:combine_reduce_epilogue    start    48.09  end    50.73  dur    2.66"
+   ],
+   "3a1f-t2048-afd": [
+    "## 3a1f T=2048 afd",
+    "anchor device 1 dispatch start = 0; period median 328.40 us",
+    "  dev0 0:dispatch_impl              start    -5.15  end    79.79  dur   84.93",
+    "  dev0 1:dispatch_copy_epilogue     start    68.06  end   145.76  dur   77.71",
+    "  dev0 2:combine_impl               start   145.72  end   321.20  dur  175.49",
+    "  dev1 0:dispatch_impl              start     0.00  end    79.46  dur   79.46",
+    "  dev1 1:combine_impl               start    80.00  end   321.01  dur  241.04",
+    "  dev1 2:combine_reduce_epilogue    start   321.04  end   326.37  dur    5.31",
+    "  dev2 0:dispatch_impl              start     0.10  end    79.84  dur   79.74",
+    "  dev2 1:combine_impl               start    80.39  end   321.01  dur  240.66",
+    "  dev2 2:combine_reduce_epilogue    start   321.02  end   326.32  dur    5.28",
+    "  dev3 0:dispatch_impl              start     0.08  end    79.28  dur   79.23",
+    "  dev3 1:combine_impl               start    79.82  end   321.01  dur  241.17",
+    "  dev3 2:combine_reduce_epilogue    start   321.04  end   326.28  dur    5.22"
+   ],
+   "3a1f-t2048-masked": [
+    "## 3a1f T=2048 masked",
+    "anchor device 1 dispatch start = 0; period median 344.02 us",
+    "  dev0 0:dispatch_impl              start    -3.93  end    82.49  dur   86.43",
+    "  dev0 1:dispatch_copy_epilogue     start    73.98  end   148.63  dur   75.26",
+    "  dev0 2:combine_impl               start   148.63  end   336.56  dur  187.71",
+    "  dev0 3:combine_reduce_epilogue    start   336.27  end   337.74  dur    1.50",
+    "  dev1 0:dispatch_impl              start     0.00  end    82.43  dur   82.43",
+    "  dev1 1:dispatch_copy_epilogue     start    81.82  end    83.33  dur    1.54",
+    "  dev1 2:combine_impl               start    83.49  end   336.72  dur  253.20",
+    "  dev1 3:combine_reduce_epilogue    start   336.54  end   341.90  dur    5.34",
+    "  dev2 0:dispatch_impl              start    -0.17  end    82.39  dur   82.59",
+    "  dev2 1:dispatch_copy_epilogue     start    82.04  end    83.31  dur    1.25",
+    "  dev2 2:combine_impl               start    83.45  end   336.78  dur  253.33",
+    "  dev2 3:combine_reduce_epilogue    start   336.59  end   341.82  dur    5.25",
+    "  dev3 0:dispatch_impl              start    -0.09  end    82.39  dur   82.50",
+    "  dev3 1:dispatch_copy_epilogue     start    82.05  end    83.32  dur    1.28",
+    "  dev3 2:combine_impl               start    83.45  end   336.74  dur  253.31",
+    "  dev3 3:combine_reduce_epilogue    start   336.56  end   341.85  dur    5.28"
+   ],
+   "3a1f-t512-afd": [
+    "## 3a1f T=512 afd",
+    "anchor device 1 dispatch start = 0; period median 99.76 us",
+    "  dev0 0:dispatch_impl              start    -2.91  end    23.14  dur   26.06",
+    "  dev0 1:dispatch_copy_epilogue     start    22.02  end    40.02  dur   18.10",
+    "  dev0 2:combine_impl               start    40.07  end    94.83  dur   54.72",
+    "  dev1 0:dispatch_impl              start     0.00  end    22.88  dur   22.88",
+    "  dev1 1:combine_impl               start    23.42  end    94.67  dur   71.30",
+    "  dev1 2:combine_reduce_epilogue    start    94.70  end    97.65  dur    2.94",
+    "  dev2 0:dispatch_impl              start     0.05  end    22.89  dur   22.85",
+    "  dev2 1:combine_impl               start    23.44  end    94.65  dur   71.25",
+    "  dev2 2:combine_reduce_epilogue    start    94.66  end    97.67  dur    3.01",
+    "  dev3 0:dispatch_impl              start    -0.10  end    22.93  dur   23.01",
+    "  dev3 1:combine_impl               start    23.47  end    94.67  dur   71.26",
+    "  dev3 2:combine_reduce_epilogue    start    94.69  end    97.66  dur    2.98"
+   ],
+   "3a1f-t512-masked": [
+    "## 3a1f T=512 masked",
+    "anchor device 1 dispatch start = 0; period median 112.35 us",
+    "  dev0 0:dispatch_impl              start    -1.69  end    28.62  dur   30.27",
+    "  dev0 1:dispatch_copy_epilogue     start    28.44  end    45.62  dur   17.15",
+    "  dev0 2:combine_impl               start    45.60  end   107.25  dur   61.68",
+    "  dev0 3:combine_reduce_epilogue    start   106.92  end   108.43  dur    1.50",
+    "  dev1 0:dispatch_impl              start     0.00  end    28.64  dur   28.64",
+    "  dev1 1:dispatch_copy_epilogue     start    27.36  end    29.54  dur    2.21",
+    "  dev1 2:combine_impl               start    29.70  end   107.42  dur   77.71",
+    "  dev1 3:combine_reduce_epilogue    start   107.25  end   110.24  dur    3.01",
+    "  dev2 0:dispatch_impl              start     0.04  end    28.65  dur   28.58",
+    "  dev2 1:dispatch_copy_epilogue     start    27.46  end    29.56  dur    2.21",
+    "  dev2 2:combine_impl               start    29.70  end   107.42  dur   77.73",
+    "  dev2 3:combine_reduce_epilogue    start   107.25  end   110.14  dur    2.91",
+    "  dev3 0:dispatch_impl              start    -0.02  end    28.66  dur   28.66",
+    "  dev3 1:dispatch_copy_epilogue     start    27.62  end    29.56  dur    1.92",
+    "  dev3 2:combine_impl               start    29.71  end   107.43  dur   77.71",
+    "  dev3 3:combine_reduce_epilogue    start   107.24  end   110.19  dur    2.98"
+   ]
+  }
+ },
+ "transport_sm_sweep_all_kernels": {
+  "metric": "median over 5 blocks of max Attention-rank us per exchange",
+  "2a2f": {
+   "1": {
+    "12": 20.23,
+    "16": 20.03,
+    "24": 19.81,
+    "32": 20.21,
+    "48": 20.24,
+    "64": 20.1,
+    "8": 19.84
+   },
+   "128": {
+    "12": 33.78,
+    "16": 32.48,
+    "24": 32.02,
+    "32": 31.71,
+    "48": 31.78,
+    "64": 31.52,
+    "8": 34.3
+   },
+   "512": {
+    "12": 79.13,
+    "16": 69.4,
+    "24": 66.27,
+    "32": 56.68,
+    "48": 55.29,
+    "64": 54.52,
+    "8": 92.51
+   },
+   "2048": {
+    "12": 236.87,
+    "16": 206.82,
+    "24": 180.83,
+    "32": 176.92,
+    "48": 172.14,
+    "64": 164.6,
+    "8": 295.27
+   }
+  },
+  "_native_source_sha256": [
+   "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+  ],
+  "3a1f": {
+   "1": {
+    "12": 19.77,
+    "16": 20.39,
+    "24": 20.28,
+    "32": 19.89,
+    "48": 19.93,
+    "64": 20.17,
+    "8": 20.25
+   },
+   "128": {
+    "12": 42.76,
+    "16": 38.77,
+    "24": 37.33,
+    "32": 36.7,
+    "48": 36.6,
+    "64": 36.68,
+    "8": 52.32
+   },
+   "512": {
+    "12": 131.29,
+    "16": 113.09,
+    "24": 99.1,
+    "32": 91.1,
+    "48": 87.37,
+    "64": 83.93,
+    "8": 170.84
+   },
+   "2048": {
+    "12": 474.52,
+    "16": 398.44,
+    "24": 326.9,
+    "32": 295.26,
+    "48": 272.26,
+    "64": 262.54,
+    "8": 627.66
+   }
+  }
+ },
+ "ffn_only_combine_grid_scratch": {
+  "native_source_sha256": "0f44a3c1 (final 9675783b + b31-patch.py host switch AFDEP_SCRATCH_FFN_COMBINE_SMS; arms other than base run AFDEP_GRID_SYNC_EXIT=1 so the Attention counts one arrival per FFN)",
+  "patch": "\"\"\"b31-patch.py <tree>: scratch FFN-only combine grid (AFDEP_SCRATCH_FFN_COMBINE_SMS), grid-sync exit only. Measurement, not for commit.\"\"\"\nimport sys\nfrom pathlib import Path\np = Path(sys.argv[1]) / \"afdep/third_party/deepep_v2/csrc/elastic/buffer.hpp\"\ns = p.read_text()\nold = \"\"\"            num_sms, jit::device_runtime->get_num_smem_bytes(),\n            num_channels,\n            use_expanded_layout, allow_multiple_reduction,\n            comm_stream,\"\"\"\nnew = \"\"\"            (afd_direct and afd_worker and not afdep_per_cta_exit() and get_env<int>(\"AFDEP_SCRATCH_FFN_COMBINE_SMS\") > 0) ?\n                get_env<int>(\"AFDEP_SCRATCH_FFN_COMBINE_SMS\") : num_sms,\n            jit::device_runtime->get_num_smem_bytes(),\n            num_channels,\n            use_expanded_layout, allow_multiple_reduction,\n            comm_stream,\"\"\"\nassert s.count(old) == 1, s.count(old)\np.write_text(s.replace(old, new))\nprint(\"patched\", p)\n",
+  "screen_3a1f_collect_view": {
+   "arms": {
+    "base": {},
+    "s24": {
+     "_env": {
+      "AFDEP_GRID_SYNC_EXIT": "1",
+      "AFDEP_SCRATCH_FFN_COMBINE_SMS": "24"
+     }
+    },
+    "s48": {
+     "_env": {
+      "AFDEP_GRID_SYNC_EXIT": "1",
+      "AFDEP_SCRATCH_FFN_COMBINE_SMS": "48"
+     }
+    },
+    "s64": {
+     "_env": {
+      "AFDEP_GRID_SYNC_EXIT": "1",
+      "AFDEP_SCRATCH_FFN_COMBINE_SMS": "64"
+     }
+    },
+    "s96": {
+     "_env": {
+      "AFDEP_GRID_SYNC_EXIT": "1",
+      "AFDEP_SCRATCH_FFN_COMBINE_SMS": "96"
+     }
+    },
+    "s132": {
+     "_env": {
+      "AFDEP_GRID_SYNC_EXIT": "1",
+      "AFDEP_SCRATCH_FFN_COMBINE_SMS": "132"
+     }
+    }
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--capacity",
+    "2048",
+    "--ffn-ranks",
+    "1",
+    "--attention-ranks",
+    "3"
+   ],
+   "processes": [
+    {
+     "order": [
+      "base",
+      "s24",
+      "s48",
+      "s64",
+      "s96",
+      "s132"
+     ],
+     "median_us": {
+      "base": {
+       "1": 18.574000000953674,
+       "8": 20.20919919013977,
+       "32": 23.674159049987793,
+       "128": 35.5076801776886,
+       "512": 96.2556791305542,
+       "2048": 322.6358413696289
+      },
+      "s24": {
+       "1": 21.388959884643555,
+       "8": 22.521519660949707,
+       "32": 25.62511920928955,
+       "128": 36.94527983665466,
+       "512": 96.82119846343994,
+       "2048": 323.37310791015625
+      },
+      "s48": {
+       "1": 21.2555992603302,
+       "8": 22.439520359039307,
+       "32": 25.575919151306152,
+       "128": 36.00056052207947,
+       "512": 85.46095848083496,
+       "2048": 268.3574390411377
+      },
+      "s64": {
+       "1": 21.484559774398804,
+       "8": 23.080559968948364,
+       "32": 25.674160718917847,
+       "128": 35.99239945411682,
+       "512": 82.26840019226074,
+       "2048": 258.64495277404785
+      },
+      "s96": {
+       "1": 20.914160013198853,
+       "8": 22.460479736328125,
+       "32": 25.78768014907837,
+       "128": 35.60855984687805,
+       "512": 80.79031944274902,
+       "2048": 265.7737636566162
+      },
+      "s132": {
+       "1": 21.16568088531494,
+       "8": 22.56735920906067,
+       "32": 25.223360061645508,
+       "128": 35.21224021911621,
+       "512": 80.43327808380127,
+       "2048": 256.8379211425781
+      }
+     },
+     "native_source_sha256": {
+      "base": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s24": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s48": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s64": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s96": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s132": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f"
+     }
+    },
+    {
+     "order": [
+      "s24",
+      "s48",
+      "s64",
+      "s96",
+      "s132",
+      "base"
+     ],
+     "median_us": {
+      "s24": {
+       "1": 21.367599964141846,
+       "8": 23.193600177764893,
+       "32": 26.15887999534607,
+       "128": 37.07103967666626,
+       "512": 97.14263916015625,
+       "2048": 323.9766502380371
+      },
+      "s48": {
+       "1": 20.993359088897705,
+       "8": 22.838079929351807,
+       "32": 26.142319440841675,
+       "128": 36.068559885025024,
+       "512": 85.48448085784912,
+       "2048": 269.06728744506836
+      },
+      "s64": {
+       "1": 21.501920223236084,
+       "8": 23.410319089889526,
+       "32": 25.9061598777771,
+       "128": 35.87679982185364,
+       "512": 81.97207927703857,
+       "2048": 258.5456848144531
+      },
+      "s96": {
+       "1": 21.5556800365448,
+       "8": 22.94592022895813,
+       "32": 26.123439073562622,
+       "128": 35.50984025001526,
+       "512": 81.03343963623047,
+       "2048": 265.4096031188965
+      },
+      "s132": {
+       "1": 21.45143985748291,
+       "8": 23.25271964073181,
+       "32": 25.629040002822876,
+       "128": 35.2949595451355,
+       "512": 80.51144123077393,
+       "2048": 256.46504402160645
+      },
+      "base": {
+       "1": 18.0839204788208,
+       "8": 20.611679553985596,
+       "32": 24.19983983039856,
+       "128": 35.521920919418335,
+       "512": 96.45031929016113,
+       "2048": 322.6831245422363
+      }
+     },
+     "native_source_sha256": {
+      "s24": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s48": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s64": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s96": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s132": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "base": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f"
+     }
+    },
+    {
+     "order": [
+      "s48",
+      "s64",
+      "s96",
+      "s132",
+      "base",
+      "s24"
+     ],
+     "median_us": {
+      "s48": {
+       "1": 21.011600494384766,
+       "8": 22.99888014793396,
+       "32": 25.72816014289856,
+       "128": 36.218000650405884,
+       "512": 85.5779218673706,
+       "2048": 269.15600776672363
+      },
+      "s64": {
+       "1": 20.990400314331055,
+       "8": 22.88472056388855,
+       "32": 25.908159017562866,
+       "128": 36.02999925613403,
+       "512": 82.01096057891846,
+       "2048": 258.9478397369385
+      },
+      "s96": {
+       "1": 21.45832061767578,
+       "8": 22.911360263824463,
+       "32": 26.236640214920044,
+       "128": 35.5457603931427,
+       "512": 81.44872188568115,
+       "2048": 265.59632301330566
+      },
+      "s132": {
+       "1": 21.22056007385254,
+       "8": 23.331360816955566,
+       "32": 25.9824001789093,
+       "128": 35.33759951591492,
+       "512": 80.63968181610107,
+       "2048": 257.43200302124023
+      },
+      "base": {
+       "1": 18.2012802362442,
+       "8": 20.532000064849854,
+       "32": 24.274959564208984,
+       "128": 35.66527962684631,
+       "512": 96.38471603393555,
+       "2048": 322.77807235717773
+      },
+      "s24": {
+       "1": 21.42791986465454,
+       "8": 23.339359760284424,
+       "32": 26.271679401397705,
+       "128": 37.03696012496948,
+       "512": 97.44128227233887,
+       "2048": 323.8541603088379
+      }
+     },
+     "native_source_sha256": {
+      "s48": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s64": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s96": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s132": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "base": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f",
+      "s24": "0f44a3c17175f6f023b2bbd246f944a04fec0a67200d6c59761d2b7f51749a0f"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "base": {
+      "median_us": 18.2012802362442,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "s24": {
+      "median_us": 21.388959884643555,
+      "paired_change_pct": [
+       15.155377859079078,
+       18.158006662143666,
+       17.727542164782093
+      ],
+      "geomean_change_pct": 17.00609516106106,
+      "repeats_faster": 0
+     },
+     "s48": {
+      "median_us": 21.011600494384766,
+      "paired_change_pct": [
+       14.43738160460235,
+       16.088539061451467,
+       15.440233992685704
+      ],
+      "geomean_change_pct": 15.320049153312908,
+      "repeats_faster": 0
+     },
+     "s64": {
+      "median_us": 21.484559774398804,
+      "paired_change_pct": [
+       15.670075230406422,
+       18.900767388456032,
+       15.323757680148663
+      ],
+      "geomean_change_pct": 16.62047880784865,
+      "repeats_faster": 0
+     },
+     "s96": {
+      "median_us": 21.45832061767578,
+      "paired_change_pct": [
+       12.599117110611747,
+       19.19804702630712,
+       17.894567520288152
+      ],
+      "geomean_change_pct": 16.528629729560528,
+      "repeats_faster": 0
+     },
+     "s132": {
+      "median_us": 21.22056007385254,
+      "paired_change_pct": [
+       13.953272769614511,
+       18.62162235565026,
+       16.588282793405096
+      ],
+      "geomean_change_pct": 16.372006526943238,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 8,
+     "base": {
+      "median_us": 20.532000064849854,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "s24": {
+      "median_us": 23.193600177764893,
+      "paired_change_pct": [
+       11.441920330708278,
+       12.526493132288397,
+       13.673094129006369
+      ],
+      "geomean_change_pct": 12.54348284100808,
+      "repeats_faster": 0
+     },
+     "s48": {
+      "median_us": 22.838079929351807,
+      "paired_change_pct": [
+       11.036167974373413,
+       10.801644618697281,
+       12.014806522952082
+      ],
+      "geomean_change_pct": 11.282968396027492,
+      "repeats_faster": 0
+     },
+     "s64": {
+      "median_us": 23.080559968948364,
+      "paired_change_pct": [
+       14.208186835080294,
+       13.577930554246208,
+       11.458798420064698
+      ],
+      "geomean_change_pct": 13.075499527697154,
+      "repeats_faster": 0
+     },
+     "s96": {
+      "median_us": 22.911360263824463,
+      "paired_change_pct": [
+       11.139880036843675,
+       11.324844580756999,
+       11.588545643188453
+      ],
+      "geomean_change_pct": 11.35093792534525,
+      "repeats_faster": 0
+     },
+     "s132": {
+      "median_us": 23.25271964073181,
+      "paired_change_pct": [
+       11.66874548928918,
+       12.813318195777645,
+       13.634135706526385
+      ],
+      "geomean_change_pct": 12.702515074981147,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "base": {
+      "median_us": 24.19983983039856,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "s24": {
+      "median_us": 26.15887999534607,
+      "paired_change_pct": [
+       8.24088473504938,
+       8.095260872291664,
+       8.22543012649415
+      ],
+      "geomean_change_pct": 8.18717219254259,
+      "repeats_faster": 0
+     },
+     "s48": {
+      "median_us": 25.72816014289856,
+      "paired_change_pct": [
+       8.033062958235648,
+       8.026828375959226,
+       5.986418122945825
+      ],
+      "geomean_change_pct": 7.344428964113159,
+      "repeats_faster": 0
+     },
+     "s64": {
+      "median_us": 25.9061598777771,
+      "paired_change_pct": [
+       8.448036801252655,
+       7.050955953994165,
+       6.72791832684192
+      ],
+      "geomean_change_pct": 7.40638369300084,
+      "repeats_faster": 0
+     },
+     "s96": {
+      "median_us": 26.123439073562622,
+      "paired_change_pct": [
+       8.927544562946865,
+       7.948809812979585,
+       8.081087202317573
+      ],
+      "geomean_change_pct": 8.318280950346058,
+      "repeats_faster": 0
+     },
+     "s132": {
+      "median_us": 25.629040002822876,
+      "paired_change_pct": [
+       6.543848118898721,
+       5.9058249246304095,
+       7.033752662631687
+      ],
+      "geomean_change_pct": 6.49347351302727,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "base": {
+      "median_us": 35.521920919418335,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "s24": {
+      "median_us": 37.03696012496948,
+      "paired_change_pct": [
+       4.048700595961163,
+       4.361021918724806,
+       3.8459827386034595
+      ],
+      "geomean_change_pct": 4.085019573892024,
+      "repeats_faster": 0
+     },
+     "s48": {
+      "median_us": 36.068559885025024,
+      "paired_change_pct": [
+       1.388095031622405,
+       1.538877829402141,
+       1.5497453807806982
+      ],
+      "geomean_change_pct": 1.4922125914592188,
+      "repeats_faster": 0
+     },
+     "s64": {
+      "median_us": 35.99239945411682,
+      "paired_change_pct": [
+       1.3651110802017419,
+       0.9990419809794204,
+       1.0226181684362512
+      ],
+      "geomean_change_pct": 1.1287854869686198,
+      "repeats_faster": 0
+     },
+     "s96": {
+      "median_us": 35.5457603931427,
+      "paired_change_pct": [
+       0.28410661773630164,
+       -0.03400905438216695,
+       -0.3351136874688798
+      ],
+      "geomean_change_pct": -0.028658390069380424,
+      "repeats_faster": 2
+     },
+     "s132": {
+      "median_us": 35.2949595451355,
+      "paired_change_pct": [
+       -0.8320452282265078,
+       -0.6389332795309732,
+       -0.918765012807421
+      ],
+      "geomean_change_pct": -0.7966500987417025,
+      "repeats_faster": 3
+     }
+    },
+    {
+     "tokens": 512,
+     "base": {
+      "median_us": 96.38471603393555,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "s24": {
+      "median_us": 97.14263916015625,
+      "paired_change_pct": [
+       0.5875178877692067,
+       0.7177994589238734,
+       1.0961968680089473
+      ],
+      "geomean_change_pct": 0.8002740277972986,
+      "repeats_faster": 0
+     },
+     "s48": {
+      "median_us": 85.48448085784912,
+      "paired_change_pct": [
+       -11.214632473870001,
+       -11.369416413565602,
+       -11.212145048764821
+      ],
+      "geomean_change_pct": -11.265428480155947,
+      "repeats_faster": 3
+     },
+     "s64": {
+      "median_us": 82.01096057891846,
+      "paired_change_pct": [
+       -14.531380449066422,
+       -15.011085623849752,
+       -14.91289910524436
+      ],
+      "geomean_change_pct": -14.818706122762393,
+      "repeats_faster": 3
+     },
+     "s96": {
+      "median_us": 81.03343963623047,
+      "paired_change_pct": [
+       -16.06695815509138,
+       -15.98427021019031,
+       -15.496226749265585
+      ],
+      "geomean_change_pct": -15.849528026428139,
+      "repeats_faster": 3
+     },
+     "s132": {
+      "median_us": 80.51144123077393,
+      "paired_change_pct": [
+       -16.437888329988905,
+       -16.525479829088685,
+       -16.33561301595877
+      ],
+      "geomean_change_pct": -16.433029743198134,
+      "repeats_faster": 3
+     }
+    },
+    {
+     "tokens": 2048,
+     "base": {
+      "median_us": 322.6831245422363,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "s24": {
+      "median_us": 323.8541603088379,
+      "paired_change_pct": [
+       0.2285135270147176,
+       0.4008656162716173,
+       0.33338322637648243
+      ],
+      "geomean_change_pct": 0.3208957246122468,
+      "repeats_faster": 0
+     },
+     "s48": {
+      "median_us": 269.06728744506836,
+      "paired_change_pct": [
+       -16.823426094903994,
+       -16.615630945444792,
+       -16.612672663562268
+      ],
+      "geomean_change_pct": -16.683968349074775,
+      "repeats_faster": 3
+     },
+     "s64": {
+      "median_us": 258.64495277404785,
+      "paired_change_pct": [
+       -19.833781741027856,
+       -19.876291894337406,
+       -19.77526916686162
+      ],
+      "geomean_change_pct": -19.828458296841845,
+      "repeats_faster": 3
+     },
+     "s96": {
+      "median_us": 265.59632301330566,
+      "paired_change_pct": [
+       -17.624228440221078,
+       -17.74915298238451,
+       -17.715499979997485
+      ],
+      "geomean_change_pct": -17.69631071912251,
+      "repeats_faster": 3
+     },
+     "s132": {
+      "median_us": 256.8379211425781,
+      "paired_change_pct": [
+       -20.393865711797698,
+       -20.52108569810335,
+       -20.244891128672226
+      ],
+      "geomean_change_pct": -20.38669418525768,
+      "repeats_faster": 3
+     }
+    }
+   ]
+  },
+  "note": "2A2F and overlap parts of this run were stopped in favour of the fairness screen below"
+ },
+ "combine_grid_role_path_vs_masked": {
+  "native_source_sha256": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+  "patch": "\"\"\"b31b-patch.py <tree>: scratch combine-only SM count (AFDEP_SCRATCH_COMBINE_SMS) for every role and Masked. Measurement only.\"\"\"\nimport sys\nfrom pathlib import Path\np = Path(sys.argv[1]) / \"afdep/deepep.py\"\ns = p.read_text()\nold = \"\"\"            handle.num_max_tokens_per_rank,\n            handle.num_sms,\n            self._num_qps(handle.num_sms),\n            None,\n            None,\n            False,\"\"\"\nnew = \"\"\"            handle.num_max_tokens_per_rank,\n            int(os.environ.get(\"AFDEP_SCRATCH_COMBINE_SMS\", \"0\")) or handle.num_sms,\n            self._num_qps(int(os.environ.get(\"AFDEP_SCRATCH_COMBINE_SMS\", \"0\")) or handle.num_sms),\n            None,\n            None,\n            False,\"\"\"\nassert s.count(old) == 1, s.count(old)\np.write_text(s.replace(old, new))\nprint(\"patched\", p)\n",
+  "note": "Python-only switch AFDEP_SCRATCH_COMBINE_SMS passes a combine SM count to every rank (role path and Masked); the per-CTA exit stays on, both roles launch the same combine grid",
+  "screen_3a1f_collect_view": {
+   "arms": {
+    "afd": {},
+    "afd_c64": {
+     "_env": {
+      "AFDEP_SCRATCH_COMBINE_SMS": "64"
+     }
+    },
+    "masked": {
+     "role_aware": false
+    },
+    "masked_c64": {
+     "role_aware": false,
+     "_env": {
+      "AFDEP_SCRATCH_COMBINE_SMS": "64"
+     }
+    }
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--tokens",
+    "1",
+    "32",
+    "512",
+    "2048",
+    "--capacity",
+    "2048",
+    "--ffn-ranks",
+    "1",
+    "--attention-ranks",
+    "3"
+   ],
+   "processes": [
+    {
+     "order": [
+      "afd",
+      "afd_c64",
+      "masked",
+      "masked_c64"
+     ],
+     "median_us": {
+      "afd": {
+       "1": 18.541120290756226,
+       "32": 23.632479906082153,
+       "512": 96.6214370727539,
+       "2048": 322.92552947998047
+      },
+      "afd_c64": {
+       "1": 18.2260799407959,
+       "32": 23.806480169296265,
+       "512": 81.60351753234863,
+       "2048": 258.5471248626709
+      },
+      "masked": {
+       "1": 32.64143943786621,
+       "32": 39.94480013847351,
+       "512": 110.4472017288208,
+       "2048": 342.8198432922363
+      },
+      "masked_c64": {
+       "1": 32.24279999732971,
+       "32": 39.81192111968994,
+       "512": 95.35655975341797,
+       "2048": 270.9932804107666
+      }
+     },
+     "native_source_sha256": {
+      "afd": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "afd_c64": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "masked": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "masked_c64": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    {
+     "order": [
+      "afd_c64",
+      "masked",
+      "masked_c64",
+      "afd"
+     ],
+     "median_us": {
+      "afd_c64": {
+       "1": 18.781360387802124,
+       "32": 23.9628005027771,
+       "512": 81.53800010681152,
+       "2048": 257.76623725891113
+      },
+      "masked": {
+       "1": 32.62320041656494,
+       "32": 39.53520059585571,
+       "512": 110.57703971862793,
+       "2048": 342.91839599609375
+      },
+      "masked_c64": {
+       "1": 32.54431962966919,
+       "32": 40.147199630737305,
+       "512": 94.88152027130127,
+       "2048": 270.22815704345703
+      },
+      "afd": {
+       "1": 17.827680110931396,
+       "32": 23.8481605052948,
+       "512": 96.6309642791748,
+       "2048": 323.25366973876953
+      }
+     },
+     "native_source_sha256": {
+      "afd_c64": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "masked": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "masked_c64": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "afd": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "afd": {
+      "median_us": 18.18440020084381,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd_c64": {
+      "median_us": 18.50372016429901,
+      "paired_change_pct": [
+       -1.699144091726712,
+       5.349435658125579
+      ],
+      "geomean_change_pct": 1.7641375664694037,
+      "repeats_faster": 1
+     },
+     "masked": {
+      "median_us": 32.632319927215576,
+      "paired_change_pct": [
+       76.04890603152914,
+       82.99184309775325
+      ],
+      "geomean_change_pct": 79.48680672977801,
+      "repeats_faster": 0
+     },
+     "masked_c64": {
+      "median_us": 32.39355981349945,
+      "paired_change_pct": [
+       73.89887715363419,
+       82.54938066627071
+      ],
+      "geomean_change_pct": 78.17163725732506,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "afd": {
+      "median_us": 23.740320205688477,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd_c64": {
+      "median_us": 23.884640336036682,
+      "paired_change_pct": [
+       0.736275938477915,
+       0.48070792486005764
+      ],
+      "geomean_change_pct": 0.6084107816653139,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 39.74000036716461,
+      "paired_change_pct": [
+       69.02500413506391,
+       65.7788263672498
+      ],
+      "geomean_change_pct": 67.39404652564689,
+      "repeats_faster": 0
+     },
+     "masked_c64": {
+      "median_us": 39.97956037521362,
+      "paired_change_pct": [
+       68.46273128299065,
+       68.34505798392195
+      ],
+      "geomean_change_pct": 68.40388435533463,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "afd": {
+      "median_us": 96.62620067596436,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd_c64": {
+      "median_us": 81.57075881958008,
+      "paired_change_pct": [
+       -15.543051309718248,
+       -15.619179923278493
+      ],
+      "geomean_change_pct": -15.581124198058848,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 110.51212072372437,
+      "paired_change_pct": [
+       14.309210331508915,
+       14.432304948506737
+      ],
+      "geomean_change_pct": 14.370741079518346,
+      "repeats_faster": 0
+     },
+     "masked_c64": {
+      "median_us": 95.11904001235962,
+      "paired_change_pct": [
+       -1.3091062994473046,
+       -1.8104383216328568
+      ],
+      "geomean_change_pct": -1.5600914562412083,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 2048,
+     "afd": {
+      "median_us": 323.089599609375,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd_c64": {
+      "median_us": 258.156681060791,
+      "paired_change_pct": [
+       -19.9359910382374,
+       -20.258836514611154
+      ],
+      "geomean_change_pct": -20.09757683326776,
+      "repeats_faster": 2
+     },
+     "masked": {
+      "median_us": 342.86911964416504,
+      "paired_change_pct": [
+       6.16065067518583,
+       6.08337293532224
+      ],
+      "geomean_change_pct": 6.122004771075673,
+      "repeats_faster": 0
+     },
+     "masked_c64": {
+      "median_us": 270.6107187271118,
+      "paired_change_pct": [
+       -16.0818034897527,
+       -16.40368467840254
+      ],
+      "geomean_change_pct": -16.242898708883125,
+      "repeats_faster": 2
+     }
+    }
+   ]
+  },
+  "overlap_3a1f": {
+   "native_source_sha256": [
+    "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+   ],
+   "per_repeat": {
+    "afd": {
+     "1": {
+      "gemm_solo_us": [
+       24.83,
+       24.75
+      ],
+      "attention.gemm_us_per_gemm": [
+       25.8,
+       26.04
+      ],
+      "attention.exchange_us": [
+       35.88,
+       34.28
+      ],
+      "attention.solo_exchange_us": [
+       21.55,
+       21.18
+      ],
+      "attention.makespan_us": [
+       7176.0,
+       6855.52
+      ],
+      "ffn.gemm_us_per_gemm": [
+       25.76,
+       25.93
+      ],
+      "ffn.exchange_us": [
+       35.73,
+       34.28
+      ],
+      "ffn.solo_exchange_us": [
+       21.17,
+       20.72
+      ],
+      "ffn.makespan_us": [
+       7145.7,
+       6856.42
+      ]
+     },
+     "512": {
+      "gemm_solo_us": [
+       24.83,
+       24.75
+      ],
+      "attention.gemm_us_per_gemm": [
+       26.39,
+       26.64
+      ],
+      "attention.exchange_us": [
+       149.36,
+       149.51
+      ],
+      "attention.solo_exchange_us": [
+       99.01,
+       99.5
+      ],
+      "attention.makespan_us": [
+       29871.2,
+       29902.08
+      ],
+      "ffn.gemm_us_per_gemm": [
+       31.91,
+       31.7
+      ],
+      "ffn.exchange_us": [
+       149.35,
+       149.42
+      ],
+      "ffn.solo_exchange_us": [
+       99.04,
+       99.37
+      ],
+      "ffn.makespan_us": [
+       29870.37,
+       29884.26
+      ]
+     },
+     "2048": {
+      "gemm_solo_us": [
+       24.83,
+       24.75
+      ],
+      "attention.gemm_us_per_gemm": [
+       26.74,
+       26.72
+      ],
+      "attention.exchange_us": [
+       481.76,
+       482.92
+      ],
+      "attention.solo_exchange_us": [
+       327.99,
+       327.29
+      ],
+      "attention.makespan_us": [
+       96352.26,
+       96584.8
+      ],
+      "ffn.gemm_us_per_gemm": [
+       34.4,
+       34.73
+      ],
+      "ffn.exchange_us": [
+       481.85,
+       482.52
+      ],
+      "ffn.solo_exchange_us": [
+       327.99,
+       327.2
+      ],
+      "ffn.makespan_us": [
+       96370.62,
+       96503.88
+      ]
+     }
+    },
+    "afd_c64": {
+     "1": {
+      "gemm_solo_us": [
+       24.59,
+       24.58
+      ],
+      "attention.gemm_us_per_gemm": [
+       26.12,
+       25.9
+      ],
+      "attention.exchange_us": [
+       34.89,
+       34.51
+      ],
+      "attention.solo_exchange_us": [
+       21.8,
+       21.22
+      ],
+      "attention.makespan_us": [
+       6977.98,
+       6901.28
+      ],
+      "ffn.gemm_us_per_gemm": [
+       26.2,
+       25.95
+      ],
+      "ffn.exchange_us": [
+       34.59,
+       34.41
+      ],
+      "ffn.solo_exchange_us": [
+       21.7,
+       20.99
+      ],
+      "ffn.makespan_us": [
+       6917.57,
+       6882.59
+      ]
+     },
+     "512": {
+      "gemm_solo_us": [
+       24.59,
+       24.58
+      ],
+      "attention.gemm_us_per_gemm": [
+       26.89,
+       26.59
+      ],
+      "attention.exchange_us": [
+       135.29,
+       135.63
+      ],
+      "attention.solo_exchange_us": [
+       83.96,
+       84.07
+      ],
+      "attention.makespan_us": [
+       27057.57,
+       27125.15
+      ],
+      "ffn.gemm_us_per_gemm": [
+       32.53,
+       32.13
+      ],
+      "ffn.exchange_us": [
+       135.26,
+       135.56
+      ],
+      "ffn.solo_exchange_us": [
+       83.86,
+       83.92
+      ],
+      "ffn.makespan_us": [
+       27052.7,
+       27112.86
+      ]
+     },
+     "2048": {
+      "gemm_solo_us": [
+       24.59,
+       24.58
+      ],
+      "attention.gemm_us_per_gemm": [
+       27.2,
+       27.15
+      ],
+      "attention.exchange_us": [
+       423.02,
+       424.24
+      ],
+      "attention.solo_exchange_us": [
+       262.84,
+       262.0
+      ],
+      "attention.makespan_us": [
+       84603.45,
+       84848.54
+      ],
+      "ffn.gemm_us_per_gemm": [
+       34.94,
+       35.42
+      ],
+      "ffn.exchange_us": [
+       422.96,
+       424.2
+      ],
+      "ffn.solo_exchange_us": [
+       262.82,
+       262.01
+      ],
+      "ffn.makespan_us": [
+       84591.45,
+       84840.19
+      ]
+     }
+    },
+    "masked": {
+     "1": {
+      "gemm_solo_us": [
+       24.64,
+       24.62
+      ],
+      "attention.gemm_us_per_gemm": [
+       30.86,
+       30.59
+      ],
+      "attention.exchange_us": [
+       48.18,
+       47.14
+      ],
+      "attention.solo_exchange_us": [
+       35.2,
+       34.89
+      ],
+      "attention.makespan_us": [
+       9635.17,
+       9427.65
+      ],
+      "ffn.gemm_us_per_gemm": [
+       30.93,
+       30.51
+      ],
+      "ffn.exchange_us": [
+       48.14,
+       47.17
+      ],
+      "ffn.solo_exchange_us": [
+       35.01,
+       34.51
+      ],
+      "ffn.makespan_us": [
+       9627.17,
+       9434.56
+      ]
+     },
+     "512": {
+      "gemm_solo_us": [
+       24.64,
+       24.62
+      ],
+      "attention.gemm_us_per_gemm": [
+       31.19,
+       30.57
+      ],
+      "attention.exchange_us": [
+       165.27,
+       165.9
+      ],
+      "attention.solo_exchange_us": [
+       111.55,
+       111.27
+      ],
+      "attention.makespan_us": [
+       33053.63,
+       33180.35
+      ],
+      "ffn.gemm_us_per_gemm": [
+       36.64,
+       35.55
+      ],
+      "ffn.exchange_us": [
+       165.31,
+       165.9
+      ],
+      "ffn.solo_exchange_us": [
+       111.56,
+       111.29
+      ],
+      "ffn.makespan_us": [
+       33061.6,
+       33179.39
+      ]
+     },
+     "2048": {
+      "gemm_solo_us": [
+       24.64,
+       24.62
+      ],
+      "attention.gemm_us_per_gemm": [
+       28.98,
+       28.69
+      ],
+      "attention.exchange_us": [
+       509.04,
+       507.5
+      ],
+      "attention.solo_exchange_us": [
+       343.13,
+       343.1
+      ],
+      "attention.makespan_us": [
+       101808.7,
+       101500.73
+      ],
+      "ffn.gemm_us_per_gemm": [
+       37.36,
+       37.36
+      ],
+      "ffn.exchange_us": [
+       509.0,
+       507.46
+      ],
+      "ffn.solo_exchange_us": [
+       343.11,
+       343.05
+      ],
+      "ffn.makespan_us": [
+       101799.39,
+       101492.87
+      ]
+     }
+    },
+    "masked_c64": {
+     "1": {
+      "gemm_solo_us": [
+       24.59,
+       24.62
+      ],
+      "attention.gemm_us_per_gemm": [
+       30.39,
+       30.25
+      ],
+      "attention.exchange_us": [
+       47.54,
+       47.12
+      ],
+      "attention.solo_exchange_us": [
+       35.14,
+       35.32
+      ],
+      "attention.makespan_us": [
+       9508.61,
+       9424.19
+      ],
+      "ffn.gemm_us_per_gemm": [
+       30.57,
+       30.19
+      ],
+      "ffn.exchange_us": [
+       47.49,
+       46.97
+      ],
+      "ffn.solo_exchange_us": [
+       34.9,
+       34.84
+      ],
+      "ffn.makespan_us": [
+       9498.4,
+       9394.18
+      ]
+     },
+     "512": {
+      "gemm_solo_us": [
+       24.59,
+       24.62
+      ],
+      "attention.gemm_us_per_gemm": [
+       31.35,
+       32.07
+      ],
+      "attention.exchange_us": [
+       151.07,
+       157.08
+      ],
+      "attention.solo_exchange_us": [
+       96.15,
+       96.27
+      ],
+      "attention.makespan_us": [
+       30213.6,
+       31416.9
+      ],
+      "ffn.gemm_us_per_gemm": [
+       35.41,
+       34.3
+      ],
+      "ffn.exchange_us": [
+       150.85,
+       157.09
+      ],
+      "ffn.solo_exchange_us": [
+       96.2,
+       96.32
+      ],
+      "ffn.makespan_us": [
+       30169.54,
+       31417.54
+      ]
+     },
+     "2048": {
+      "gemm_solo_us": [
+       24.59,
+       24.62
+      ],
+      "attention.gemm_us_per_gemm": [
+       30.24,
+       30.14
+      ],
+      "attention.exchange_us": [
+       443.03,
+       443.18
+      ],
+      "attention.solo_exchange_us": [
+       271.1,
+       271.28
+      ],
+      "attention.makespan_us": [
+       88605.92,
+       88636.96
+      ],
+      "ffn.gemm_us_per_gemm": [
+       38.71,
+       38.53
+      ],
+      "ffn.exchange_us": [
+       443.02,
+       443.15
+      ],
+      "ffn.solo_exchange_us": [
+       271.03,
+       271.22
+      ],
+      "ffn.makespan_us": [
+       88603.49,
+       88629.44
+      ]
+     }
+    }
+   }
+  }
+ },
+ "streaming_expand_timing_bound": {
+  "native_source_sha256": "073ced76 (final + b31e-patch.py: copy epilogue without its whole-dispatch dependency, fence before the FFN receive's count trigger); WRONG DATA by design, timing only",
+  "patch": "\"\"\"b31e-patch.py <tree>: TIMING BOUND ONLY (wrong data): the copy epilogue skips its whole-dispatch dependency and starts at the\nFFN receive's count trigger, so expansion overlaps ingress. Measurement of the overlap ceiling for a 3:1 streaming expand; never commit.\"\"\"\nimport sys\nfrom pathlib import Path\nimpls = Path(sys.argv[1]) / \"afdep/third_party/deepep_v2/deep_ep/include/deep_ep/impls\"\np = impls / \"dispatch_copy_epilogue.cuh\"; s = p.read_text()\nold = \"    cudaGridDependencySynchronize();\\n\"\nassert s.count(old) == 1\ns = s.replace(old, \"    // b31e timing bound: no whole-dispatch dependency\\n\"); p.write_text(s)\np = impls / \"afdep_ffn_dispatch.cuh\"; s = p.read_text()\nold = \"    if (warp_idx < kNumNotifyWarps) cudaTriggerProgrammaticLaunchCompletion();\"\nassert s.count(old) == 1\ns = s.replace(old, \"    if (warp_idx < kNumNotifyWarps) { __threadfence(); cudaTriggerProgrammaticLaunchCompletion(); }\"); p.write_text(s)\nprint(\"patched\", impls)\n",
+  "screen_3a1f_collect_view": {
+   "arms": {
+    "final": {
+     "_tree": "/work/src-fin4",
+     "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+    },
+    "bound": {}
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--tokens",
+    "1",
+    "128",
+    "512",
+    "2048",
+    "--capacity",
+    "2048",
+    "--ffn-ranks",
+    "1",
+    "--attention-ranks",
+    "3"
+   ],
+   "processes": [
+    {
+     "order": [
+      "final",
+      "bound"
+     ],
+     "median_us": {
+      "final": {
+       "1": 18.48784029483795,
+       "128": 35.444639921188354,
+       "512": 96.3645601272583,
+       "2048": 322.5971984863281
+      },
+      "bound": {
+       "1": 17.48016059398651,
+       "128": 35.17312049865723,
+       "512": 95.33160209655762,
+       "2048": 311.881685256958
+      }
+     },
+     "native_source_sha256": {
+      "final": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "bound": "073ced76373b999d9a7a4f479f93808b8a6dd7c984beeb180ea59a6bf8e3cab8"
+     }
+    },
+    {
+     "order": [
+      "bound",
+      "final"
+     ],
+     "median_us": {
+      "bound": {
+       "1": 18.32264006137848,
+       "128": 35.36168098449707,
+       "512": 96.0804033279419,
+       "2048": 311.9866466522217
+      },
+      "final": {
+       "1": 18.588719964027405,
+       "128": 35.70840001106262,
+       "512": 96.88647747039795,
+       "2048": 322.63336181640625
+      }
+     },
+     "native_source_sha256": {
+      "bound": "073ced76373b999d9a7a4f479f93808b8a6dd7c984beeb180ea59a6bf8e3cab8",
+      "final": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    {
+     "order": [
+      "final",
+      "bound"
+     ],
+     "median_us": {
+      "final": {
+       "1": 18.072319626808167,
+       "128": 35.599679946899414,
+       "512": 96.44983768463135,
+       "2048": 323.15040588378906
+      },
+      "bound": {
+       "1": 18.342960476875305,
+       "128": 35.38904070854187,
+       "512": 96.52344226837158,
+       "2048": 311.6000747680664
+      }
+     },
+     "native_source_sha256": {
+      "final": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "bound": "073ced76373b999d9a7a4f479f93808b8a6dd7c984beeb180ea59a6bf8e3cab8"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "final": {
+      "median_us": 18.48784029483795,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "bound": {
+      "median_us": 18.32264006137848,
+      "paired_change_pct": [
+       -5.4504998138306,
+       -1.431405191771351,
+       1.4975435121547642
+      ],
+      "geomean_change_pct": -1.8362566368466227,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 128,
+     "final": {
+      "median_us": 35.599679946899414,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "bound": {
+      "median_us": 35.36168098449707,
+      "paired_change_pct": [
+       -0.7660380332113803,
+       -0.9709732904810586,
+       -0.5916885732448529
+      ],
+      "geomean_change_pct": -0.7763543920048854,
+      "repeats_faster": 3
+     }
+    },
+    {
+     "tokens": 512,
+     "final": {
+      "median_us": 96.44983768463135,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "bound": {
+      "median_us": 96.0804033279419,
+      "paired_change_pct": [
+       -1.0719273032913423,
+       -0.8319779638003011,
+       0.07631384925799178
+      ],
+      "geomean_change_pct": -0.6104250578034986,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 2048,
+     "final": {
+      "median_us": 322.63336181640625,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "bound": {
+      "median_us": 311.881685256958,
+      "paired_change_pct": [
+       -3.321638650195613,
+       -3.2999424189253723,
+       -3.5742895275447606
+      ],
+      "geomean_change_pct": -3.398703846543949,
+      "repeats_faster": 3
+     }
+    }
+   ]
+  },
+  "note_2a2f": "the 2A2F bound arm failed benchmarks.comm's correctness check (expected for a wrong-data bound); no 2A2F numbers",
+  "count_arrival_from_kernel_timelines": "epilogue start minus FFN receive start under the count trigger: 7.2, 11.4, 25 and 73 us at 1, 128, 512, 2048 tokens (3A:1F traces above)"
+ },
+ "count_first_standin_timing_bound": {
+  "native_source_sha256": "cfc0d694 (b31e tree + b31f-patch.py 3000 ns) and its 8000 ns twin; benchmarks.comm check disabled in both trees (data wrong by design); final arm = /work/src-fin4 (9675783b)",
+  "patch": "\"\"\"b31f-patch.py <tree> <delay_ns>: TIMING BOUND ONLY, on top of b31e: source payload warps idle <delay_ns> at entry so the count\nstores reach the FFN before the payload. Tests whether count-first ordering lets the expansion overlap ingress; never commit.\"\"\"\nimport sys\nfrom pathlib import Path\np = Path(sys.argv[1]) / \"afdep/third_party/deepep_v2/deep_ep/include/deep_ep/impls/dispatch.cuh\"\ns = p.read_text()\nold = \"        const int dispatch_warp_idx = warp_idx - kNumNotifyWarps;\\n\"\nassert s.count(old) == 1\nnew = old + (f\"        if (afd_source) {{ unsigned long long t0, t1; asm volatile(\\\"mov.u64 %0, %%globaltimer;\\\" : \\\"=l\\\"(t0));\"\n             f\" do {{ asm volatile(\\\"mov.u64 %0, %%globaltimer;\\\" : \\\"=l\\\"(t1)); }} while (t1 - t0 < {int(sys.argv[2])}ull); }}  // b31f\\n\")\np.write_text(s.replace(old, new))\nprint(\"patched\", p, sys.argv[2])\n",
+  "screen_3a1f_collect_view": {
+   "arms": {
+    "final": {
+     "_tree": "/work/src-fin4"
+    },
+    "bound": {},
+    "d3us": {
+     "_tree": "/work/src-b31f3000"
+    },
+    "d8us": {
+     "_tree": "/work/src-b31f8000"
+    }
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--tokens",
+    "1",
+    "512",
+    "2048",
+    "--capacity",
+    "2048",
+    "--ffn-ranks",
+    "1",
+    "--attention-ranks",
+    "3"
+   ],
+   "processes": [
+    {
+     "order": [
+      "final",
+      "bound",
+      "d3us",
+      "d8us"
+     ],
+     "median_us": {
+      "final": {
+       "1": 18.692559599876404,
+       "512": 96.93672180175781,
+       "2048": 322.72144317626953
+      },
+      "bound": {
+       "1": 18.33911955356598,
+       "512": 96.56424045562744,
+       "2048": 312.17735290527344
+      },
+      "d3us": {
+       "1": 18.774160146713257,
+       "512": 84.1319990158081,
+       "2048": 308.04903984069824
+      },
+      "d8us": {
+       "1": 23.591119050979614,
+       "512": 88.25016021728516,
+       "2048": 283.615198135376
+      }
+     },
+     "native_source_sha256": {
+      "final": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "bound": "073ced76373b999d9a7a4f479f93808b8a6dd7c984beeb180ea59a6bf8e3cab8",
+      "d3us": "cfc0d6943698b86cd10661a81077913ef3defff61c27a2a5e22ff4bd7a734b9e",
+      "d8us": "a88a383d9e57c1c146db1f2ffbecff5386f4e270034a3b0e6556458e8e21be54"
+     }
+    },
+    {
+     "order": [
+      "bound",
+      "d3us",
+      "d8us",
+      "final"
+     ],
+     "median_us": {
+      "bound": {
+       "1": 17.475680112838745,
+       "512": 95.44360160827637,
+       "2048": 310.9960746765137
+      },
+      "d3us": {
+       "1": 18.376320004463196,
+       "512": 83.81991863250732,
+       "2048": 309.07520294189453
+      },
+      "d8us": {
+       "1": 23.579440116882324,
+       "512": 88.25239658355713,
+       "2048": 283.6178398132324
+      },
+      "final": {
+       "1": 18.565279841423035,
+       "512": 96.84479713439941,
+       "2048": 322.63662338256836
+      }
+     },
+     "native_source_sha256": {
+      "bound": "073ced76373b999d9a7a4f479f93808b8a6dd7c984beeb180ea59a6bf8e3cab8",
+      "d3us": "cfc0d6943698b86cd10661a81077913ef3defff61c27a2a5e22ff4bd7a734b9e",
+      "d8us": "a88a383d9e57c1c146db1f2ffbecff5386f4e270034a3b0e6556458e8e21be54",
+      "final": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    },
+    {
+     "order": [
+      "d3us",
+      "d8us",
+      "final",
+      "bound"
+     ],
+     "median_us": {
+      "d3us": {
+       "1": 18.609440326690674,
+       "512": 83.73655796051025,
+       "2048": 308.8715934753418
+      },
+      "d8us": {
+       "1": 23.24072003364563,
+       "512": 88.03264141082764,
+       "2048": 284.2234420776367
+      },
+      "final": {
+       "1": 18.542879819869995,
+       "512": 96.54888153076172,
+       "2048": 322.67263412475586
+      },
+      "bound": {
+       "1": 17.526320219039917,
+       "512": 95.74543952941895,
+       "2048": 310.8087158203125
+      }
+     },
+     "native_source_sha256": {
+      "d3us": "cfc0d6943698b86cd10661a81077913ef3defff61c27a2a5e22ff4bd7a734b9e",
+      "d8us": "a88a383d9e57c1c146db1f2ffbecff5386f4e270034a3b0e6556458e8e21be54",
+      "final": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+      "bound": "073ced76373b999d9a7a4f479f93808b8a6dd7c984beeb180ea59a6bf8e3cab8"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "final": {
+      "median_us": 18.565279841423035,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "bound": {
+      "median_us": 17.526320219039917,
+      "paired_change_pct": [
+       -1.8908060419545847,
+       -5.869018608344179,
+       -5.482209940986427
+      ],
+      "geomean_change_pct": -4.430653205702251,
+      "repeats_faster": 3
+     },
+     "d3us": {
+      "median_us": 18.609440326690674,
+      "paired_change_pct": [
+       0.436540252290496,
+       -1.0178130282648912,
+       0.35895452846193
+      ],
+      "geomean_change_pct": -0.07634622761888421,
+      "repeats_faster": 1
+     },
+     "d8us": {
+      "median_us": 23.579440116882324,
+      "paired_change_pct": [
+       26.205931964157546,
+       27.008266604587593,
+       25.335008690190453
+      ],
+      "geomean_change_pct": 26.181218660785245,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "final": {
+      "median_us": 96.84479713439941,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "bound": {
+      "median_us": 95.74543952941895,
+      "paired_change_pct": [
+       -0.3842520555750961,
+       -1.4468464673207948,
+       -0.8321608584215268
+      ],
+      "geomean_change_pct": -0.8887108131399923,
+      "repeats_faster": 3
+     },
+     "d3us": {
+      "median_us": 83.81991863250732,
+      "paired_change_pct": [
+       -13.209362301457062,
+       -13.449228959420923,
+       -13.27029724955363
+      ],
+      "geomean_change_pct": -13.309689297255801,
+      "repeats_faster": 3
+     },
+     "d8us": {
+      "median_us": 88.25016021728516,
+      "paired_change_pct": [
+       -8.961063901291466,
+       -8.872340905333209,
+       -8.820651244127253
+      ],
+      "geomean_change_pct": -8.884703802623228,
+      "repeats_faster": 3
+     }
+    },
+    {
+     "tokens": 2048,
+     "final": {
+      "median_us": 322.67263412475586,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "bound": {
+      "median_us": 310.9960746765137,
+      "paired_change_pct": [
+       -3.267241918361441,
+       -3.607944003384833,
+       -3.676766186455205
+      ],
+      "geomean_change_pct": -3.517483375184949,
+      "repeats_faster": 3
+     },
+     "d3us": {
+      "median_us": 308.8715934753418,
+      "paired_change_pct": [
+       -4.546460622871362,
+       -4.203310925614689,
+       -4.2771029178998
+      ],
+      "geomean_change_pct": -4.342405243235059,
+      "repeats_faster": 3
+     },
+     "d8us": {
+      "median_us": 283.6178398132324,
+      "paired_change_pct": [
+       -12.117646926713155,
+       -12.09372425246007,
+       -11.915851541427402
+      ],
+      "geomean_change_pct": -12.042453617868421,
+      "repeats_faster": 3
+     }
+    }
+   ]
+  }
+ },
+ "cross_node_4f12a": {
+  "native_source_sha256": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a",
+  "layout": "statler pods s8b (FFN domain), s8c, s8d, s4e; 4 GPUs per domain (XNPROC=4), H100, 8 x 400 Gb/s NDR per node",
+  "screen": {
+   "arms": {
+    "afd": {
+     "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+    },
+    "afd_shared": {
+     "_env": {
+      "AFDEP_SHARED_ROLE_KERNELS": "1"
+     },
+     "_digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+    },
+    "masked": {
+     "role_aware": false
+    }
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "--capacity",
+    "2048",
+    "--hybrid",
+    "on",
+    "--ffn-ranks",
+    "4",
+    "--attention-ranks",
+    "12"
+   ],
+   "processes": [
+    {
+     "order": [
+      "afd",
+      "afd_shared",
+      "masked"
+     ],
+     "median_us": {
+      "afd": {
+       "1": 108.46208095550537,
+       "8": 127.67680168151855,
+       "32": 137.42616176605225,
+       "128": 194.57008361816406,
+       "512": 493.4884834289551
+      },
+      "afd_shared": {
+       "1": 109.618239402771,
+       "8": 127.71071910858154,
+       "32": 137.79312133789062,
+       "128": 194.36199188232422,
+       "512": 492.82873153686523
+      },
+      "masked": {
+       "1": 140.27967929840088,
+       "8": 152.40064144134521,
+       "32": 164.24744606018066,
+       "128": 218.59375953674316,
+       "512": 516.9655990600586
+      }
+     }
+    },
+    {
+     "order": [
+      "afd_shared",
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "afd_shared": {
+       "1": 109.56279754638672,
+       "8": 128.41840267181396,
+       "32": 137.63000011444092,
+       "128": 194.86224174499512,
+       "512": 493.5228729248047
+      },
+      "masked": {
+       "1": 139.8318386077881,
+       "8": 152.31815814971924,
+       "32": 164.6604061126709,
+       "128": 218.32975387573242,
+       "512": 516.6058349609375
+      },
+      "afd": {
+       "1": 108.88576030731201,
+       "8": 128.18336009979248,
+       "32": 137.8600788116455,
+       "128": 194.40407752990723,
+       "512": 493.2725524902344
+      }
+     }
+    },
+    {
+     "order": [
+      "masked",
+      "afd",
+      "afd_shared"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 140.72968006134033,
+       "8": 151.3855218887329,
+       "32": 164.12591934204102,
+       "128": 218.13712120056152,
+       "512": 516.7588043212891
+      },
+      "afd": {
+       "1": 108.66496086120605,
+       "8": 127.77159690856934,
+       "32": 137.41559982299805,
+       "128": 194.16799545288086,
+       "512": 493.475284576416
+      },
+      "afd_shared": {
+       "1": 109.17520046234131,
+       "8": 128.07424068450928,
+       "32": 137.80800342559814,
+       "128": 194.58840370178223,
+       "512": 494.5536804199219
+      }
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "afd": {
+      "median_us": 108.66496086120605,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd_shared": {
+      "median_us": 109.56279754638672,
+      "paired_change_pct": [
+       1.065956357355824,
+       0.621786758125098,
+       0.46955301607016775
+      ],
+      "geomean_change_pct": 0.718781183443018,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 140.27967929840088,
+      "paired_change_pct": [
+       29.33522763217875,
+       28.420684406423668,
+       29.50787350955697
+      ],
+      "geomean_change_pct": 29.087045650602803,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 8,
+     "afd": {
+      "median_us": 127.77159690856934,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd_shared": {
+      "median_us": 128.07424068450928,
+      "paired_change_pct": [
+       0.026565066336470267,
+       0.18336433983201506,
+       0.23686310828259227
+      ],
+      "geomean_change_pct": 0.1488910664813492,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 152.31815814971924,
+      "paired_change_pct": [
+       19.36439465447972,
+       18.82833936568482,
+       18.48135700852296
+      ],
+      "geomean_change_pct": 18.890809063388204,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "afd": {
+      "median_us": 137.42616176605225,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd_shared": {
+      "median_us": 137.79312133789062,
+      "paired_change_pct": [
+       0.2670230814297847,
+       -0.1668929099619465,
+       0.2855597203705651
+      ],
+      "geomean_change_pct": 0.1283448415813071,
+      "repeats_faster": 1
+     },
+     "masked": {
+      "median_us": 164.24744606018066,
+      "paired_change_pct": [
+       19.516869240507283,
+       19.440237907916735,
+       19.437618111370124
+      ],
+      "geomean_change_pct": 19.4649027659189,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "afd": {
+      "median_us": 194.40407752990723,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd_shared": {
+      "median_us": 194.58840370178223,
+      "paired_change_pct": [
+       -0.10694950218976818,
+       0.23567623730391674,
+       0.21651778807356692
+      ],
+      "geomean_change_pct": 0.11495800897529662,
+      "repeats_faster": 1
+     },
+     "masked": {
+      "median_us": 218.32975387573242,
+      "paired_change_pct": [
+       12.347055349847412,
+       12.307188537310632,
+       12.344529638767021
+      ],
+      "geomean_change_pct": 12.332923029741515,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "afd": {
+      "median_us": 493.475284576416,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd_shared": {
+      "median_us": 493.5228729248047,
+      "paired_change_pct": [
+       -0.1336914465572936,
+       0.05074688086872392,
+       0.21853087220600198
+      ],
+      "geomean_change_pct": 0.04509201555678022,
+      "repeats_faster": 1
+     },
+     "masked": {
+      "median_us": 516.7588043212891,
+      "paired_change_pct": [
+       4.757378625733089,
+       4.730302213838478,
+       4.718274749030016
+      ],
+      "geomean_change_pct": 4.735317252878057,
+      "repeats_faster": 0
+     }
+    }
+   ],
+   "native_source_sha256": {
+    "afd": [
+     {
+      "repeat": 0,
+      "ranks": 16,
+      "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     {
+      "repeat": 1,
+      "ranks": 16,
+      "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     {
+      "repeat": 2,
+      "ranks": 16,
+      "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    ],
+    "afd_shared": [
+     {
+      "repeat": 0,
+      "ranks": 16,
+      "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     {
+      "repeat": 1,
+      "ranks": 16,
+      "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     {
+      "repeat": 2,
+      "ranks": 16,
+      "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    ],
+    "masked": [
+     {
+      "repeat": 0,
+      "ranks": 16,
+      "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     {
+      "repeat": 1,
+      "ranks": 16,
+      "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     },
+     {
+      "repeat": 2,
+      "ranks": 16,
+      "digest": "9675783bee5e9a41c3239cb0e8f2342dc5cbac8feb459f72d75f6d6f2700425a"
+     }
+    ]
+   },
+   "pods": [
+    "afdep-v21-s8b",
+    "afdep-v21-s8c",
+    "afdep-v21-s8d",
+    "afdep-v21-s4e"
+   ],
+   "topology": "4 pods (soc) x 4 GPUs, InfiniBand, GIN"
+  },
+  "traces_and_log": [
+   "s8d 9675783b",
+   "s4e 9675783b",
+   "#### screen 4F:12A (4-GPU domains)",
+   "{\"repeat\": 2, \"masked\": {\"1\": 140.72968006134033, \"8\": 151.3855218887329, \"32\": 164.12591934204102, \"128\": 218.13712120056152, \"512\": 516.7588043212891}, \"afd\": {\"1\": 108.66496086120605, \"8\": 127.77159690856934, \"32\": 137.41559982299805, \"128\": 194.16799545288086, \"512\": 493.475284576416}, \"afd_shared\": {\"1\": 109.17520046234131, \"8\": 128.07424068450928, \"32\": 137.80800342559814, \"128\": 194.58840370178223, \"512\": 494.5536804199219}}",
+   "{\"tokens\": 1, \"afd\": [108.66, 0.0, 0], \"afd_shared\": [109.56, 0.72, 0], \"masked\": [140.28, 29.09, 0]}",
+   "{\"tokens\": 8, \"afd\": [127.77, 0.0, 0], \"afd_shared\": [128.07, 0.15, 0], \"masked\": [152.32, 18.89, 0]}",
+   "{\"tokens\": 32, \"afd\": [137.43, 0.0, 0], \"afd_shared\": [137.79, 0.13, 1], \"masked\": [164.25, 19.46, 0]}",
+   "{\"tokens\": 128, \"afd\": [194.4, 0.0, 0], \"afd_shared\": [194.59, 0.11, 1], \"masked\": [218.33, 12.33, 0]}",
+   "{\"tokens\": 512, \"afd\": [493.48, 0.0, 0], \"afd_shared\": [493.52, 0.05, 1], \"masked\": [516.76, 4.74, 0]}",
+   "#### afd T1",
+   "## node0 (s8b)",
+   "dev0: SM-us reserved per exchange (upper bound)    2953.5",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    56.10 us  SM-us    1346.3",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.87 us  SM-us     511.1",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    45.66 us  SM-us    1095.9",
+   "  3:afdep_ffn_complete       grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "dev1: SM-us reserved per exchange (upper bound)    2792.1",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    54.66 us  SM-us    1311.7",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.59 us  SM-us     342.1",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    47.10 us  SM-us    1130.5",
+   "  3:afdep_ffn_complete       grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     1.98 us  SM-us       2.0",
+   "dev2: SM-us reserved per exchange (upper bound)    3084.0",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    57.02 us  SM-us    1368.6",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     4.83 us  SM-us     637.8",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    44.70 us  SM-us    1072.9",
+   "  3:afdep_ffn_complete       grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "dev3: SM-us reserved per exchange (upper bound)    2942.7",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    55.94 us  SM-us    1342.5",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.73 us  SM-us     492.1",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    45.85 us  SM-us    1100.5",
+   "  3:afdep_ffn_complete       grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "## node1 (s8c)",
+   "dev0: SM-us reserved per exchange (upper bound)     768.0",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.98 us  SM-us     239.6",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    90.78 us  SM-us      90.8",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.30 us  SM-us     435.1",
+   "dev1: SM-us reserved per exchange (upper bound)     753.1",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.02 us  SM-us     216.6",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.08 us  SM-us       2.1",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    91.55 us  SM-us      91.6",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.36 us  SM-us     443.5",
+   "dev2: SM-us reserved per exchange (upper bound)     768.9",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.90 us  SM-us     237.7",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    90.88 us  SM-us      90.9",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.33 us  SM-us     439.3",
+   "dev3: SM-us reserved per exchange (upper bound)     760.4",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.66 us  SM-us     231.9",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    91.04 us  SM-us      91.0",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.30 us  SM-us     435.1",
+   "## node2 (s8d)",
+   "dev0: SM-us reserved per exchange (upper bound)     769.0",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    10.02 us  SM-us     240.4",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    90.62 us  SM-us      90.6",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.30 us  SM-us     435.1",
+   "dev1: SM-us reserved per exchange (upper bound)     762.3",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.73 us  SM-us     233.5",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    91.06 us  SM-us      91.1",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.30 us  SM-us     435.1",
+   "dev2: SM-us reserved per exchange (upper bound)     767.7",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.95 us  SM-us     238.8",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    90.72 us  SM-us      90.7",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.30 us  SM-us     435.1",
+   "dev3: SM-us reserved per exchange (upper bound)     764.5",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.73 us  SM-us     233.5",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    90.94 us  SM-us      90.9",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.33 us  SM-us     439.3",
+   "## node3 (s4e)",
+   "dev0: SM-us reserved per exchange (upper bound)     764.0",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.79 us  SM-us     235.0",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     1.95 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    91.12 us  SM-us      91.1",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.30 us  SM-us     435.1",
+   "dev1: SM-us reserved per exchange (upper bound)     750.9",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.66 us  SM-us     231.9",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     1.98 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    91.23 us  SM-us      91.2",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.23 us  SM-us     426.6",
+   "dev2: SM-us reserved per exchange (upper bound)     756.4",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.86 us  SM-us     236.6",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     1.98 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    91.12 us  SM-us      91.1",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.23 us  SM-us     426.6",
+   "dev3: SM-us reserved per exchange (upper bound)     748.8",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur     9.57 us  SM-us     229.6",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     1.98 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur    91.46 us  SM-us      91.5",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.20 us  SM-us     422.4",
+   "#### masked T1",
+   "## node0 (s8b)",
+   "dev0: SM-us reserved per exchange (upper bound)    3943.3",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    79.23 us  SM-us    1901.6",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.83 us  SM-us     373.8",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    56.90 us  SM-us    1365.5",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.27 us  SM-us     299.9",
+   "dev1: SM-us reserved per exchange (upper bound)    4075.8",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    79.18 us  SM-us    1900.4",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.84 us  SM-us     506.9",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    57.41 us  SM-us    1377.8",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.21 us  SM-us     291.5",
+   "dev2: SM-us reserved per exchange (upper bound)    4357.4",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    79.68 us  SM-us    1912.3",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     5.82 us  SM-us     768.8",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    56.77 us  SM-us    1362.4",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.27 us  SM-us     299.9",
+   "dev3: SM-us reserved per exchange (upper bound)    4107.8",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    78.94 us  SM-us    1894.6",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     4.10 us  SM-us     540.7",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    57.42 us  SM-us    1378.2",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.27 us  SM-us     299.9",
+   "## node1 (s8c)",
+   "dev0: SM-us reserved per exchange (upper bound)    3946.9",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    62.72 us  SM-us    1505.3",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     1.73 us  SM-us     228.1",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    73.33 us  SM-us    1759.9",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.39 us  SM-us     447.7",
+   "dev1: SM-us reserved per exchange (upper bound)    4045.6",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    62.43 us  SM-us    1498.4",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.35 us  SM-us     310.5",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    73.82 us  SM-us    1771.8",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.46 us  SM-us     456.2",
+   "dev2: SM-us reserved per exchange (upper bound)    4051.0",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    64.30 us  SM-us    1543.3",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.48 us  SM-us     327.4",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    72.16 us  SM-us    1731.8",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.39 us  SM-us     447.7",
+   "dev3: SM-us reserved per exchange (upper bound)    4013.0",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    62.61 us  SM-us    1502.6",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.14 us  SM-us     283.0",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    73.79 us  SM-us    1771.0",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.39 us  SM-us     447.7",
+   "## node2 (s8d)",
+   "dev0: SM-us reserved per exchange (upper bound)    3948.7",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    62.83 us  SM-us    1508.0",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     1.73 us  SM-us     228.1",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    73.36 us  SM-us    1760.6",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.39 us  SM-us     447.7",
+   "dev1: SM-us reserved per exchange (upper bound)    4043.9",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    62.98 us  SM-us    1511.4",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.46 us  SM-us     325.2",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    73.52 us  SM-us    1764.5",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.39 us  SM-us     447.7",
+   "dev2: SM-us reserved per exchange (upper bound)    4042.4",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    64.24 us  SM-us    1541.7",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.40 us  SM-us     316.8",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    72.34 us  SM-us    1736.1",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.39 us  SM-us     447.7",
+   "dev3: SM-us reserved per exchange (upper bound)    4020.5",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    63.04 us  SM-us    1513.0",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.14 us  SM-us     283.0",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    73.65 us  SM-us    1767.6",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.42 us  SM-us     452.0",
+   "## node3 (s4e)",
+   "dev0: SM-us reserved per exchange (upper bound)    3938.7",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    62.02 us  SM-us    1488.4",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     1.66 us  SM-us     219.6",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    74.53 us  SM-us    1788.7",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.36 us  SM-us     443.5",
+   "dev1: SM-us reserved per exchange (upper bound)    4076.7",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    62.24 us  SM-us    1493.8",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.72 us  SM-us     359.0",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    74.62 us  SM-us    1791.0",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.26 us  SM-us     430.8",
+   "dev2: SM-us reserved per exchange (upper bound)    4094.6",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    64.26 us  SM-us    1542.1",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.90 us  SM-us     382.3",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    72.59 us  SM-us    1742.2",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.30 us  SM-us     435.1",
+   "dev3: SM-us reserved per exchange (upper bound)    3989.9",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    62.59 us  SM-us    1502.2",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.11 us  SM-us     278.8",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur    74.40 us  SM-us    1785.6",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.26 us  SM-us     430.8",
+   "#### afd T512",
+   "## node0 (s8b)",
+   "dev0: SM-us reserved per exchange (upper bound)   15025.8",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur   312.90 us  SM-us    7509.5",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur    30.22 us  SM-us    3989.6",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   147.66 us  SM-us    3543.9",
+   "  3:afdep_ffn_complete       grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.05 us  SM-us       2.0",
+   "dev1: SM-us reserved per exchange (upper bound)   14986.6",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur   312.35 us  SM-us    7496.4",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur    29.86 us  SM-us    3941.0",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   148.43 us  SM-us    3562.4",
+   "  3:afdep_ffn_complete       grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "dev2: SM-us reserved per exchange (upper bound)   15095.2",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur   311.54 us  SM-us    7476.9",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur    30.35 us  SM-us    4006.5",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   149.95 us  SM-us    3598.8",
+   "  3:afdep_ffn_complete       grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.05 us  SM-us       2.0",
+   "dev3: SM-us reserved per exchange (upper bound)   15087.1",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur   310.46 us  SM-us    7451.1",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur    30.74 us  SM-us    4057.2",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   149.66 us  SM-us    3591.9",
+   "  3:afdep_ffn_complete       grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.05 us  SM-us       2.0",
+   "## node1 (s8c)",
+   "dev0: SM-us reserved per exchange (upper bound)    1547.8",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    24.14 us  SM-us     579.5",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   460.99 us  SM-us     461.0",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.84 us  SM-us     506.9",
+   "dev1: SM-us reserved per exchange (upper bound)    1543.9",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    23.58 us  SM-us     566.0",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.08 us  SM-us       2.1",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   461.36 us  SM-us     461.4",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.90 us  SM-us     515.3",
+   "dev2: SM-us reserved per exchange (upper bound)    1547.3",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    23.97 us  SM-us     575.2",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   461.02 us  SM-us     461.0",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.84 us  SM-us     506.9",
+   "dev3: SM-us reserved per exchange (upper bound)    1542.8",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    23.81 us  SM-us     571.4",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   461.28 us  SM-us     461.3",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.84 us  SM-us     506.9",
+   "## node2 (s8d)",
+   "dev0: SM-us reserved per exchange (upper bound)    1551.4",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    24.19 us  SM-us     580.6",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   460.88 us  SM-us     460.9",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.84 us  SM-us     506.9",
+   "dev1: SM-us reserved per exchange (upper bound)    1532.8",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    23.55 us  SM-us     565.2",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   462.21 us  SM-us     462.2",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.81 us  SM-us     502.7",
+   "dev2: SM-us reserved per exchange (upper bound)    1543.9",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    24.22 us  SM-us     581.4",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   461.38 us  SM-us     461.4",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.78 us  SM-us     498.4",
+   "dev3: SM-us reserved per exchange (upper bound)    1544.5",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    23.81 us  SM-us     571.4",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     2.02 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   461.52 us  SM-us     461.5",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.84 us  SM-us     506.9",
+   "## node3 (s4e)",
+   "dev0: SM-us reserved per exchange (upper bound)    1541.8",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    24.00 us  SM-us     576.0",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     1.95 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   461.01 us  SM-us     461.0",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.81 us  SM-us     502.7",
+   "dev1: SM-us reserved per exchange (upper bound)    1517.9",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    23.52 us  SM-us     564.5",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     1.95 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   462.13 us  SM-us     462.1",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.71 us  SM-us     490.0",
+   "dev2: SM-us reserved per exchange (upper bound)    1531.3",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    24.03 us  SM-us     576.8",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     1.98 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   461.86 us  SM-us     461.9",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.71 us  SM-us     490.0",
+   "dev3: SM-us reserved per exchange (upper bound)    1519.3",
+   "  0:hybrid_dispatch          grid   24 x  384 thr  smem  227.0 KiB  coop 0  dur    23.81 us  SM-us     571.4",
+   "  1:afdep_source_finalize    grid    1 x  128 thr  smem    0.0 KiB  coop 0  dur     1.98 us  SM-us       2.0",
+   "  2:afdep_hybrid_collect_impl grid    1 x  192 thr  smem  227.0 KiB  coop 0  dur   461.77 us  SM-us     461.8",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.65 us  SM-us     481.5",
+   "#### masked T512",
+   "## node0 (s8b)",
+   "dev0: SM-us reserved per exchange (upper bound)   16077.1",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur   320.82 us  SM-us    7699.6",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur    30.74 us  SM-us    4057.2",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   167.73 us  SM-us    4025.5",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.37 us  SM-us     312.6",
+   "dev1: SM-us reserved per exchange (upper bound)   16324.2",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur   317.89 us  SM-us    7629.3",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur    32.72 us  SM-us    4319.0",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   171.58 us  SM-us    4118.0",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.18 us  SM-us     287.2",
+   "dev2: SM-us reserved per exchange (upper bound)   16347.4",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur   318.00 us  SM-us    7632.0",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur    32.58 us  SM-us    4300.0",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   171.28 us  SM-us    4110.7",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.21 us  SM-us     291.5",
+   "dev3: SM-us reserved per exchange (upper bound)   16067.1",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur   316.13 us  SM-us    7587.1",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur    30.88 us  SM-us    4076.1",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   172.10 us  SM-us    4130.3",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.34 us  SM-us     308.4",
+   "## node1 (s8c)",
+   "dev0: SM-us reserved per exchange (upper bound)   13231.3",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    96.21 us  SM-us    2309.0",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.26 us  SM-us     297.8",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   418.16 us  SM-us   10035.9",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.94 us  SM-us     519.6",
+   "dev1: SM-us reserved per exchange (upper bound)   13615.9",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    96.86 us  SM-us    2324.7",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     5.65 us  SM-us     745.5",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   418.11 us  SM-us   10034.7",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.90 us  SM-us     515.3",
+   "dev2: SM-us reserved per exchange (upper bound)   13385.1",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    95.34 us  SM-us    2288.3",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.89 us  SM-us     513.2",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   419.01 us  SM-us   10056.2",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.90 us  SM-us     515.3",
+   "dev3: SM-us reserved per exchange (upper bound)   13424.4",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    95.01 us  SM-us    2280.2",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.92 us  SM-us     517.4",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   419.15 us  SM-us   10059.6",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.94 us  SM-us     519.6",
+   "## node2 (s8d)",
+   "dev0: SM-us reserved per exchange (upper bound)   13126.4",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    94.19 us  SM-us    2260.6",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     1.70 us  SM-us     223.9",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   419.94 us  SM-us   10078.5",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.94 us  SM-us     519.6",
+   "dev1: SM-us reserved per exchange (upper bound)   13560.8",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    96.34 us  SM-us    2312.1",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     5.36 us  SM-us     707.5",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   418.45 us  SM-us   10042.8",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.87 us  SM-us     511.1",
+   "dev2: SM-us reserved per exchange (upper bound)   13514.5",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    97.30 us  SM-us    2335.1",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     5.18 us  SM-us     684.3",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   417.15 us  SM-us   10011.6",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.90 us  SM-us     515.3",
+   "dev3: SM-us reserved per exchange (upper bound)   13345.8",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    96.93 us  SM-us    2326.3",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.79 us  SM-us     500.5",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   417.55 us  SM-us   10021.3",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.97 us  SM-us     523.8",
+   "## node3 (s4e)",
+   "dev0: SM-us reserved per exchange (upper bound)   13139.5",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    94.46 us  SM-us    2267.1",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     2.05 us  SM-us     270.3",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   419.86 us  SM-us   10076.5",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.84 us  SM-us     506.9",
+   "dev1: SM-us reserved per exchange (upper bound)   13644.6",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    96.54 us  SM-us    2317.1",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     6.02 us  SM-us     794.1",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   417.97 us  SM-us   10031.2",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.74 us  SM-us     494.2",
+   "dev2: SM-us reserved per exchange (upper bound)   13340.0",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    96.42 us  SM-us    2314.0",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.86 us  SM-us     509.0",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   417.87 us  SM-us   10028.9",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.81 us  SM-us     502.7",
+   "dev3: SM-us reserved per exchange (upper bound)   13355.3",
+   "  0:hybrid_dispatch          grid   24 x  640 thr  smem  227.0 KiB  coop 0  dur    94.32 us  SM-us    2263.7",
+   "  1:dispatch_copy_epilogue   grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.52 us  SM-us     464.6",
+   "  2:hybrid_combine           grid   24 x  512 thr  smem  227.0 KiB  coop 0  dur   420.19 us  SM-us   10084.6",
+   "  3:combine_reduce_epilogue  grid  132 x 1024 thr  smem  227.0 KiB  coop 0  dur     3.78 us  SM-us     498.4",
+   "done"
+  ]
+ }
+}
