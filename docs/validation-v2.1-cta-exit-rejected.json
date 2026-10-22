@@ -1,0 +1,332 @@
+{
+ "date": "2026-10-21",
+ "decision": "invalid measurement",
+ "change": "directed exit without the sender grid sync: each sending CTA flushes its TMA stores and releases its own arrival; receivers wait for round x sender CTAs; the last source CTA resets the slot counters (scratch build, selected per arm by PYTHONPATH)",
+ "scope": "4 x H100, 2A2F, random, BF16, graphs, 24 SMs; three fresh-process repeats",
+ "correctness": "BF16/FP8 small and large and the 3:1 and 1:3 small cases passed",
+ "screens": [
+  {
+   "hidden": 2048,
+   "native_source_sha256": {
+    "head": "3d68dba2908a071fa732163a66a697d010c62d6227e0868db2672dfb8683e199",
+    "cta_exit": "3d68dba2908a071fa732163a66a697d010c62d6227e0868db2672dfb8683e199"
+   },
+   "processes": [
+    {
+     "order": [
+      "head",
+      "cta_exit"
+     ],
+     "median_us": {
+      "head": {
+       "1": 22.403520345687866,
+       "8": 26.387439966201782,
+       "32": 27.843120098114014,
+       "128": 36.60799980163574,
+       "512": 72.0304012298584,
+       "2048": 194.18383598327637
+      },
+      "cta_exit": {
+       "1": 22.728160619735718,
+       "8": 26.391119956970215,
+       "32": 28.05624008178711,
+       "128": 36.67688012123108,
+       "512": 72.00824022293091,
+       "2048": 194.16680335998535
+      }
+     }
+    },
+    {
+     "order": [
+      "cta_exit",
+      "head"
+     ],
+     "median_us": {
+      "cta_exit": {
+       "1": 22.517040967941284,
+       "8": 26.547040939331055,
+       "32": 28.09664011001587,
+       "128": 36.505759954452515,
+       "512": 71.98256015777588,
+       "2048": 193.90568733215332
+      },
+      "head": {
+       "1": 22.850639820098877,
+       "8": 27.053760290145874,
+       "32": 28.059040307998657,
+       "128": 41.58575892448425,
+       "512": 72.48991966247559,
+       "2048": 194.39583778381348
+      }
+     }
+    },
+    {
+     "order": [
+      "head",
+      "cta_exit"
+     ],
+     "median_us": {
+      "head": {
+       "1": 22.587119340896606,
+       "8": 27.143360376358032,
+       "32": 27.692641019821167,
+       "128": 36.57696008682251,
+       "512": 72.09847927093506,
+       "2048": 194.17391777038574
+      },
+      "cta_exit": {
+       "1": 22.609119415283203,
+       "8": 26.683120727539062,
+       "32": 28.074960708618164,
+       "128": 36.83472037315369,
+       "512": 72.23199844360352,
+       "2048": 194.2636013031006
+      }
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "head": {
+      "median_us": 22.587,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 22.609,
+      "geomean_change_pct": 0.022,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 8,
+     "head": {
+      "median_us": 27.054,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 26.547,
+      "geomean_change_pct": -1.189,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 32,
+     "head": {
+      "median_us": 27.843,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 28.075,
+      "geomean_change_pct": 0.759,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "head": {
+      "median_us": 36.608,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 36.677,
+      "geomean_change_pct": -3.965,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 512,
+     "head": {
+      "median_us": 72.098,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 72.008,
+      "geomean_change_pct": -0.183,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 2048,
+     "head": {
+      "median_us": 194.184,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 194.167,
+      "geomean_change_pct": -0.072,
+      "repeats_faster": 2
+     }
+    }
+   ]
+  },
+  {
+   "hidden": 4096,
+   "native_source_sha256": {
+    "head": "3d68dba2908a071fa732163a66a697d010c62d6227e0868db2672dfb8683e199",
+    "cta_exit": "3d68dba2908a071fa732163a66a697d010c62d6227e0868db2672dfb8683e199"
+   },
+   "processes": [
+    {
+     "order": [
+      "head",
+      "cta_exit"
+     ],
+     "median_us": {
+      "head": {
+       "1": 30.07904052734375,
+       "8": 41.40944004058838,
+       "32": 47.3581600189209,
+       "128": 62.672719955444336,
+       "512": 128.50119590759277,
+       "2048": 385.2081489562988
+      },
+      "cta_exit": {
+       "1": 30.098479986190796,
+       "8": 38.650559186935425,
+       "32": 44.46887969970703,
+       "128": 63.15016031265259,
+       "512": 128.58463764190674,
+       "2048": 384.7011184692383
+      }
+     }
+    },
+    {
+     "order": [
+      "cta_exit",
+      "head"
+     ],
+     "median_us": {
+      "cta_exit": {
+       "1": 30.21967887878418,
+       "8": 39.18783903121948,
+       "32": 44.727840423583984,
+       "128": 63.37296009063721,
+       "512": 128.6784791946411,
+       "2048": 384.9032783508301
+      },
+      "head": {
+       "1": 30.336480140686035,
+       "8": 40.08584022521973,
+       "32": 43.96984100341797,
+       "128": 63.54736089706421,
+       "512": 128.38736057281494,
+       "2048": 384.6847152709961
+      }
+     }
+    },
+    {
+     "order": [
+      "head",
+      "cta_exit"
+     ],
+     "median_us": {
+      "head": {
+       "1": 30.217679738998413,
+       "8": 39.36016082763672,
+       "32": 44.96879816055298,
+       "128": 63.48527908325195,
+       "512": 128.6681604385376,
+       "2048": 385.1006317138672
+      },
+      "cta_exit": {
+       "1": 30.238800048828125,
+       "8": 39.68824028968811,
+       "32": 45.53383827209473,
+       "128": 63.312721252441406,
+       "512": 128.27119827270508,
+       "2048": 385.7966423034668
+      }
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "head": {
+      "median_us": 30.218,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 30.22,
+      "geomean_change_pct": -0.084,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 8,
+     "head": {
+      "median_us": 40.086,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 39.188,
+      "geomean_change_pct": -2.739,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 32,
+     "head": {
+      "median_us": 44.969,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 44.728,
+      "geomean_change_pct": -1.106,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 128,
+     "head": {
+      "median_us": 63.485,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 63.313,
+      "geomean_change_pct": 0.071,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 512,
+     "head": {
+      "median_us": 128.501,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 128.585,
+      "geomean_change_pct": -0.006,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 2048,
+     "head": {
+      "median_us": 385.101,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "cta_exit": {
+      "median_us": 384.903,
+      "geomean_change_pct": 0.035,
+      "repeats_faster": 1
+     }
+    }
+   ]
+  }
+ ],
+ "conclusion": "Void: both arms recorded the same native digest (the screen's working directory shadowed PYTHONPATH), so the variant was not measured. Re-run with PYTHONSAFEPATH=1."
+}

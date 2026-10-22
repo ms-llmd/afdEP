@@ -26,6 +26,19 @@ template <bool kIsScaleupNVLink,
           int kNumExperts, int kNumTopk, int kExpertAlignment,
           int kNumQPs, int64_t kNumTimeoutCycles,
           int kAfdFfnRanks = 0,
+          // afdEP: role path only; ordering proof in csrc/kernels/elastic/afdep_roles.hpp.
+          bool kAfdSkipEntryBarrier = false,
+          // afdEP: Attention sources publish counts only to FFN ranks; FFNs only receive.
+          bool kAfdDirectionalNotify = false,
+          // afdEP: sources signal FFN receivers; only receivers wait (no all-rank exit).
+          bool kAfdDirectedExit = false,
+          // afdEP: FFN dispatch inboxes hold one region per Attention source (source - kAfdFfnRanks).
+          bool kAfdRoleBuffers = false,
+          // afdEP: with directed exit, every source CTA releases its own arrival (no sender grid sync).
+          bool kAfdPerCtaExit = false,
+          // afdEP single-FFN collect view: the combine row stride (bytes) of rows to zero for tokens
+          // with no valid route, which no FFN rank writes. 0 disables.
+          int kAfdZeroCollectRowBytes = 0,
           int kNumNotifyThreads = kNumNotifyWarps * 32,
           int kNumDispatchThreads = kNumDispatchWarps * 32,
           int kNumThreads = kNumNotifyThreads + kNumDispatchThreads,
@@ -47,10 +60,40 @@ dispatch_impl(
     constexpr int kNumExpertsPerRank = kNumExperts / kNumRanks;
     EP_STATIC_ASSERT(kNumExperts % kNumRanks == 0, "Invalid number of experts or ranks");
     EP_STATIC_ASSERT(kNumNotifyWarps % 4 == 0, "Invalid warpgroup size");
+    EP_STATIC_ASSERT(not kAfdDirectionalNotify or (kAfdFfnRanks > 0 and kIsScaleupNVLink),
+                     "Directional notify requires the direct-NVLink role path");
+    EP_STATIC_ASSERT(not kAfdDirectedExit or (kAfdFfnRanks > 0 and kIsScaleupNVLink),
+                     "Directed exit requires the direct-NVLink role path");
+    EP_STATIC_ASSERT(not kAfdRoleBuffers or (kAfdFfnRanks > 0 and kIsScaleupNVLink),
+                     "Role-sized buffers require the direct-NVLink role path");
+    EP_STATIC_ASSERT(not kAfdPerCtaExit or kAfdDirectedExit, "Per-CTA exit requires directed exit");
+    // FFN ranks own the first kAfdFfnRanks * kNumExpertsPerRank logical experts.
+    constexpr int kNumSourceRanks = kNumRanks - kAfdFfnRanks;
+    constexpr int kNumReducedCountElems = kAfdDirectionalNotify ?
+        kAfdFfnRanks * (1 + kNumExpertsPerRank) : kNumRanks + kNumExperts;
+    constexpr int kNumIncomingCountElems = kAfdDirectionalNotify ?
+        kNumSourceRanks * (1 + kNumExpertsPerRank) : kNumRanks + kNumExperts;
+    constexpr int kNumNotifyDstRanks = kAfdDirectionalNotify ? kAfdFfnRanks : kNumRanks;
+    constexpr int kNumNotifyExperts = kAfdDirectionalNotify ? kAfdFfnRanks * kNumExpertsPerRank : kNumExperts;
 
     // Utils
     const auto sm_idx = static_cast<int>(blockIdx.x), thread_idx = static_cast<int>(threadIdx.x);
     const auto warp_idx = ptx::get_warp_idx(), lane_idx = ptx::get_lane_idx();
+    const bool afd_source = rank_idx >= kAfdFfnRanks;
+    // Canonical R+E positions: outgoing FFN ranks/experts, incoming source ranks/experts.
+    const auto reduced_count_index = [](const int i) {
+        if constexpr (kAfdDirectionalNotify)
+            return i < kAfdFfnRanks ? i : kNumRanks + i - kAfdFfnRanks;
+        else
+            return i;
+    };
+    const auto incoming_count_index = [](const int i) {
+        if constexpr (kAfdDirectionalNotify)
+            return i < kNumSourceRanks ? kAfdFfnRanks + i :
+                kNumRanks + kAfdFfnRanks * kNumExpertsPerRank + i - kNumSourceRanks;
+        else
+            return i;
+    };
 
     // Workspaces
     const auto workspace_layout = layout::WorkspaceLayout(workspace, 1, kNumRanks, kNumExperts);
@@ -72,9 +115,11 @@ dispatch_impl(
     const auto gin = handle::NCCLGin(nccl_dev_comm, nccl_window, qp_idx, sharing_mode);
 
     // Barrier without TMA store flush, without prologue grid sync
-    comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
-                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kDispatchTag0, false, false, true>(
-        gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    if constexpr (not kAfdSkipEntryBarrier) {
+        comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
+                          kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kDispatchTag0, false, false, true>(
+            gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    }
 
     // Different warp roles
     if (warp_idx < kNumNotifyWarps) {
@@ -93,7 +138,9 @@ dispatch_impl(
         // Atomic add on shared memory
         EP_STATIC_ASSERT(kNumTopk <= 32, "Insufficient lanes");
         const auto global_warp_idx = warp_idx * kNumSMs + sm_idx;
-        for (int i = global_warp_idx; i < num_tokens; i += kNumNotifyWarps * kNumSMs) {
+        // FFN role ranks originate no tokens (host-enforced).
+        for (int i = global_warp_idx; (not kAfdDirectionalNotify or afd_source) and i < num_tokens;
+             i += kNumNotifyWarps * kNumSMs) {
             // Expert choice can not be redundant
             // Generic dispatch keeps the original unchecked expert path.
             // Role dispatch validates before this loop's first route-derived index.
@@ -118,10 +165,13 @@ dispatch_impl(
         ptx::named_barrier<kNumNotifyThreads>(kNotifyBarrierIndex);
 
         // Do full-grid reduction
-        #pragma unroll
-        for (int i = thread_idx; i < kNumRanks + kNumExperts; i += kNumNotifyThreads) {
-            const int64_t counter = (1ll << 32ll) | rank_expert_count[i];
-            ptx::red_add(workspace_layout.get_notify_reduction_workspace_ptr() + i, counter);
+        if (not kAfdDirectionalNotify or afd_source) {
+            #pragma unroll
+            for (int i = thread_idx; i < kNumReducedCountElems; i += kNumNotifyThreads) {
+                const int index = reduced_count_index(i);
+                const int64_t counter = (1ll << 32ll) | rank_expert_count[index];
+                ptx::red_add(workspace_layout.get_notify_reduction_workspace_ptr() + index, counter);
+            }
         }
 
         // Do the remaining work by SM 0
@@ -129,20 +179,22 @@ dispatch_impl(
             // Reduce all SM's count
             // Wait all SMs' arrival
             #pragma unroll
-            for (int i = thread_idx; i < kNumRanks + kNumExperts; i += kNumNotifyThreads) {
+            for (int i = thread_idx; (not kAfdDirectionalNotify or afd_source) and i < kNumReducedCountElems;
+                 i += kNumNotifyThreads) {
+                const int index = reduced_count_index(i);
                 comm::timeout_while<kNumTimeoutCycles>(true, [=](const bool& is_last_check) {
-                    const auto status = ptx::ld_volatile<int64_t>(workspace_layout.get_notify_reduction_workspace_ptr() + i);
+                    const auto status = ptx::ld_volatile<int64_t>(workspace_layout.get_notify_reduction_workspace_ptr() + index);
                     if ((status >> 32) == kNumSMs) {
                         // Write into shared memory
                         // Write into send buffer if with RDMA
                         const auto encoded =
                             math::encode_decode_positive(static_cast<int>(status & 0xffffffffll));
-                        rank_expert_count[i] = encoded;
+                        rank_expert_count[index] = encoded;
                         if constexpr (not kIsScaleupNVLink)
-                            workspace_layout.get_scaleup_rank_expert_count_ptr<true>()[i] = encoded;
+                            workspace_layout.get_scaleup_rank_expert_count_ptr<true>()[index] = encoded;
 
                         // Clean for the next usage
-                        workspace_layout.get_notify_reduction_workspace_ptr()[i] = 0;
+                        workspace_layout.get_notify_reduction_workspace_ptr()[index] = 0;
                         return true;
                     }
 
@@ -159,7 +211,8 @@ dispatch_impl(
 
             // TODO: for further optimization, we can fuse rank and expert counters
             // Issue scaleup rank count writes to peers
-            for (int i = thread_idx; i < kNumRanks; i += kNumNotifyThreads) {
+            for (int i = thread_idx; (not kAfdDirectionalNotify or afd_source) and i < kNumNotifyDstRanks;
+                 i += kNumNotifyThreads) {
                 // Rank counters
                 const auto dst_rank_counter =
                     workspace_layout.get_scaleup_rank_count_ptr<false>() + rank_idx;
@@ -172,7 +225,8 @@ dispatch_impl(
             if constexpr (kIsScaleupNVLink) {
                 // NVLink per-element copy
                 // We don't use TMA as the dtype of shared memory and global is different
-                for (int i = thread_idx; i < kNumExperts; i += kNumNotifyThreads) {
+                for (int i = thread_idx; (not kAfdDirectionalNotify or afd_source) and i < kNumNotifyExperts;
+                     i += kNumNotifyThreads) {
                     const auto idx = kNumExpertsPerRank * rank_idx + (i % kNumExpertsPerRank);
                     gin.put_value<team_t>(
                         workspace_layout.get_scaleup_expert_count_ptr<false>() + idx,
@@ -190,17 +244,29 @@ dispatch_impl(
             // This is necessary, as the waited results will rewrite the shared memory
             ptx::named_barrier<kNumNotifyThreads>(kNotifyBarrierIndex);
 
+            if constexpr (kAfdDirectionalNotify) {
+                // Sources receive no payload: publish decoded zeros (not their outgoing
+                // counts) through the unchanged prefix sums. FFN-origin inbox slots stay
+                // zero from the initial shared-memory clear.
+                if (afd_source) {
+                    for (int i = thread_idx; i < kNumRanks + kNumExperts; i += kNumNotifyThreads)
+                        rank_expert_count[i] = 0;
+                }
+            }
+
             // Wait for rank and expert count
             const auto start_clock = clock64();
-            for (int i = thread_idx; i < kNumRanks + kNumExperts; i += kNumNotifyThreads) {
+            for (int i = thread_idx; (not kAfdDirectionalNotify or not afd_source) and i < kNumIncomingCountElems;
+                 i += kNumNotifyThreads) {
+                const int index = incoming_count_index(i);
                 comm::timeout_while<kNumTimeoutCycles>([=](const bool& is_last_check) {
                     // NOTES: the global memory type has 64 bits
                     const auto count = static_cast<int>(
-                        ptx::ld_volatile<int64_t>(workspace_layout.get_scaleup_rank_expert_count_ptr<false>() + i));
+                        ptx::ld_volatile<int64_t>(workspace_layout.get_scaleup_rank_expert_count_ptr<false>() + index));
                     const auto decoded = math::encode_decode_positive(count);
                     if (math::is_decoded_positive_ready(decoded)) {
-                        workspace_layout.get_scaleup_rank_expert_count_ptr<false>()[i] = 0;
-                        rank_expert_count[i] = decoded;
+                        workspace_layout.get_scaleup_rank_expert_count_ptr<false>()[index] = 0;
+                        rank_expert_count[index] = decoded;
                         return true;
                     }
 
@@ -212,10 +278,11 @@ dispatch_impl(
             ptx::named_barrier<kNumNotifyThreads>(kNotifyBarrierIndex);
 
             // Reduce expert count and add stats
-            for (int i = thread_idx; i < kNumExpertsPerRank; i += kNumNotifyThreads) {
+            for (int i = thread_idx; (not kAfdDirectionalNotify or not afd_source) and i < kNumExpertsPerRank;
+                 i += kNumNotifyThreads) {
                 int sum = 0;
                 #pragma unroll
-                for (int j = 0; j < kNumRanks; ++ j)
+                for (int j = kAfdDirectionalNotify ? kAfdFfnRanks : 0; j < kNumRanks; ++ j)
                     sum += expert_count[j * kNumExpertsPerRank + i];
                 expert_count[i] = math::align(sum, kExpertAlignment);
 
@@ -227,7 +294,9 @@ dispatch_impl(
 
             // Write host workspace
             if constexpr (kDoCPUSync) {
-                for (int i = thread_idx; i < kNumRanks + kNumExpertsPerRank; i += kNumNotifyThreads) {
+                // Known-empty role sources return zero host counts without reading these.
+                for (int i = thread_idx; (not kAfdDirectionalNotify or not afd_source) and
+                                         i < kNumRanks + kNumExpertsPerRank; i += kNumNotifyThreads) {
                     host_workspace_layout.get_scaleup_rank_expert_count_ptr<false>()[i] =
                         math::encode_decode_positive(rank_expert_count[i]);
                 }
@@ -280,7 +349,8 @@ dispatch_impl(
             math::advance_ptr<int>(smem, kNumSmemBytesForNotify)).get_rank_buffer(dispatch_warp_idx).get_token_buffer(0);
         auto recv_buffer = layout::BufferLayout<false>(token_layout, kNumRanks, kNumMaxTokensPerRank, buffer);
         auto send_buffer = layout::BufferLayout<false>(token_layout, 1, kNumMaxTokensPerRank, recv_buffer.get_buffer_end_ptr());
-        recv_buffer = recv_buffer.get_rank_buffer(rank_idx);
+        // FFN ranks send nothing (asserted on the host); clamp their unused region.
+        recv_buffer = recv_buffer.get_rank_buffer(kAfdRoleBuffers ? max(rank_idx - kAfdFfnRanks, 0) : rank_idx);
 
         // Init TMA
         ptx::arrival_phase phase = 0;
@@ -339,6 +409,18 @@ dispatch_impl(
                     uncasted_dst_expert_idx, lane_idx);
             } else {
                 dst_expert_idx = static_cast<int>(uncasted_dst_expert_idx);
+            }
+            if constexpr (kAfdZeroCollectRowBytes > 0) {
+                // With one FFN rank the combine inbox row of a token is its final output (the collect
+                // view); a token with no valid route gets no reply, so its row is zeroed here. The
+                // Attention receives nothing at this offset in dispatch, and the FFN writes only
+                // routed tokens' rows, after this dispatch.
+                EP_STATIC_ASSERT(kAfdZeroCollectRowBytes % sizeof(int4) == 0, "Unaligned collect row");
+                if (__ballot_sync(0xffffffff, lane_idx < kNumTopk and dst_expert_idx >= 0) == 0) {
+                    const auto row = math::advance_ptr<int4>(buffer, token_i64_idx * kAfdZeroCollectRowBytes);
+                    for (int i = lane_idx; i < kAfdZeroCollectRowBytes / static_cast<int>(sizeof(int4)); i += 32)
+                        row[i] = make_int4(0, 0, 0, 0);
+                }
             }
             if (lane_idx < kNumTopk) {
                 stored_dst_rank_idx = dst_expert_idx >= 0 ? dst_expert_idx / kNumExpertsPerRank : -1;
@@ -419,16 +501,48 @@ dispatch_impl(
     }
 
     // Barrier to ensure data arrival
-    comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
-                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kDispatchTag1, true, true, false>(
-        gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    if constexpr (kAfdDirectedExit) {
+        // Sources publish payload arrival to FFN ranks; FFN ranks (no payload
+        // to send) wait on SM0 for every source before triggering the epilogue.
+        if (afd_source) {
+            afdep_signal_receivers<kNumRanks, team_t, kAfdPerCtaExit>(gin, workspace_layout, kAfdepDispatchPhase, rank_idx,
+                                                      0, kAfdFfnRanks, sm_idx, thread_idx);
+        } else {
+            afdep_wait_senders<kNumRanks, kNumTimeoutCycles, kAfdPerCtaExit ? kNumSMs : 1>(
+                workspace_layout, kAfdepDispatchPhase, rank_idx,
+                                                              kAfdFfnRanks, kNumSourceRanks, sm_idx, thread_idx);
+        }
+    } else {
+        comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
+                          kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kDispatchTag1, true, true, false>(
+            gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    }
 
     // Trigger the copy epilogue kernel
     cudaTriggerProgrammaticLaunchCompletion();
 
     // Clean atomic counters
     EP_STATIC_ASSERT(kNumRanks <= kNumThreads, "Insufficient threads");
-    if (not kReuseSlotIndices and sm_idx == 0 and thread_idx < kNumRanks)
+    bool clean_counters = sm_idx == 0;
+    if constexpr (kAfdPerCtaExit) {
+        // Without a sender grid sync, the last source CTA to finish (after every
+        // CTA's slot atomics) resets the slot counters. No static shared memory:
+        // the kernel already uses the maximum dynamic size.
+        if (afd_source) {
+            int is_last_cta = 0;
+            if (thread_idx == 0) {
+                __threadfence();
+                const auto done_ptr = reinterpret_cast<unsigned long long*>(afdep_done_ptr<kNumRanks>(workspace_layout));
+                is_last_cta = atomicAdd(done_ptr, 1ull) == kNumSMs - 1;
+                if (is_last_cta) {
+                    *done_ptr = 0;
+                    __threadfence();
+                }
+            }
+            clean_counters = __syncthreads_or(is_last_cta);
+        }
+    }
+    if (not kReuseSlotIndices and clean_counters and thread_idx < kNumRanks)
         workspace_layout.get_scaleup_atomic_sender_counter()[thread_idx] = 0;
 }
 

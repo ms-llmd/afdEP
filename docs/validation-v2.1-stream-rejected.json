@@ -1,0 +1,180 @@
+{
+ "date": "2026-10-21",
+ "decision": "rejected",
+ "change": "streaming FFN expand: sources release per-slot ready flags after each TMA store completes; the FFN dispatch kernel releases its PDL copy epilogue at entry and the epilogue waits for prefix sums, then per slot",
+ "scope": "4 x H100, 2 Attention + 2 FFN, BF16, H2048 random, graphs, 24 SMs; max over Attention ranks of per-process block medians",
+ "screens": [
+  {
+   "name": "release flags (candidate)",
+   "native_source_sha256": "4a0b4a71062535abbb835294947cdb0360dabce8859626be8c2e043a111ed024",
+   "table": [
+    {
+     "tokens": 1,
+     "masked": {
+      "median_us": 31.27,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 22.89,
+      "geomean_change_pct": -26.91,
+      "repeats_faster": 3
+     },
+     "afd_nostream": {
+      "median_us": 19.59,
+      "geomean_change_pct": -37.22,
+      "repeats_faster": 3
+     }
+    },
+    {
+     "tokens": 32,
+     "masked": {
+      "median_us": 35.52,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 26.51,
+      "geomean_change_pct": -26.28,
+      "repeats_faster": 3
+     },
+     "afd_nostream": {
+      "median_us": 22.01,
+      "geomean_change_pct": -38.61,
+      "repeats_faster": 3
+     }
+    },
+    {
+     "tokens": 128,
+     "masked": {
+      "median_us": 44.56,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 35.38,
+      "geomean_change_pct": -21.02,
+      "repeats_faster": 3
+     },
+     "afd_nostream": {
+      "median_us": 30.28,
+      "geomean_change_pct": -32.52,
+      "repeats_faster": 3
+     }
+    },
+    {
+     "tokens": 512,
+     "masked": {
+      "median_us": 78.53,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 72.73,
+      "geomean_change_pct": -7.35,
+      "repeats_faster": 3
+     },
+     "afd_nostream": {
+      "median_us": 67.94,
+      "geomean_change_pct": -13.39,
+      "repeats_faster": 3
+     }
+    },
+    {
+     "tokens": 2048,
+     "masked": {
+      "median_us": 200.97,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 193.29,
+      "geomean_change_pct": -3.76,
+      "repeats_faster": 3
+     },
+     "afd_nostream": {
+      "median_us": 185.66,
+      "geomean_change_pct": -7.73,
+      "repeats_faster": 3
+     }
+    }
+   ]
+  },
+  {
+   "name": "relaxed flags + backoff polling (scratch timing variant, unsafe ordering)",
+   "native_source_sha256": "d8784f5d66291014181b4fdfae011590311bdce56980ce4194765cc029da5414",
+   "repeats": [
+    {
+     "tokens": 1,
+     "variant_us": [
+      25.83,
+      25.81
+     ],
+     "control_us": [
+      19.61,
+      19.67
+     ]
+    },
+    {
+     "tokens": 128,
+     "variant_us": [
+      37.75,
+      38.23
+     ],
+     "control_us": [
+      30.41,
+      30.49
+     ]
+    },
+    {
+     "tokens": 512,
+     "variant_us": [
+      75.97,
+      76.34
+     ],
+     "control_us": [
+      67.55,
+      67.66
+     ]
+    },
+    {
+     "tokens": 2048,
+     "variant_us": [
+      196.89,
+      197.36
+     ],
+     "control_us": [
+      185.75,
+      186.11
+     ]
+    }
+   ]
+  },
+  {
+   "name": "relaxed flags, acquire polling (scratch timing variant, unsafe ordering; per-process JSON not retained)",
+   "summary": {
+    "1": [
+     21.73,
+     19.59
+    ],
+    "128": [
+     32.26,
+     30.3
+    ],
+    "512": [
+     69.57,
+     67.69
+    ],
+    "2048": [
+     188.13,
+     185.8
+    ]
+   },
+   "columns": [
+    "variant median us",
+    "control median us"
+   ]
+  }
+ ],
+ "conclusion": "No variant beats its control at any token count; even without a release fence the early-launched epilogue does not shorten the round trip. Not shipped."
+}

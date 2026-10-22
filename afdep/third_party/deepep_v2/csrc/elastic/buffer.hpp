@@ -50,6 +50,12 @@ class ElasticBuffer {
     // Zero preserves the original symmetric DeepEP allocation/epilogues.
     int afd_ffn_ranks;
 
+    // afdEP count-first (afdep_suites.hpp), latched at construction: the minimum bucket (0: off)
+    // and the raw screen arm ("source": sources only, against the payload-first FFN receive).
+    int afd_cf_min_bucket = 0;
+    std::string afd_cf_arm = "full";
+    bool afd_cf_source_only = false;
+
     // Timeout settings
     int num_cpu_timeout_secs;
     int64_t num_gpu_timeout_cycles;
@@ -102,12 +108,26 @@ public:
         prefer_overlap_with_compute(prefer_overlap_with_compute),
         afd_ffn_ranks(afd_ffn_ranks) {
         EP_HOST_ASSERT(afd_ffn_ranks >= 0 and afd_ffn_ranks < num_ranks);
+
         // Init NCCL runtime
         static constexpr int kBufferAlignment = 16;
         this->nccl_context = std::make_shared<nccl::NCCLSymmetricMemoryContext>(
             nccl_comm, num_ranks, rank_idx,
             layout::WorkspaceLayout::get_num_bytes() + num_buffer_bytes, kBufferAlignment,
             allow_hybrid_mode, sl_idx, num_allocated_qps);
+
+        // afdEP count-first: the role path of one NVLink domain with every v2.1 role protocol;
+        // afdep/deepep.py checks that every rank latched the same configuration and a valid arm.
+        // Nothing is checked here: one rank throwing would leave its peers in the collective
+        // window registration above. Generic buffers never read the screen arm.
+        if (afd_ffn_ranks > 0) {
+            afd_cf_arm = afdep_count_first_arm();
+            afd_cf_source_only = afd_cf_arm == "source";
+        }
+        if (afd_ffn_ranks > 0 and nccl_context->num_scaleout_ranks == 1 and nccl_context->is_scaleup_nvlink and
+            not deterministic and afdep_skip_entry_barriers() and afdep_directional_notify() and
+            afdep_directed_exit() and afdep_per_cta_exit() and afdep_role_buffers())
+            afd_cf_min_bucket = afdep_count_first_min_bucket();
 
         // Timeout
         this->num_cpu_timeout_secs = num_cpu_timeout_secs;
@@ -167,6 +187,11 @@ public:
 
     std::tuple<int, int> get_logical_domain_size() const {
         return {nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks};
+    }
+
+    // afdEP count-first: (minimum bucket, arm), which must agree on every rank.
+    std::tuple<int, std::string> get_afd_count_first_config() const {
+        return {afd_cf_min_bucket, afd_cf_arm};
     }
 
     // ReSharper disable once CppMemberFunctionMayBeStatic
@@ -537,16 +562,18 @@ public:
                                             const int& hidden, const int& num_sf_packs, const int& num_topk,
                                             const int& elem_size,
                                             const int& num_scaleout_ranks, const int& num_scaleup_ranks,
-                                            const bool& is_scaleup_nvlink) {
+                                            const bool& is_scaleup_nvlink,
+                                            const int& afd_role_ffn_ranks = 0) {
         const auto num_ranks = num_scaleup_ranks * num_scaleout_ranks;
         const auto token_layout = get_dispatch_token_layout(hidden, elem_size, num_sf_packs, num_topk);
 
         if (num_scaleout_ranks == 1) {
-            // Direct dispatch
+            // Direct dispatch (afdEP role buffers: one inbox region per Attention source)
+            EP_HOST_ASSERT(afd_role_ffn_ranks == 0 or is_scaleup_nvlink);
             const auto send_buffer_layout = layout::BufferLayout<false>(
                 token_layout, is_scaleup_nvlink ? 0 : 1, num_max_tokens_per_rank);
             const auto recv_buffer_layout = layout::BufferLayout<false>(
-                token_layout, num_ranks, num_max_tokens_per_rank);
+                token_layout, num_ranks - afd_role_ffn_ranks, num_max_tokens_per_rank);
             return send_buffer_layout.get_num_bytes() + recv_buffer_layout.get_num_bytes();
         } else {
             // Hybrid dispatch
@@ -566,13 +593,18 @@ public:
     static int64_t get_combine_buffer_size(const int& num_max_tokens_per_rank, const int& hidden, const int& num_topk,
                                            const int& num_scaleout_ranks, const int& num_scaleup_ranks,
                                            const bool& is_scaleup_nvlink,
-                                           const bool& allow_multiple_reduction) {
+                                           const bool& allow_multiple_reduction,
+                                           const int& afd_role_ffn_ranks = 0) {
         const auto num_ranks = num_scaleup_ranks * num_scaleout_ranks;
         const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
 
         if (num_scaleout_ranks == 1) {
-            // Direct combine
-            const auto num_tokens_in_layout = allow_multiple_reduction ? std::min(num_ranks, num_topk) : num_topk;
+            // Direct combine. The rank layout indexes inbox regions by sending
+            // rank; with afdEP role buffers only the FFN ranks [0, F) send.
+            const bool use_rank_layout = allow_multiple_reduction and num_ranks <= num_topk;
+            EP_HOST_ASSERT(afd_role_ffn_ranks == 0 or is_scaleup_nvlink);
+            const auto num_tokens_in_layout = use_rank_layout and afd_role_ffn_ranks > 0 ? afd_role_ffn_ranks :
+                (allow_multiple_reduction ? std::min(num_ranks, num_topk) : num_topk);
             const auto send_buffer_layout = layout::BufferLayout<false>(
                 token_layout, is_scaleup_nvlink ? 0 : num_ranks,
                 // For single reduction cases, the maximum number of received tokens is
@@ -599,11 +631,27 @@ public:
         }
     }
 
+    // afdEP directional hybrid: the FFN combine staging slice reserved at the window end.
+    static int64_t get_hybrid_combine_send_bytes(const int& num_max_tokens_per_rank, const int& hidden, const int& num_topk,
+                                                 const int& num_scaleout_ranks, const bool& allow_multiple_reduction) {
+        const auto token_layout = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk);
+        return layout::BufferLayout<false>(
+            token_layout, allow_multiple_reduction ? 1 : num_topk,
+            num_scaleout_ranks * (num_max_tokens_per_rank + kNumMaxChannels)).get_num_bytes();
+    }
+
+    // afdEP single-FFN collect view: one FFN rank, one NVLink domain, rank layout.
+    bool afd_single_ffn_collect_rows(const bool& afd_direct_nvlink, const int& num_topk) const {
+        return afd_direct_nvlink and afd_ffn_ranks == 1 and allow_multiple_reduction and
+            nccl_context->num_ranks <= num_topk;
+    }
+
     static int64_t calculate_buffer_size(const int64_t& nccl_comm,
                                          const int& num_max_tokens_per_rank, const int& hidden,
                                          int num_topk, const bool& use_fp8_dispatch,
                                          const bool& allow_hybrid_mode,
-                                         const bool& allow_multiple_reduction) {
+                                         const bool& allow_multiple_reduction,
+                                         const int& afd_ffn_ranks) {
         EP_HOST_ASSERT(num_max_tokens_per_rank > 0 and hidden > 0);
 
         // The worst case SF bytes must be less than the main part
@@ -616,6 +664,8 @@ public:
         const auto [num_rdma_ranks, num_nvl_ranks] = nccl::get_physical_domain_size(nccl_comm);
         const auto [num_scaleout_ranks, num_scaleup_ranks] = nccl::get_logical_domain_size(nccl_comm, allow_hybrid_mode);
         const auto is_scaleup_nvlink = num_scaleup_ranks == num_nvl_ranks;
+        const auto afd_role_ffn_ranks = afd_ffn_ranks > 0 and num_scaleout_ranks == 1 and is_scaleup_nvlink and
+            afdep_role_buffers() ? afd_ffn_ranks : 0;
 
         // Dispatch size
         const auto elem_size = use_fp8_dispatch ? sizeof(__nv_fp8_e4m3) : sizeof(nv_bfloat16);
@@ -623,13 +673,24 @@ public:
         const auto num_dispatch_bytes = get_dispatch_buffer_size(
             num_max_tokens_per_rank, hidden, num_sf_packs, num_topk, elem_size,
             num_scaleout_ranks, num_scaleup_ranks,
-            is_scaleup_nvlink);
+            is_scaleup_nvlink, afd_role_ffn_ranks);
 
         // Combine layout
         const auto num_combine_bytes = get_combine_buffer_size(
             num_max_tokens_per_rank, hidden, num_topk,
             num_scaleout_ranks, num_scaleup_ranks,
-            is_scaleup_nvlink, allow_multiple_reduction);
+            is_scaleup_nvlink, allow_multiple_reduction, afd_role_ffn_ranks);
+
+        // afdEP directional hybrid with two or more Attention domains: FFN combine staging must not
+        // overlap any inbox another role or domain writes (the dispatch inboxes), so it gets its
+        // own slice past both layouts.
+        const int afd_ffn_scaleout_ranks = afd_ffn_ranks > 0 and num_scaleout_ranks > 1 ?
+            afdep_directional_hybrid(afd_ffn_ranks, num_scaleout_ranks, num_scaleup_ranks) : 0;
+        if (afd_ffn_scaleout_ranks > 0 and num_scaleout_ranks - afd_ffn_scaleout_ranks >= 2) {
+            const auto num_send_bytes = get_hybrid_combine_send_bytes(
+                num_max_tokens_per_rank, hidden, num_topk, num_scaleout_ranks, allow_multiple_reduction);
+            return std::max(num_dispatch_bytes, num_combine_bytes - num_send_bytes) + num_send_bytes;
+        }
 
         // Return the maximum of those layouts
         return std::max(num_dispatch_bytes, num_combine_bytes);
@@ -693,6 +754,10 @@ public:
         const bool afd_direct_nvlink = afd_role_aware and
             nccl_context->num_scaleout_ranks == 1 and nccl_context->is_scaleup_nvlink and
             not deterministic;
+        // Direct dispatch over GIN (hybrid off across NVLink domains): only the in-kernel route
+        // checks apply so far; the barrier, count and exit protocol stays union.
+        const bool afd_direct_gin_routes = afd_role_aware and nccl_context->num_scaleout_ranks == 1 and
+            not nccl_context->is_scaleup_nvlink and not deterministic and afdep_hybrid_routes_in_kernel();
         if (afd_role_aware) {
             // Only expanded inference dispatch is currently exposed by afdEP.
             // Roles are immutable constructor geometry, never token-count guesses.
@@ -751,7 +816,11 @@ public:
         // All new tensor allocations should happen after this
         const auto compute_stream = stream_control_prologue(previous_event, allocate_on_comm_stream, async_with_compute_stream);
 
-        if (afd_source and not afd_direct_nvlink)
+        const int afd_ffn_scaleout_ranks = afd_role_aware and not deterministic ?
+            afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
+                                     nccl_context->num_scaleup_ranks) : 0;
+        const bool afd_hybrid_routes_in_kernel = afd_ffn_scaleout_ranks > 0 and afdep_hybrid_routes_in_kernel();
+        if (afd_source and not afd_direct_nvlink and not afd_hybrid_routes_in_kernel and not afd_direct_gin_routes)
             launch_afdep_route_guard(topk_idx.data_ptr<topk_idx_t>(), num_tokens,
                                     afd_ffn_ranks * num_local_experts, num_topk,
                                     num_sms, comm_stream);
@@ -924,10 +993,25 @@ public:
         }
 
         // Check buffer size
+        const bool afd_role_buffers = afd_direct_nvlink and afdep_role_buffers();
         EP_HOST_ASSERT(get_dispatch_buffer_size(
                        num_max_tokens_per_rank, hidden, num_sf_packs, num_topk, x.element_size(),
                        nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks,
-                       nccl_context->is_scaleup_nvlink) <= num_buffer_bytes);
+                       nccl_context->is_scaleup_nvlink, afd_role_buffers ? afd_ffn_ranks : 0) <= num_buffer_bytes);
+
+        // afdEP count-first (afdep_suites.hpp): one decision per exchange from the constructor latch
+        // and the bucket, which every rank passes identically. The environment is re-read on every
+        // call, so a control flipped after construction fails here instead of splitting the ranks.
+        if (afd_cf_min_bucket > 0)
+            EP_HOST_ASSERT(afdep_count_first_min_bucket() > 0 and afdep_skip_entry_barriers() and
+                           afdep_directional_notify() and afdep_directed_exit() and afdep_per_cta_exit() and
+                           afdep_role_buffers() and afdep_count_first_arm_valid(afd_cf_arm) and
+                           afdep_count_first_arm() == afd_cf_arm);
+        const int afd_cf_sources = nccl_context->num_ranks - afd_ffn_ranks;
+        const bool afd_count_first = afd_cf_min_bucket > 0 and afd_direct_nvlink and
+            num_max_tokens_per_rank >= afd_cf_min_bucket and afd_ffn_ranks <= kAfdepCountFirstMaxFfnRanks and
+            afd_cf_sources <= kAfdepCountFirstMaxSources and
+            afdep_count_first_flags_fit(afd_cf_sources, num_max_tokens_per_rank);
 
         // Ready and clean host workspace for this round
         const auto host_workspace_layout = layout::WorkspaceLayout(
@@ -946,6 +1030,19 @@ public:
 
         // Do dispatch into the buffers (with SM limitation)
         EP_HOST_ASSERT(num_sms <= jit::device_runtime->get_num_sms());
+        // afdEP role suites (afdep_suites.hpp): in one NVLink domain the FFN receive triggers its
+        // copy epilogue after the arrival wait (or, count-first, streams it behind the payload);
+        // in directional hybrid each role launches only the warp classes it uses.
+        auto afd_dispatch_shape = AfdLaunchShape::kShared;
+        if (afd_count_first and (afd_source or not afd_cf_source_only))
+            afd_dispatch_shape = AfdLaunchShape::kCountFirst;
+        else if (afd_direct_nvlink and not afd_source and afdep_skip_entry_barriers() and afdep_directional_notify() and
+                 afdep_directed_exit() and afdep_ffn_receive_kernels())
+            afd_dispatch_shape = AfdLaunchShape::kRoleKernel;
+        else if (afd_ffn_scaleout_ranks > 0 and afd_source and afdep_hybrid_send_blocks())
+            afd_dispatch_shape = AfdLaunchShape::kSendBlock;
+        else if (afd_ffn_scaleout_ranks > 0 and not afd_source and afdep_hybrid_forward_kernels())
+            afd_dispatch_shape = AfdLaunchShape::kRoleKernel;
         launch_dispatch(x.data_ptr(), sf_ptr,
                         topk_idx.data_ptr<topk_idx_t>(), topk_weights_ptr,
                         copied_topk_idx_ptr,
@@ -968,7 +1065,18 @@ public:
                         num_smem_bytes,
                         num_qps, num_gpu_timeout_cycles,
                         cached_mode, deterministic, do_cpu_sync,
-                        comm_stream, afd_direct_nvlink ? afd_ffn_ranks : 0);
+                        comm_stream, afd_direct_nvlink or afd_direct_gin_routes ? afd_ffn_ranks : 0,
+                        afd_direct_nvlink and afdep_skip_entry_barriers(),
+                        afd_direct_nvlink and afdep_directional_notify(),
+                        afd_direct_nvlink and afdep_directed_exit(),
+                        afd_role_buffers,
+                        afd_direct_nvlink and afdep_directed_exit() and afdep_per_cta_exit(),
+                        afd_ffn_scaleout_ranks, afd_hybrid_routes_in_kernel,
+                        afd_ffn_scaleout_ranks > 0 and afdep_skip_attention_entry_sync(),
+                        afd_source and afd_single_ffn_collect_rows(afd_direct_nvlink, num_topk) ?
+                            get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk).get_num_bytes<false>() : 0,
+                        afd_dispatch_shape,
+                        afdep_count_first_ungated_tokens(), afdep_count_first_thread_count());
 
         // Received token counters
         int num_recv_tokens = 0, num_expanded_tokens = 0;
@@ -1128,7 +1236,9 @@ public:
                                       jit::device_runtime->get_num_smem_bytes(),
                                       num_channels,
                                       do_expand, cached_mode, afd_role_aware and not do_cpu_sync,
-                                      comm_stream);
+                                      comm_stream, afd_role_buffers ? afd_ffn_ranks : 0,
+                                      afd_count_first and not afd_cf_source_only, num_gpu_timeout_cycles,
+                                      afdep_count_first_unit_min_rows(), afdep_count_first_epilogue_sms());
         }
 
         // Stream control
@@ -1177,7 +1287,8 @@ public:
             const std::optional<EventHandle>& previous_event_before_epilogue,
             const bool& async_with_compute_stream,
             const bool& allocate_on_comm_stream,
-            const bool& use_expanded_layout) const {
+            const bool& use_expanded_layout,
+            const bool& afd_collect_view) const {
         // Check SM count
         EP_HOST_ASSERT(num_sms > 0);
 
@@ -1191,9 +1302,11 @@ public:
         const auto [num_combined_tokens, num_topk] = get_shape<2>(combined_topk_idx);
         const int afd_rank = nccl_context->rank_idx;
         const bool afd_worker = afd_ffn_ranks > 0 and afd_rank < afd_ffn_ranks;
-        const bool afd_direct_worker = afd_worker and
+        // Every role must instantiate the same collective combine protocol.
+        const bool afd_direct = afd_ffn_ranks > 0 and
             nccl_context->num_scaleout_ranks == 1 and nccl_context->is_scaleup_nvlink and
             not deterministic;
+        const bool afd_direct_worker = afd_worker and afd_direct;
         if (afd_worker)
             EP_HOST_ASSERT(num_combined_tokens == 0);
         const auto [num_scaleup_ranks] = get_shape<1>(psum_num_recv_tokens_per_scaleup_rank);
@@ -1242,7 +1355,8 @@ public:
         // Check buffer size
         EP_HOST_ASSERT(get_combine_buffer_size(num_max_tokens_per_rank, hidden, num_topk,
                                                nccl_context->num_scaleout_ranks, nccl_context->num_scaleup_ranks,
-                                               nccl_context->is_scaleup_nvlink, allow_multiple_reduction) <= num_buffer_bytes);
+                                               nccl_context->is_scaleup_nvlink, allow_multiple_reduction,
+                                               afd_direct and afdep_role_buffers() ? afd_ffn_ranks : 0) <= num_buffer_bytes);
 
         // Optional configs and metadata for hybrid combine
         int num_channels = 1;
@@ -1276,6 +1390,23 @@ public:
         // receive allocation as the live row count (including on a source).
         const int transport_reduced_tokens = afd_ffn_ranks > 0 ?
             num_max_tokens_per_rank * nccl_context->num_ranks : num_reduced_tokens;
+        // afdEP directional hybrid: FFN combine staging uses the slice reserved at the window end.
+        const int afd_ffn_scaleout_ranks = afd_ffn_ranks > 0 and not deterministic ?
+            afdep_directional_hybrid(afd_ffn_ranks, nccl_context->num_scaleout_ranks,
+                                     nccl_context->num_scaleup_ranks) : 0;
+        void* afd_scaleout_send_base = nullptr;
+        if (afd_ffn_scaleout_ranks > 0 and nccl_context->num_scaleout_ranks - afd_ffn_scaleout_ranks >= 2) {
+            const auto num_send_bytes = get_hybrid_combine_send_bytes(
+                num_max_tokens_per_rank, hidden, num_topk, nccl_context->num_scaleout_ranks, allow_multiple_reduction);
+            // calculate_buffer_size reserved this slice past both layouts (sized for top-k 32).
+            EP_HOST_ASSERT(num_send_bytes <= num_buffer_bytes);
+            afd_scaleout_send_base = math::advance_ptr(buffer, num_buffer_bytes - num_send_bytes);
+        }
+        // afdEP role suites (afdep_suites.hpp): in directional hybrid the Attention receive runs
+        // the one-CTA collect kernel.
+        auto afd_combine_shape = AfdLaunchShape::kShared;
+        if (afd_ffn_scaleout_ranks > 0 and not afd_worker and afdep_hybrid_collect_kernels())
+            afd_combine_shape = AfdLaunchShape::kRoleKernel;
         const auto reduce_buffer = launch_combine(
             x.data_ptr(),
             topk_weights.has_value() ? topk_weights->data_ptr() : nullptr,
@@ -1294,10 +1425,26 @@ public:
             num_sms, jit::device_runtime->get_num_smem_bytes(),
             num_channels,
             use_expanded_layout, allow_multiple_reduction,
-            comm_stream);
+            comm_stream,
+            afd_direct and afdep_skip_entry_barriers(),
+            afd_direct and afdep_directed_exit() ? afd_ffn_ranks : 0,
+            afd_direct and afdep_directed_exit() and afdep_per_cta_exit(),
+            afd_ffn_scaleout_ranks,
+            afd_direct and afd_ffn_ranks == 1 and afdep_single_ffn_reduce(),
+            afd_scaleout_send_base,
+            afd_combine_shape);
 
         // Allocate output tensors
-        auto combined_x = torch::empty({num_combined_tokens, hidden}, x.options());
+        // afdEP single-FFN collect view: with one FFN rank in one NVLink domain (rank layout), each
+        // token's only reply row in inbox region 0 is its final output, so the result can alias it
+        // (valid until the next source dispatch, which rewrites the inbox) instead of copying it.
+        const bool afd_view = afd_collect_view and not afd_worker and afd_single_ffn_collect_rows(afd_direct, num_topk) and
+            not topk_weights.has_value() and not bias_0.has_value() and not bias_1.has_value();
+        const auto collect_row_elems = get_combine_token_layout(hidden, sizeof(nv_bfloat16), num_topk).get_num_bytes<false>() /
+            static_cast<int>(sizeof(nv_bfloat16));
+        auto combined_x = afd_view ?
+            torch::from_blob(reduce_buffer, {num_combined_tokens, hidden}, {collect_row_elems, 1}, x.options()) :
+            torch::empty({num_combined_tokens, hidden}, x.options());
         auto combined_topk_weights = std::optional<torch::Tensor>();
         float* combined_topk_weights_ptr = nullptr;
         if (topk_weights.has_value()) {
@@ -1314,7 +1461,7 @@ public:
                                         num_experts, num_channels, comm_stream);
             // The normal event/wait below already covers the full main
             // combine, its transport barrier and all input-reader lifetimes.
-        } else {
+        } else if (not afd_view) {
             launch_combine_reduce_epilogue(combined_x.data_ptr(),
                                        combined_topk_weights_ptr,
                                        combined_topk_idx.data_ptr<topk_idx_t>(),
@@ -1356,6 +1503,7 @@ static void register_apis(pybind11::module_& m) {
         .def("get_comm_stream", &ElasticBuffer::get_comm_stream)
         .def("get_physical_domain_size", &ElasticBuffer::get_physical_domain_size)
         .def("get_logical_domain_size", &ElasticBuffer::get_logical_domain_size)
+        .def("get_afd_count_first_config", &ElasticBuffer::get_afd_count_first_config)
         .def("barrier", &ElasticBuffer::barrier)
         .def("engram_write", &ElasticBuffer::engram_write)
         .def("engram_fetch", &ElasticBuffer::engram_fetch)

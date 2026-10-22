@@ -1,0 +1,250 @@
+{
+ "date": "2026-10-21",
+ "change": "role-sized registered buffers",
+ "native_source_sha256": "a1bcebdd53c2581685e45b88260724bbcc08fa01a0b31b207395e2f9ba1f8149",
+ "scope": "4 x H100 80GB, one NVLink domain",
+ "correctness": {
+  "matrix": "tests.gpu.deepep 2A2F: BF16/FP8 direct/hybrid small, large (capacity 2048, H2048, top-k 8, 24 SMs) and generic controls; 8 invalid-route assertions (eager and graph)",
+  "ratios": "--ffn-ranks 1 and 3: BF16/FP8 small, and large with 32 experts per FFN",
+  "result": "all runs pass; every invalid route asserts",
+  "logs": [
+   {
+    "log": "matrix/bf16-direct-small.log",
+    "log_sha256": "c41fb44683b7042b3076f8960ff03046f2ac668a12bac504d5cd2ab4df36b924"
+   },
+   {
+    "log": "matrix/bf16-generic-control.log",
+    "log_sha256": "fa2e1fd2168f0b2a01cdbac2b0ddf22bf4f754f5a4d1b99e92b96efaa8eb95aa"
+   },
+   {
+    "log": "matrix/bf16-hybrid-small.log",
+    "log_sha256": "4dca56574a4f30a5902525f27f4ba47410ad59ab3da0ee9123e418fadefec108"
+   },
+   {
+    "log": "matrix/bf16-off-large.log",
+    "log_sha256": "08bf9b987f8fd5e9069c0b466ceb9ba4fd688b760027b9d6ace8121a5a7fb029"
+   },
+   {
+    "log": "matrix/bf16-on-large.log",
+    "log_sha256": "2c1e9a2bec82923411743d77b4c0c4c57aff0b75010eaf4d4da6bc6b0cfd26e4"
+   },
+   {
+    "log": "matrix/fp8-direct-small.log",
+    "log_sha256": "aab1b759ccece5d6d1b3b8ea2fb47c83a2fca4ceafeaedea75b9acf3e369c826"
+   },
+   {
+    "log": "matrix/fp8-generic-control.log",
+    "log_sha256": "0ec3d7596a0e1bd27db48a41dd032678bf165c1287a8e160590ac626f4b66296"
+   },
+   {
+    "log": "matrix/fp8-hybrid-small.log",
+    "log_sha256": "82f8cfc6dcb36473e80f81fe99fee9ea39ad4727e12440ea099bb7fbf4e391f2"
+   },
+   {
+    "log": "matrix/fp8-off-large.log",
+    "log_sha256": "e140990c819d2e8c6ecfdad712b237c628823f834399ad5c5dc548bd06e1d44c"
+   },
+   {
+    "log": "matrix/fp8-on-large.log",
+    "log_sha256": "e9929119f584cfb1f2b750396650886957e0b8672bf379b05fd3f808f3c93f40"
+   },
+   {
+    "log": "matrix/invalid-eager-dummy.log",
+    "log_sha256": "c88688990995f20fb7c49894a16758aa582d7a90593fef9fbe5bcf74b6fc4d88"
+   },
+   {
+    "log": "matrix/invalid-eager-duplicate.log",
+    "log_sha256": "6e41941eda461a3e3c7ec20bdb5354356ebcff3ca0379f6b3485cb2be5c8a3ae"
+   },
+   {
+    "log": "matrix/invalid-eager-negative.log",
+    "log_sha256": "a82ee7bce41427ba7e0ff505c361eb7e39fdd1dbda0715fc6bf75a85ce6405d1"
+   },
+   {
+    "log": "matrix/invalid-eager-wide.log",
+    "log_sha256": "b4ecdaec8027ec7e9acfca5501118aafe3aca955e4d8f3bcd75836d83f8c00c1"
+   },
+   {
+    "log": "matrix/invalid-graph-dummy.log",
+    "log_sha256": "5d50b119b30d07466ed16c58d507af63954626dfaab45d83342f2035766cb165"
+   },
+   {
+    "log": "matrix/invalid-graph-duplicate.log",
+    "log_sha256": "4ca2dace547b15bdacb5d43069d81201e1b80801e05b5028505d674bce4e63db"
+   },
+   {
+    "log": "matrix/invalid-graph-negative.log",
+    "log_sha256": "b45a91c85882431f4456ca5888ed1fc21dc764a70edd3867b043ffcbdc2ed559"
+   },
+   {
+    "log": "matrix/invalid-graph-wide.log",
+    "log_sha256": "ea95f3a6faf7513075e52250553e1867cd353f805f7ac533d7ac77c86917fb2b"
+   },
+   {
+    "log": "f1-bf16-large.log",
+    "log_sha256": "cf3f60bc462b20f4e4f28f344ce96457c71444da37b8d2aca92f113448475c7b"
+   },
+   {
+    "log": "f1-bf16-small.log",
+    "log_sha256": "c8681009edbe0ccefe83fb76c819ad9d4175e9e8858032c345f15107b0a876e7"
+   },
+   {
+    "log": "f1-fp8-large.log",
+    "log_sha256": "c2ecbe40a08bcb2ae365ad6f579faec199dc4c686d7367cba45b8a3fc3104426"
+   },
+   {
+    "log": "f1-fp8-small.log",
+    "log_sha256": "89719f31a5ed4c1e700388d7173098e6771fca84a48418f462319cb6976d8ff4"
+   },
+   {
+    "log": "f3-bf16-large.log",
+    "log_sha256": "d12f554c5f6f0262a23486a0cca949c738b5287eb4eb237bc457657ef8336ada"
+   },
+   {
+    "log": "f3-bf16-small.log",
+    "log_sha256": "1668b97d179f92febe712e2e708b12088a309ee82c5153db35015324f89acf7c"
+   },
+   {
+    "log": "f3-fp8-large.log",
+    "log_sha256": "05c5159c9c6f0a29c5cd5c647e94b4e141cafce85115fa0c31c18c2116a1e00f"
+   },
+   {
+    "log": "f3-fp8-small.log",
+    "log_sha256": "e49c251c41e3962e8f789f417ab644363a693366ede9afa690a0fc5daede8f0e"
+   },
+   {
+    "log": "quick.log",
+    "log_sha256": "75dab04bd213befaf57d485df7961f614e910e9956b770c3d0dee7af55bc7604"
+   }
+  ]
+ },
+ "registered_transport_bytes": {
+  "union (Masked and AFDEP_UNION_BUFFERS=1), capacity 2048 H2048 top-k 8 BF16": 34619904,
+  "role 2A2F BF16": 17309952,
+  "role 2A2F FP8": 17047680,
+  "role 3A:1F BF16": 25964928,
+  "role 3A:1F FP8": 14949504,
+  "role 1A:3F BF16": 25571520,
+  "union small (H256 top-k 2)": 19584,
+  "role 2A2F small": 9792
+ },
+ "latency_screen": {
+  "name": "h2048 random, role buffers vs AFDEP_UNION_BUFFERS=1",
+  "processes": [
+   {
+    "order": [
+     "afd",
+     "afd_union"
+    ],
+    "median_us": {
+     "afd": {
+      "1": 19.486640095710754,
+      "32": 21.48967981338501,
+      "512": 67.29127883911133,
+      "2048": 185.9503936767578
+     },
+     "afd_union": {
+      "1": 19.551600217819214,
+      "32": 22.011280059814453,
+      "512": 67.4891209602356,
+      "2048": 186.24919891357422
+     }
+    }
+   },
+   {
+    "order": [
+     "afd_union",
+     "afd"
+    ],
+    "median_us": {
+     "afd_union": {
+      "1": 19.625120162963867,
+      "32": 21.925679445266724,
+      "512": 67.51599788665771,
+      "2048": 185.53048133850098
+     },
+     "afd": {
+      "1": 19.546799659729004,
+      "32": 21.697360277175903,
+      "512": 67.41431951522827,
+      "2048": 185.6559181213379
+     }
+    }
+   },
+   {
+    "order": [
+     "afd",
+     "afd_union"
+    ],
+    "median_us": {
+     "afd": {
+      "1": 19.629200100898743,
+      "32": 21.64456009864807,
+      "512": 67.53015995025635,
+      "2048": 186.26359939575195
+     },
+     "afd_union": {
+      "1": 19.632959961891174,
+      "32": 22.207359075546265,
+      "512": 67.57992029190063,
+      "2048": 185.9077548980713
+     }
+    }
+   }
+  ],
+  "table": [
+   {
+    "tokens": 1,
+    "afd": {
+     "median_us": 19.547,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd_union": {
+     "median_us": 19.625,
+     "geomean_change_pct": 0.251,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 32,
+    "afd": {
+     "median_us": 21.645,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd_union": {
+     "median_us": 22.011,
+     "geomean_change_pct": 2.024,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 512,
+    "afd": {
+     "median_us": 67.414,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd_union": {
+     "median_us": 67.516,
+     "geomean_change_pct": 0.173,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 2048,
+    "afd": {
+     "median_us": 185.95,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd_union": {
+     "median_us": 185.908,
+     "geomean_change_pct": -0.033,
+     "repeats_faster": 2
+    }
+   }
+  ]
+ }
+}

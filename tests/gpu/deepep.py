@@ -18,20 +18,26 @@ import torch
 import torch.distributed as dist
 
 from afdep import Buffer, Config
+from afdep._build import source_digest
 
 DEFAULT_HIDDEN = 256
-EXPERTS = 8
+EXPERTS_PER_FFN = 4
 DEFAULT_TOP_K = 2
-FFN_RANKS = 2
-ATTENTION_RANKS = 2
+DEFAULT_FFN_RANKS = 2
 GRAPH_STEPS = 26
 DELAY_CYCLES = 2_000_000
+COLLECT_VIEW = False  # --collect-view: Attention reads the single-FFN collect view
+# Per-role environment (--role-env) is limited to controls that only choose a
+# role's launch shape; protocol and buffer-geometry controls must match on all ranks.
+ROLE_LOCAL_ENV_PREFIX, ROLE_LOCAL_ENV = "AFDEP_SHARED_", ("AFDEP_ATTENTION_GRID_SYNC",)
+RECORDED_ENV_PREFIXES = ("AFDEP_", "EP_", "NCCL_")
+# FFN rank 0 delays replies; the last Attention rank delays its next dispatch.
 
 
 @dataclass(frozen=True)
 class Case:
     name: str
-    counts: tuple[int, int]
+    counts: tuple[int, ...]
     epoch: int
     routing: str = "mixed"
 
@@ -48,7 +54,7 @@ def inputs(case: Case, source: int, rows: int, config: Config):
         ids = (tokens[:, None] + slots) % config.experts_per_rank
         ids = torch.where(slots < config.experts_per_rank, ids, -1)
     else:
-        ids = (tokens[:, None] + slots + source + case.epoch) % EXPERTS
+        ids = (tokens[:, None] + slots + source + case.epoch) % config.num_experts
     weights = (
         torch.tensor(
             [0.25, 0.5] if config.top_k == 2 else [1 / 8] * config.top_k,
@@ -141,17 +147,22 @@ class Exchange:
             self.ids.copy_(ids)
             self.weights.copy_(weights)
 
-    def run(self, *, host_counts=False, delay=False, alternate=False):
+    def run(self, *, host_counts=False, delay=False, alternate=False, bucket=None):
+        bucket = bucket or self.config.capacity_tokens_per_rank
         if self.buffer.role == "attention":
             if alternate:
                 self.input.neg_()
                 self._quantize()
+            if delay and self.buffer.role_rank == self.config.attention_ranks - 1:
+                # A lagging source must not let peers overwrite its prior-exchange
+                # inputs or receive before every source has published.
+                torch.cuda._sleep(DELAY_CYCLES)
             self.buffer.source_dispatch(
                 self.x,
                 self.ids,
                 self.weights,
                 self.scale,
-                bucket=self.config.capacity_tokens_per_rank,
+                bucket=bucket,
                 read_host_counts=host_counts,
             )
             if self.config.role_aware:
@@ -159,14 +170,12 @@ class Exchange:
                     0,
                     self.config.hidden_size,
                 )
-            return self.buffer.source_collect().clone(), None
+            return self.buffer.source_collect(view=COLLECT_VIEW).clone(), None
         received = self.buffer.worker_receive(
-            bucket=self.config.capacity_tokens_per_rank, read_host_counts=host_counts
+            bucket=bucket, read_host_counts=host_counts
         )
         if self.config.role_aware and not host_counts:
-            assert received.recv_x.shape[0] == self.config.receive_rows(
-                self.config.capacity_tokens_per_rank
-            )
+            assert received.recv_x.shape[0] == self.config.receive_rows(bucket)
         rows = expert_rows(received, self.buffer.role_rank, self.config)
         if delay and self.buffer.role_rank == 0:
             torch.cuda._sleep(DELAY_CYCLES)
@@ -175,18 +184,44 @@ class Exchange:
         return snapshot, received.recv_counts_host if host_counts else None
 
 
+def combined_reference(x, ids, weights, config: Config, scaleup_ranks: int | None):
+    """BF16 combine result along DeepEP's reduction tree.
+
+    Each FFN rank sums its experts' BF16 rows into one BF16 partial; with hybrid
+    (multi-domain) transport each FFN domain's forwarder sums its ranks' partials
+    into one BF16 partial; the source sums what it receives. Every stage is an
+    exact FP32 sum rounded once to BF16, so this equals a single rounding whenever
+    the intermediates are exact (one FFN domain, small expert factors).
+    """
+    contribution = (weights * (ids + 1).float()).masked_fill(ids < 0, 0)
+    rows_bf16 = (x.float()[:, None, :] * contribution[:, :, None]).bfloat16().float()
+    owner = torch.where(ids >= 0, ids // config.experts_per_rank, -1)
+    partials = [
+        (rows_bf16 * (owner == rank)[:, :, None]).sum(dim=1).bfloat16().float()
+        for rank in range(config.ffn_ranks)
+    ]
+    if scaleup_ranks is not None:
+        partials = [
+            sum(partials[start : start + scaleup_ranks]).bfloat16().float()
+            for start in range(0, config.ffn_ranks, scaleup_ranks)
+        ]
+    return sum(partials).bfloat16()
+
+
 def verify(snapshot, case: Case, buffer: Buffer, rows: int, *, sign=1) -> None:
     value, host_counts = snapshot
     config = buffer.config
     if buffer.role == "attention":
         x, ids, weights = inputs(case, buffer.role_rank, rows, config)
-        factor = torch.where(ids >= 0, (ids + 1).float() * weights, 0).sum(dim=1)
-        expected = (sign * x.float() * factor[:, None]).bfloat16()
+        scaleout, scaleup = buffer.logical_domain
+        expected = combined_reference(
+            sign * x.float(), ids, weights, config, scaleup if scaleout > 1 else None
+        )
         torch.testing.assert_close(value, expected, rtol=0, atol=0)
         return
     first = buffer.role_rank * config.experts_per_rank
     counts = torch.zeros(config.experts_per_rank, dtype=torch.int64, device="cuda")
-    for source in range(ATTENTION_RANKS):
+    for source in range(config.attention_ranks):
         _, ids, _ = inputs(case, source, case.counts[source], config)
         selected = ids[(ids >= first) & (ids < first + config.experts_per_rank)] - first
         counts += torch.bincount(selected, minlength=config.experts_per_rank)
@@ -241,7 +276,9 @@ def graph_checks(buffer, cases, steps, *, delayed):
 def invalid_route_check(buffer, kind, execution):
     """Destructive device-assert test; run in its own torchrun process."""
     exchange = Exchange(buffer, buffer.config.capacity_tokens_per_rank)
-    exchange.update(Case("valid_before_invalid", (8, 8), 1))
+    exchange.update(
+        Case("valid_before_invalid", (8,) * buffer.config.attention_ranks, 1)
+    )
     exchange.run()
     torch.cuda.synchronize()
     dist.barrier()
@@ -258,7 +295,7 @@ def invalid_route_check(buffer, kind, execution):
             exchange.ids[0, 1].copy_(exchange.ids[0, 0])
         else:
             exchange.ids[0, 0] = {
-                "dummy": EXPERTS,
+                "dummy": buffer.config.num_experts,
                 "negative": -2,
                 "wide": 1 << 32,
             }[kind]
@@ -286,6 +323,57 @@ def invalid_route_check(buffer, kind, execution):
     raise AssertionError("invalid role route unexpectedly completed")
 
 
+def bucket_checks(buffer, graph):
+    """Change the bucket between back-to-back exchanges, as a serving ladder does.
+
+    Eager exchanges run without synchronization and rotate read_host_counts per
+    role (FFN only, Attention only, both, neither); the graph captures the same
+    bucket sequence in one graph, then replays it with new inputs.
+    """
+    n, sources = buffer.config.capacity_tokens_per_rank, buffer.config.attention_ranks
+    buckets = (1, n, min(3, n), min(64, n), n)
+    host_counts = ((True, False), (False, True), (True, True), (False, False))
+    plans = []
+    for index, bucket in enumerate(buckets):
+        # Source 0 sends a partial bucket so slot and staging offsets also move.
+        counts = tuple(max(bucket - (i == 0), 0) for i in range(sources))
+        case = Case(f"bucket_{bucket}", counts, 20 + index)
+        rows = counts[buffer.role_rank] if buffer.role == "attention" else bucket
+        plans.append((bucket, case, Exchange(buffer, rows)))
+    if graph:
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            for bucket, case, exchange in plans:
+                exchange.update(case)
+                exchange.run(bucket=bucket)
+        torch.cuda.synchronize()
+        dist.barrier()
+        cuda_graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(cuda_graph, stream=stream):
+            captured = [exchange.run(bucket=bucket) for bucket, _, exchange in plans]
+        with torch.cuda.stream(stream):
+            for _, case, exchange in plans:
+                exchange.update(Case(case.name, case.counts, case.epoch + 10))
+            cuda_graph.replay()
+        torch.cuda.synchronize()
+        for (_, case, exchange), (value, counts) in zip(plans, captured, strict=True):
+            replayed = Case(case.name, case.counts, case.epoch + 10)
+            verify((value.clone(), counts), replayed, buffer, exchange.rows)
+        cuda_graph.reset()
+    else:
+        snapshots = []
+        for index, (bucket, case, exchange) in enumerate(plans):
+            ffn, attention = host_counts[index % len(host_counts)]
+            exchange.update(case)
+            role_host_counts = ffn if buffer.role == "ffn" else attention
+            snapshots.append(exchange.run(host_counts=role_host_counts, bucket=bucket))
+        torch.cuda.synchronize()
+        for (_, case, exchange), snapshot in zip(plans, snapshots, strict=True):
+            verify(snapshot, case, buffer, exchange.rows)
+    dist.barrier()
+
+
 def queued_eager_checks(buffer, cases):
     """Reuse source host-counter storage without inter-case host sync."""
     exchange = Exchange(buffer, buffer.config.capacity_tokens_per_rank)
@@ -305,44 +393,80 @@ def main() -> None:
     parser.add_argument("--capacity", type=int, default=8)
     parser.add_argument("--graph-steps", type=int, default=GRAPH_STEPS)
     parser.add_argument("--num-sms", type=int, default=8)
+    parser.add_argument("--num-qps", type=int, default=0, help="0 = automatic")
     parser.add_argument("--hybrid", choices=("on", "off"), default="on")
     parser.add_argument(
         "--generic", action="store_true", help="Control: disable role specialization"
     )
     parser.add_argument(
-        "--hidden-size", type=int, choices=(256, 2048), default=DEFAULT_HIDDEN
+        "--hidden-size",
+        type=int,
+        choices=(256, 2048, 7168, 8192),
+        default=DEFAULT_HIDDEN,
     )
     parser.add_argument("--top-k", type=int, choices=(2, 8), default=DEFAULT_TOP_K)
+    parser.add_argument("--ffn-ranks", type=int, default=DEFAULT_FFN_RANKS)
+    parser.add_argument("--experts-per-ffn", type=int, default=EXPERTS_PER_FFN)
     parser.add_argument(
         "--invalid-route", choices=("dummy", "duplicate", "negative", "wide")
     )
     parser.add_argument(
         "--invalid-execution", choices=("eager", "graph"), default="graph"
     )
+    parser.add_argument(
+        "--collect-view",
+        action="store_true",
+        help="Attention collects through source_collect(view=True)",
+    )
+    parser.add_argument(
+        "--role-env",
+        action="append",
+        default=[],
+        metavar="ROLE:KEY=VALUE",
+        help="Set a launch-shape control (AFDEP_SHARED_*, AFDEP_ATTENTION_GRID_SYNC) "
+        "on one role's ranks (ffn or attention)",
+    )
     args = parser.parse_args()
+    global COLLECT_VIEW
+    COLLECT_VIEW = args.collect_view
     if min(args.capacity, args.graph_steps, args.num_sms) < 1:
         parser.error("capacity, graph-steps and num-sms must be positive")
     if args.invalid_route and (args.generic or args.capacity < 8):
         parser.error("invalid-route requires role specialization and capacity>=8")
     torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
     dist.init_process_group("gloo", timeout=timedelta(seconds=300))
+    world = dist.get_world_size()
+    if not 0 < args.ffn_ranks < world:
+        parser.error("ffn-ranks must leave at least one Attention rank")
+    for setting in args.role_env:
+        role, _, assignment = setting.partition(":")
+        key, _, value = assignment.partition("=")
+        if role not in ("ffn", "attention") or not key:
+            parser.error("role-env must be ROLE:KEY=VALUE with ROLE ffn or attention")
+        if not key.startswith(ROLE_LOCAL_ENV_PREFIX) and key not in ROLE_LOCAL_ENV:
+            parser.error(f"{key} changes the protocol or buffer size on every rank")
+        # FFN ranks are [0, ffn_ranks); transport controls are read on every call.
+        if (dist.get_rank() < args.ffn_ranks) == (role == "ffn"):
+            os.environ[key] = value
     config = Config(
         args.capacity,
         args.hidden_size,
-        EXPERTS,
+        args.experts_per_ffn * args.ffn_ranks,
         args.top_k,
-        FFN_RANKS,
-        ATTENTION_RANKS,
+        args.ffn_ranks,
+        world - args.ffn_ranks,
         payload=args.payload,
         num_sms=args.num_sms,
+        num_qps=args.num_qps,
         allow_hybrid_mode=args.hybrid == "on",
         role_aware=not args.generic,
         cpu_timeout_s=10 if args.invalid_route else 120,
         gpu_timeout_s=10 if args.invalid_route else 120,
     )
     buffer = Buffer(group=dist.group.WORLD, config=config)
-    if buffer.physical_domain != (1, config.world_size):
-        raise ValueError("this runner requires four GPUs in one NVLink domain")
+    # One NVLink domain, or NVLink domains joined by GIN (recorded per rank).
+    if buffer.physical_domain[0] * buffer.physical_domain[1] != config.world_size:
+        raise ValueError("physical domain does not cover the world")
     if config.role_aware and buffer.role == "attention":
         native_dispatch = buffer.transport.dispatch
 
@@ -355,15 +479,19 @@ def main() -> None:
         buffer.transport.dispatch = checked_source_host_counts
     if args.invalid_route:
         invalid_route_check(buffer, args.invalid_route, args.invalid_execution)
-    n = args.capacity
+    n, sources = args.capacity, config.attention_ranks
+    full, empty = (n,) * sources, (0,) * sources
+    # Source 1 (or the only source) is inactive; prefixes differ per source.
+    inactive = tuple(0 if i == min(1, sources - 1) else n for i in range(sources))
+    prefix = tuple(min((3, 1, 2)[i % 3], n) for i in range(sources))
     cases = [
-        Case("mixed", (n, n), 1),
-        Case("changed_routes", (n, n), 2),
-        Case("skew", (n, n), 3, "skew"),
-        Case("inactive_source", (n, 0), 4),
-        Case("all_skipped", (n, n), 5, "skip"),
-        Case("all_empty", (0, 0), 6),
-        Case("partial_prefix", (min(3, n), min(1, n)), 7),
+        Case("mixed", full, 1),
+        Case("changed_routes", full, 2),
+        Case("skew", full, 3, "skew"),
+        Case("inactive_source", inactive, 4),
+        Case("all_skipped", full, 5, "skip"),
+        Case("all_empty", empty, 6),
+        Case("partial_prefix", prefix, 7),
     ]
     for host_counts in (False, True):
         for case in cases:
@@ -377,12 +505,20 @@ def main() -> None:
     for delayed in (False, True):
         graph_checks(buffer, cases * 2, args.graph_steps, delayed=delayed)
     queued_eager_checks(buffer, cases)
+    for graph in (False, True):
+        bucket_checks(buffer, graph)
     summary = {
         "rank": buffer.rank,
         "role": buffer.role,
         "config": asdict(config),
         "physical_domain": buffer.physical_domain,
         "gpu": torch.cuda.get_device_name(),
+        "native_source_sha256": source_digest(),
+        "env": {
+            key: value
+            for key, value in sorted(os.environ.items())
+            if key.startswith(RECORDED_ENV_PREFIXES)
+        },
         "registered_transport_bytes": buffer.num_buffer_bytes,
         "receive_bound_rows": (
             0
@@ -398,6 +534,7 @@ def main() -> None:
         "queued_eager_host_count_cases": len(cases),
         "graph_replays": len(cases) * 2 * 2,
         "checked_graph_exchanges": len(cases) * 2 * 2 * args.graph_steps,
+        "bucket_cycle_exchanges": {"eager": 5, "graph": 5},
     }
     summaries = [None] * config.world_size
     dist.all_gather_object(summaries, summary)

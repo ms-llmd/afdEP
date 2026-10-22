@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -34,11 +35,147 @@ def test_pinned_origin_and_declared_role_specialization():
     assert actual == expected
     assert all(name in expected for name in SOURCE_NAMES)
     assert "MIT License" in (VENDOR_ROOT / "LICENSE").read_text()
-    # Direct dispatch adds opt-in role checks. The remaining main transport and
-    # credit kernels remain the pinned input, independently reviewable here.
-    for name in ("hybrid_dispatch", "combine", "hybrid_combine", "barrier"):
-        path = f"deep_ep/include/deep_ep/impls/{name}.cuh"
-        assert expected[path] == provenance["file_sha256"][path]
+    # Direct and hybrid dispatch/combine add opt-in role specializations whose
+    # defaults keep upstream kernels (see the template-default test). The
+    # credit/barrier kernel remains the pinned input, independently reviewable here.
+    path = "deep_ep/include/deep_ep/impls/barrier.cuh"
+    assert expected[path] == provenance["file_sha256"][path]
+
+
+def test_role_template_parameters_default_to_upstream_kernels():
+    """Generic (Masked) instantiations omit role arguments and keep upstream code."""
+    impls = VENDOR_ROOT / "deep_ep/include/deep_ep/impls"
+    combine = (impls / "combine.cuh").read_text()
+    assert "bool kAfdSkipEntryBarrier = false," in combine
+    assert "int kAfdDirectedFfnRanks = 0," in combine
+    assert "bool kAfdPerCtaExit = false," in combine
+    assert "bool kAfdSingleFfnReduce = false," in combine
+    dispatch = (impls / "dispatch.cuh").read_text()
+    assert "int kAfdFfnRanks = 0," in dispatch
+    assert "bool kAfdSkipEntryBarrier = false," in dispatch
+    assert "bool kAfdDirectionalNotify = false," in dispatch
+    assert "bool kAfdDirectedExit = false," in dispatch
+    assert "bool kAfdRoleBuffers = false," in dispatch
+    assert "bool kAfdPerCtaExit = false," in dispatch
+    assert "int kAfdZeroCollectRowBytes = 0," in dispatch
+    epilogue = (impls / "dispatch_copy_epilogue.cuh").read_text()
+    assert "int kAfdRegionOffset = 0," in epilogue
+    for hybrid in ("hybrid_dispatch.cuh", "hybrid_combine.cuh"):
+        assert "int kAfdFfnScaleoutRanks = 0," in (impls / hybrid).read_text()
+    hybrid_dispatch = (impls / "hybrid_dispatch.cuh").read_text()
+    assert "bool kAfdDirectionalRoutes = false," in hybrid_dispatch
+    assert "bool kAfdSkipAttentionEntrySync = false," in hybrid_dispatch
+
+
+# Device sources of v2.1 (native digest 8205d02b). The role suites size launches of
+# these kernels and add separate role kernels; they never edit a shared kernel, so
+# Masked and every shared instantiation keep their code, include hash and cubin.
+V21_KERNEL_SHA256 = {
+    "dispatch.cuh": (
+        "81e189fab1985fba3f8c772ecfe0b2efbfe4618744c0ae0195566ae20326ce6a"
+    ),
+    "combine.cuh": "8847dfb9b41cc0cb0c971ac0c35ca25d95cacc2443413ca3a6d6b7dcb43a51e1",
+    "hybrid_dispatch.cuh": (
+        "56ebe2ee6854380fa575881bf53e4a8d9392f7e4bf3ad1510c57b65854d1c313"
+    ),
+    "hybrid_combine.cuh": (
+        "a6fd0f17475bf1b1783a9671cbe09218e982ae904ad86ff2e6aa12efe2c9ee8a"
+    ),
+    "dispatch_copy_epilogue.cuh": (
+        "0b573abeb0dc2bb8d4c65d9a3ce28f82537e129d3dc4cf5e3709dd4e9cbf85cf"
+    ),
+    "afdep_roles.cuh": (
+        "4f7ed0d81d7215753c99dfe1364e4ba6e707101cb5ede0d1b139e8b1923e937a"
+    ),
+}
+
+
+def test_role_suites_leave_shared_kernels_untouched():
+    provenance = json.loads((VENDOR_ROOT / "PROVENANCE.json").read_text())
+    include = VENDOR_ROOT / "deep_ep/include/deep_ep"
+
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    for name, sha in V21_KERNEL_SHA256.items():
+        assert digest(include / "impls" / name) == sha, name
+    upstream = [
+        include / "impls/combine_reduce_epilogue.cuh",
+        *sorted((include / "common").glob("*")),
+    ]
+    for path in upstream:
+        name = path.relative_to(VENDOR_ROOT).as_posix()
+        assert digest(path) == provenance["file_sha256"][name], name
+
+
+def test_role_suite_shapes_are_host_launch_overrides():
+    """The Attention hybrid send block relaunches the shared cubin, generated first."""
+    elastic = VENDOR_ROOT / "csrc/kernels/elastic"
+    suites = (elastic / "afdep_suites.hpp").read_text()
+    controls = ("ROLE_KERNELS", "FFN_RECEIVE", "HYBRID_SEND", "HYBRID_FORWARD")
+    for control in (*controls, "HYBRID_COLLECT"):
+        assert f'"AFDEP_SHARED_{control}", 0) == 0' in suites
+    # Count-first dispatch keeps the payload-first kernels as its control.
+    assert '"AFDEP_PAYLOAD_FIRST", 0) == 0' in suites
+    dispatch = (elastic / "dispatch.hpp").read_text()
+    generate = dispatch.index("const auto code = DispatchRuntime::generate(args);")
+    assert generate < dispatch.index("shaped_args.launch_args = jit::LaunchArgs(")
+
+
+def test_ffn_role_kernels_are_the_generated_copies():
+    from tests import role_kernels as rk
+
+    hybrid = (rk.IMPLS / "hybrid_dispatch.cuh").read_text()
+    assert (rk.IMPLS / rk.FFN_HYBRID_DISPATCH).read_text() == rk.ffn_hybrid_dispatch(
+        hybrid
+    )
+    direct = (rk.IMPLS / "dispatch.cuh").read_text()
+    assert (rk.IMPLS / rk.FFN_DISPATCH).read_text() == rk.ffn_dispatch(direct)
+    assert (rk.IMPLS / rk.SOURCE_DISPATCH).read_text() == rk.source_dispatch(direct)
+    stream = (rk.IMPLS / rk.FFN_STREAM_DISPATCH).read_text()
+    assert stream == rk.ffn_stream_dispatch(direct)
+    epilogue = (rk.IMPLS / "dispatch_copy_epilogue.cuh").read_text()
+    assert (rk.IMPLS / rk.FFN_STREAM_EPILOGUE).read_text() == rk.ffn_stream_epilogue(
+        epilogue
+    )
+
+
+def test_count_first_kernels_stay_out_of_shared_runtimes():
+    """Each count-first copy has one runtime; no shared runtime includes the header."""
+    from tests import role_kernels as rk
+
+    dispatch = (VENDOR_ROOT / "csrc/kernels/elastic/dispatch.hpp").read_text()
+    for name in (rk.SOURCE_DISPATCH, rk.FFN_STREAM_DISPATCH, rk.FFN_STREAM_EPILOGUE):
+        assert dispatch.count(f"#include <deep_ep/impls/{name}>") == 1, name
+    assert "afdep_count_first.cuh" not in dispatch
+    for name in (
+        "dispatch.cuh",
+        "dispatch_copy_epilogue.cuh",
+        "afdep_ffn_dispatch.cuh",
+    ):
+        assert "afdep_count_first.cuh" not in (rk.IMPLS / name).read_text(), name
+
+
+def test_count_first_host_flag_geometry_mirrors_the_header():
+    """The host's flag bound uses the device header's wire constants."""
+
+    def constant(text, name):
+        return int(re.search(rf"\b{name} = (\d+);", text).group(1))
+
+    impls = VENDOR_ROOT / "deep_ep/include/deep_ep/impls"
+    header = (impls / "afdep_count_first.cuh").read_text()
+    suites = (VENDOR_ROOT / "csrc/kernels/elastic/afdep_suites.hpp").read_text()
+    assert "kAfdCfFlags = kAfdCfBase + 128;" in header
+    flags = constant(header, "kAfdCfBase") + 128
+    assert constant(suites, "kAfdepCountFirstFlagBase") == flags
+    for host, device in (
+        ("kAfdepCountFirstFlagStride", "kAfdepFlagStride"),
+        ("kAfdepCountFirstMaxSources", "kAfdCfMaxSources"),
+        ("kAfdepCountFirstMaxFfnRanks", "kAfdCfMaxFfnRanks"),
+    ):
+        assert constant(suites, host) == constant(header, device), host
+    # kNumMaxRanks x kNumMaxChannels int64 words (1024 x 1024).
+    assert "kAfdepCountFirstRegionWords = 1 << 20;" in suites
 
 
 def test_runtime_header_contents_invalidate_build(tmp_path):

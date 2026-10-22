@@ -10,6 +10,9 @@ Attention receive payloads and empty-side epilogues; FFN receive tensors are
 bounded by Attention source count. The collective protocol, logical expert
 slots, registered transport capacity and required synchronization remain.
 
+**v2.1 (in progress) specializes those kernels for AFD**, measured against
+Masked DeepEP: [changes and communication-only evidence](docs/v2.1.md).
+
 ## Use
 
 Linux, PyTorch ≥2.6, CUDA toolkit with `nvcc`, and NCCL ≥2.30.7 with device
@@ -59,13 +62,20 @@ prequantized FP8 dispatch return BF16 combined outputs. See the
 
 | Architecture | Evidence | Current v1 scope |
 |---|---|---|
-| Hopper (SM90) | H100 GPU suite | BF16/FP8; eager/CUDA graphs; one NVLink domain |
+| Hopper (SM90) | H100 GPU suite; H200 two-domain suite | BF16/FP8; eager/CUDA graphs; one NVLink domain, or two joined by GIN |
 | Blackwell | Not validated | No support claim yet |
 | Other architectures | Not validated | No support claim yet |
 
-Validation uses 2 Attention + 2 FFN ranks with partitioned experts. Other group
-layouts and multi-domain role specialization require validation. V1 rejects
-multiple physical NVLink domains when role specialization is enabled.
+v1 validation uses 2 Attention + 2 FFN ranks with partitioned experts. The v2.1
+role path is also validated with 3 Attention + 1 FFN and 1 Attention + 3 FFN in
+one four-GPU NVLink domain ([evidence](docs/validation-v2.1-clean.json)), and
+across two to four NVLink domains of two H200 GPUs (up to 8 ranks), and four and five single-GPU domains, joined by InfiniBand GIN (FFN domain +
+Attention domain, plus 3:1 and 1:3 layouts that mix roles in a domain;
+[evidence](docs/validation-v2.1-cross-node.json)). When each domain holds a single
+role, a directional hybrid protocol is 17% (two nodes) to 21% (three nodes) faster than Masked at one token
+([evidence](docs/validation-v2.1-directional-hybrid.json)); mixed-role domains keep
+DeepEP's hybrid protocol. Other group layouts and larger multi-domain worlds
+require validation.
 `allow_hybrid_mode` retains DeepEP's meaning; it does not enable an unvalidated
 topology.
 

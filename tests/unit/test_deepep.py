@@ -74,6 +74,7 @@ def runtime(monkeypatch):
     group = SimpleNamespace(rank=lambda: 2, size=lambda: 4)
     native = Mock()
     native.get_logical_domain_size.return_value = (1, 4)
+    native.get_afd_count_first_config.return_value = (0, "full")
     native.combine.return_value = (Tensor((2, 256)), None, None)
 
     def dispatch(*args):
@@ -168,11 +169,39 @@ def test_role_aware_requires_explicit_geometry_and_preserves_generic_ctor(runtim
     runtime.module.ElasticBuffer.assert_not_called()
     generic = elastic(runtime)
     assert len(runtime.module.ElasticBuffer.call_args.args) == 13
+    # Union sizing for the generic buffer; role-sized inboxes for the role path.
+    assert runtime.module.calculate_elastic_buffer_size.call_args.args[-1] == 0
     generic.close()
     roles = elastic(runtime, role_aware=True, ffn_ranks=2)
     assert len(runtime.module.ElasticBuffer.call_args.args) == 14
     assert runtime.module.ElasticBuffer.call_args.args[-1] == 2
+    assert runtime.module.calculate_elastic_buffer_size.call_args.args[-1] == 2
     roles.close()
+
+
+def test_count_first_configuration_must_agree(runtime):
+    gather = runtime.dist.all_gather_object
+
+    def split(values, value, group):
+        gather(values, value, group)
+        if isinstance(value, tuple):
+            values[1] = (1, "full")
+
+    runtime.dist.all_gather_object = split
+    with pytest.raises(ValueError, match="same count-first configuration"):
+        elastic(runtime, role_aware=True, ffn_ranks=2)
+    runtime.native.destroy.assert_called_once()
+    runtime.module.destroy_nccl_comm.assert_called_once_with(17)
+
+
+def test_count_first_arm_is_rejected_collectively(runtime):
+    runtime.native.get_afd_count_first_config.return_value = (1, "both")
+    with pytest.raises(
+        ValueError, match="AFDEP_COUNT_FIRST_ARM must be full or source"
+    ):
+        elastic(runtime, role_aware=True, ffn_ranks=2)
+    runtime.native.destroy.assert_called_once()
+    runtime.module.destroy_nccl_comm.assert_called_once_with(17)
 
 
 def test_role_aware_source_owns_no_dummy_payload_arena(runtime):
@@ -229,12 +258,13 @@ def test_explicit_disable_rejects_multidomain_before_buffer_creation(
     runtime.module.destroy_nccl_comm.assert_called_once_with(17)
 
 
-def test_role_aware_rejects_unvalidated_multidomain_before_buffer_creation(runtime):
+def test_role_aware_accepts_multidomain_with_gin(runtime, monkeypatch):
+    monkeypatch.delenv("EP_DISABLE_GIN", raising=False)
     runtime.module.get_physical_domain_size.return_value = (2, 2)
-    with pytest.raises(ValueError, match="requires one physical NVLink domain"):
-        elastic(runtime, role_aware=True, ffn_ranks=2)
-    runtime.module.ElasticBuffer.assert_not_called()
-    runtime.module.destroy_nccl_comm.assert_called_once_with(17)
+    buffer = elastic(runtime, role_aware=True, ffn_ranks=2)
+    assert buffer.physical_domain == (2, 2)
+    assert runtime.module.ElasticBuffer.call_args.args[-1] == 2
+    buffer.close()
 
 
 def test_opaque_handle_is_required_and_native_output_is_returned(runtime):
@@ -287,6 +317,10 @@ def test_role_source_returns_native_output_without_copy(runtime):
     output = buffer.source_collect()
     assert output is runtime.native.combine.return_value[0]
     assert runtime.native.combine.call_args.args[0].view_parent is buffer._zero_output
+    assert runtime.native.combine.call_args.args[-1] is False
+    buffer.source_dispatch(x, ids, weights, bucket=8)
+    buffer.source_collect(view=True)
+    assert runtime.native.combine.call_args.args[-1] is True
     with pytest.raises(RuntimeError, match="ffn role"):
         buffer.worker_receive(bucket=8)
     with pytest.raises(ValueError, match="dtype"):

@@ -1,0 +1,246 @@
+#pragma once  // afdEP: generated from dispatch_copy_epilogue.cuh by tests/role_kernels.py; do not edit
+
+#include <deep_ep/common/compiled.cuh>
+#include <deep_ep/common/layout.cuh>
+#include <deep_ep/common/math.cuh>
+#include <deep_ep/common/ptx.cuh>
+#include <deep_ep/impls/afdep_count_first.cuh>
+
+
+namespace deep_ep::elastic {
+
+template <bool kDoExpand, bool kCachedMode, bool kReadDeviceCount,
+          // NOTES: this channel concept only applies for scale-out ranks
+          int kNumSMs, int kNumChannels, int kNumWarps,
+          int kNumScaleoutRanks, int kNumScaleupRanks,
+          int kNumHiddenBytes, int kNumSFPacks,
+          int kNumMaxTokensPerRank,
+          int kNumExperts, int kNumTopk,
+          // afdEP role buffers: inbox regions start at the first Attention source.
+          int kAfdRegionOffset = 0,
+          // afdEP count-first: the prefix and row wait timeout, and the fewest rows per claimed unit
+          int64_t kAfdTimeoutCycles = 0, int kAfdUnitMinRows = 1,
+          int kNumRanks = kNumScaleoutRanks * kNumScaleupRanks,
+          int kNumThreads = kNumWarps * 32,
+          int kNumMaxTokensPerChannel = math::constexpr_ceil_div(kNumMaxTokensPerRank, kNumChannels),
+          bool kDoCreateLinkedList = (kNumScaleoutRanks > 1 and not kCachedMode)>
+__global__ void __launch_bounds__(kNumThreads, 1)
+afdep_ffn_stream_epilogue_impl(void* buffer, void* workspace,
+                            int* psum_num_recv_tokens_per_scaleup_rank,
+                            int* psum_num_recv_tokens_per_expert,
+                            void* recv_x, sf_pack_t* recv_sf,
+                            topk_idx_t* recv_topk_idx, float* recv_topk_weights,
+                            int* recv_src_metadata,
+                            int* channel_linked_list,
+                            int num_recv_tokens,
+                            const int recv_sf_token_stride, const int recv_sf_hidden_stride,
+                            const int scaleout_rank_idx, const int scaleup_rank_idx) {
+    // Utils
+    const auto sm_idx = static_cast<int>(blockIdx.x), thread_idx = static_cast<int>(threadIdx.x);
+    const auto warp_idx = ptx::get_warp_idx(), lane_idx = ptx::get_lane_idx();
+    const auto global_warp_idx = warp_idx * kNumSMs + sm_idx;
+
+    // For top-k index transformations
+    constexpr int kNumExpertsPerRank = kNumExperts / kNumRanks;
+    const auto rank_idx = scaleout_rank_idx * kNumScaleupRanks + scaleup_rank_idx;
+    const auto expert_start_idx = kNumExpertsPerRank * rank_idx, expert_end_idx = kNumExpertsPerRank * (rank_idx + 1);
+
+    // Buffer layouts
+    extern __shared__ __align__(ptx::kNumTMAAlignBytes) int8_t smem[];
+    const auto token_layout = layout::TokenLayout(kNumHiddenBytes, kNumSFPacks * sizeof(sf_pack_t), kNumTopk, true);
+    const auto tma_buffer = layout::BufferLayout<true>(token_layout, kNumWarps, 1, smem)
+        .get_rank_buffer(warp_idx).get_token_buffer(0);
+    const auto scaleup_buffer = layout::BufferLayout<false>(token_layout, kNumScaleupRanks, kNumScaleoutRanks * kNumMaxTokensPerRank, buffer);
+
+    // Init TMA
+    ptx::arrival_phase phase = 0;
+    const auto mbarrier_ptr = tma_buffer.get_mbarrier_ptr();
+    if (ptx::elect_one_sync())
+        ptx::mbarrier_init_with_fence(mbarrier_ptr, 1);
+    __syncwarp();
+
+    // afdEP count-first: no grid dependency sync at entry; P orders the prefix sums, epochs and
+    // per-expert cursors, and each row's flag orders its data (PDL is used, please do not use `__ldg`)
+    EP_STATIC_ASSERT(kDoExpand and not kCachedMode and kNumScaleoutRanks == 1 and kAfdRegionOffset > 0 and
+                     kAfdTimeoutCycles > 0 and kNumScaleupRanks - kAfdRegionOffset <= kAfdCfMaxSources,
+                     "Count-first copy epilogue: one-domain expanded role path");
+    const auto afd_ws = layout::WorkspaceLayout(workspace, kNumScaleoutRanks, kNumScaleupRanks, kNumExperts);
+    afdep_cf_wait_prefix<kAfdTimeoutCycles>(afd_ws, thread_idx, rank_idx);
+
+    // For no CPU sync case, the number of received tokens should be read from the GPU tensor
+    if constexpr (kReadDeviceCount) {
+        const int actual = psum_num_recv_tokens_per_scaleup_rank[kNumScaleupRanks - 1];
+        EP_DEVICE_ASSERT(actual >= 0 and actual <= num_recv_tokens);
+        num_recv_tokens = actual;
+    } else if (num_recv_tokens == kNumMaxTokensPerRank * kNumRanks)
+        num_recv_tokens = psum_num_recv_tokens_per_scaleup_rank[kNumScaleupRanks - 1];
+
+    // afdEP count-first: CTAs claim units of rows (chunk-major, source-minor) until none is left;
+    // warp w copies a unit's row w once its flag carries the source's epoch
+    auto afd_sources = afdep_cf_load_sources<kNumScaleupRanks, kAfdRegionOffset, kNumMaxTokensPerRank>(
+        afd_ws, psum_num_recv_tokens_per_scaleup_rank, lane_idx);
+    EP_DEVICE_ASSERT(afd_sources.total == num_recv_tokens);
+    afdep_cf_unit_rows<kNumWarps, kAfdUnitMinRows>(afd_sources, static_cast<int>(gridDim.x));
+    const auto afd_claims = static_cast<int*>(
+        layout::BufferLayout<true>(token_layout, kNumWarps, 1, smem).get_buffer_end_ptr());
+    AfdCfCursor afd_cursor = {};
+    for (auto unit = afdep_cf_claim(afd_ws, afd_sources, afd_cursor, afd_claims, thread_idx); unit.valid;
+         unit = afdep_cf_claim(afd_ws, afd_sources, afd_cursor, afd_claims, thread_idx)) {
+        if (warp_idx >= unit.len)
+            continue;
+        const int current_rank_idx = kAfdRegionOffset + unit.source;
+        const int current_rank_start = unit.base;
+        const int afd_slot = unit.first_slot + warp_idx;
+        const int i = current_rank_start + afd_slot;
+        const auto buffer_token = scaleup_buffer.get_rank_buffer(unit.source).get_token_buffer(afd_slot);
+        afdep_cf_wait_row<kAfdTimeoutCycles, kNumMaxTokensPerRank, kAfdRegionOffset>(
+            afd_ws, unit.source, afd_slot, unit.epoch, lane_idx, rank_idx);
+
+        // Wait buffer releases
+        ptx::tma_store_wait();
+        __syncwarp();
+
+        // Issue TMA loads
+        // Including all stuffs: data, SF, top-k metadata
+        if (ptx::elect_one_sync()) {
+            ptx::tma_load_1d(tma_buffer.get_base_ptr(), buffer_token.get_base_ptr(),
+                             mbarrier_ptr, tma_buffer.get_num_bytes<false>());
+            ptx::mbarrier_arrive_and_set_tx(mbarrier_ptr, tma_buffer.get_num_bytes<false>());
+        }
+        __syncwarp();
+
+        // Load target expert indices separately to tolerate TMA load latency
+        EP_STATIC_ASSERT(kNumTopk <= 32, "Too many top-k selections");
+        int dst_expert_idx = -1;
+        if (lane_idx < kNumTopk)
+            dst_expert_idx = buffer_token.get_topk_idx_ptr()[lane_idx];
+        __syncwarp();
+
+        // Validate target expert indices and store for non-expand mode
+        const auto in_range = expert_start_idx <= dst_expert_idx and dst_expert_idx < expert_end_idx;
+        const auto master_src_topk_idx = ptx::get_master_lane_idx(ptx::gather(in_range));
+        dst_expert_idx = in_range ? dst_expert_idx - expert_start_idx : -1;
+        EP_DEVICE_ASSERT(ptx::deduplicate(dst_expert_idx, lane_idx) or dst_expert_idx == -1);
+        if (not kDoExpand and lane_idx < kNumTopk)
+            recv_topk_idx[i * kNumTopk + lane_idx] = static_cast<topk_idx_t>(dst_expert_idx);
+        __syncwarp();
+
+        // Calculate target indices in the tensor
+        int dst_tensor_idx = -1;
+        if (not kDoExpand and ptx::elect_one_sync()) {
+            dst_tensor_idx = i;
+        } else if (kDoExpand and dst_expert_idx >= 0) {
+            dst_tensor_idx = atomicAdd(psum_num_recv_tokens_per_expert + dst_expert_idx, 1);
+        }
+        __syncwarp();
+
+        // Wait for TMA arrival
+        if (ptx::elect_one_sync())
+            ptx::mbarrier_wait_and_flip_phase(mbarrier_ptr, phase);
+        __syncwarp();
+
+        // Maintain linked list
+        if constexpr (kDoCreateLinkedList) {
+            if (ptx::elect_one_sync())
+                channel_linked_list[tma_buffer.get_linked_list_idx_ptr()[master_src_topk_idx]] = i;
+            __syncwarp();
+        }
+
+        // Issue TMA stores for data
+        if (kDoExpand ? (dst_tensor_idx >= 0) : ptx::elect_one_sync()) {
+            ptx::tma_store_1d(math::advance_ptr(recv_x, static_cast<int64_t>(dst_tensor_idx) * kNumHiddenBytes),
+                              tma_buffer.get_hidden_ptr(), kNumHiddenBytes);
+            ptx::tma_store_commit();
+        }
+        __syncwarp();
+
+        // Store SF
+        if constexpr (kNumSFPacks > 0) {
+            constexpr auto kNumFullIters = kNumSFPacks / 32;
+            const bool do_last_iter = (kNumSFPacks % 32 != 0) and (kNumFullIters * 32 + lane_idx < kNumSFPacks);
+            EP_STATIC_ASSERT(sizeof(sf_pack_t) % 4 == 0, "Unaligned SF element type");
+
+            // Load into registers
+            const auto smem_src_ptr = tma_buffer.get_sf_ptr();
+            sf_pack_t reg_src[kNumFullIters + 1];
+            #pragma unroll
+            for (int k = 0; k < kNumFullIters; ++ k)
+                reg_src[k] = smem_src_ptr[k * 32 + lane_idx];
+            if (do_last_iter)
+                reg_src[kNumFullIters] = smem_src_ptr[kNumFullIters * 32 + lane_idx];
+
+            // Prepare strides
+            const auto recv_sf_token_stride_i64 = static_cast<int64_t>(recv_sf_token_stride);
+            const auto recv_sf_hidden_stride_i64 = static_cast<int64_t>(recv_sf_hidden_stride);
+
+            // Iterate through all valid indices and store into output buffer
+            auto mask = kDoExpand ? ptx::gather(dst_tensor_idx >= 0) : 1;
+            while (mask) {
+                const int valid_lane_idx = __ffs(mask) - 1;
+                const auto gmem_dst = math::advance_ptr<sf_pack_t>(recv_sf,
+                    ptx::exchange(dst_tensor_idx, valid_lane_idx) * (recv_sf_token_stride_i64 * sizeof(sf_pack_t)));
+                #pragma unroll
+                for (int k = 0; k < kNumFullIters; ++ k)
+                    gmem_dst[(k * 32 + lane_idx) * recv_sf_hidden_stride_i64] = reg_src[k];
+                if (do_last_iter)
+                    gmem_dst[(kNumFullIters * 32 + lane_idx) * recv_sf_hidden_stride_i64] = reg_src[kNumFullIters];
+                mask ^= 1 << valid_lane_idx;
+            }
+        }
+
+        // Store the top-k weights
+        if (kDoExpand and recv_topk_weights != nullptr and dst_tensor_idx >= 0) {
+            recv_topk_weights[dst_tensor_idx] = tma_buffer.get_topk_weights_ptr()[lane_idx];
+        } else if (not kDoExpand and recv_topk_weights != nullptr and lane_idx < kNumTopk) {
+            // For backward, weights are optional
+            recv_topk_weights[i * kNumTopk + lane_idx] = tma_buffer.get_topk_weights_ptr()[lane_idx];
+        }
+        __syncwarp();
+
+        // Write source token index
+        // And:
+        //   - Non-hybrid mode: the source scaleup peer rank index and master top-k lane index
+        //   - Hybrid mode: the slot index and master top-k lane index
+        constexpr int kMetadataStride = 2 + kNumTopk;
+        if (ptx::elect_one_sync()) {
+            recv_src_metadata[i * kMetadataStride + 0] = *tma_buffer.get_src_token_global_idx_ptr();
+            if constexpr (kNumScaleoutRanks == 1) {
+                recv_src_metadata[i * kMetadataStride + 1] = current_rank_idx * kNumTopk + master_src_topk_idx;
+            } else {
+                recv_src_metadata[i * kMetadataStride + 1] = (i - current_rank_start) * kNumTopk + master_src_topk_idx;
+            }
+        }
+        __syncwarp();
+
+        // Write reduction source indices
+        if (kDoExpand and lane_idx < kNumTopk)
+            recv_src_metadata[i * kMetadataStride + 2 + lane_idx] = dst_tensor_idx;
+        __syncwarp();
+    }
+
+    // afdEP count-first: the last claimant waits for the dispatch, then clears P and CLAIM
+    afdep_cf_epilogue_end(afd_ws, afd_cursor.last, thread_idx);
+
+    // Maintain linked list's ending
+    // Or you can understand it as writing the tail at once
+    if constexpr (kDoCreateLinkedList) {
+        constexpr int kNumScaleupRanksPerLane = math::constexpr_ceil_div(kNumScaleupRanks, 32);
+        const auto workspace_layout = layout::WorkspaceLayout(workspace, kNumScaleoutRanks, kNumScaleupRanks, kNumExperts);
+        for (int i = global_warp_idx; i < kNumChannels; i += kNumSMs * kNumWarps) {
+            #pragma unroll
+            for (int j = 0; j < kNumScaleupRanksPerLane; ++ j) {
+                if (const auto k = j * 32 + lane_idx; j < (kNumScaleupRanksPerLane - 1) or k < kNumScaleupRanks) {
+                    channel_linked_list[
+                        *workspace_layout.get_channel_scaleup_tail_ptr(i, k)
+                    ] = -1;
+
+                    // Clean for combine usages
+                    *workspace_layout.get_channel_scaleup_tail_ptr(i, k) = 0;
+                }
+            }
+            __syncwarp();
+        }
+    }
+}
+
+}  // namespace deep_ep::elastic

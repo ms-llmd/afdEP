@@ -4,46 +4,99 @@
   "modified_files": {
     "csrc/elastic/buffer.hpp": {
       "upstream_sha256": "b2080118bb3e192018d42625eefba5c517690af5a0b8f6858c0842168f79da13",
-      "sha256": "80b9e1d073787d2d62d008ace8e85e4d79c4015bd5a9b6b4d5a7631f135897a6"
+      "sha256": "86f3a2777982458c37a9f531ca15c184353d188422487a543cfec8e2fc2976d4"
+    },
+    "csrc/kernels/elastic/combine.hpp": {
+      "upstream_sha256": "edb25ab70b64517786302a952c223f8389b3d7fce0f2d82a9706ddd83598b5e6",
+      "sha256": "1f21e0377e83e333eec893a5eb8e674a8b09288b4efb96d662b6068d1099425c"
     },
     "csrc/kernels/elastic/dispatch.hpp": {
       "upstream_sha256": "34180aebedf6f0a7062fd2bfe4f35668a58ae9486767f7d77554817a8f9999a2",
-      "sha256": "33a04fb2dd96d31622aee9dff8bf8e4d8b1fad348ce06854c52652c21e0bae47"
-    },
-    "deep_ep/include/deep_ep/impls/dispatch_copy_epilogue.cuh": {
-      "upstream_sha256": "77eb7a54c2d645e5137255e399f465af550f56bcb2d8fd000d6de9a7f3d7c033",
-      "sha256": "ca6373e5694886f259ad9ce2ad1366ca060e62d0bb285930731d1daa27b4dd6f"
-    },
-    "deep_ep/include/deep_ep/impls/dispatch.cuh": {
-      "upstream_sha256": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
-      "sha256": "4fd27e4ae09fc87351bb9ace2e9a49b0e071d7dec22f4daed80da77a3110ffea"
+      "sha256": "1f87dd0f69ab50aeb442375ca768343558b9bb7921dd7fd4b860935a8fdf96da"
     },
     "csrc/python_api.cpp": {
       "upstream_sha256": "64b6041b75c1027c9f7f16b236e1fb037f0838f5338020804035e8e39d5710ba",
       "sha256": "fd3f14ee9316ea7d05615738ed2ac18e3687b9c27a44dc773c510c3fe2dfe0bf"
+    },
+    "deep_ep/include/deep_ep/impls/combine.cuh": {
+      "upstream_sha256": "6a0f1f3f978978a35f9616178825f8c29881aafc3a04d8c2ba68b50a4a283c9a",
+      "sha256": "8847dfb9b41cc0cb0c971ac0c35ca25d95cacc2443413ca3a6d6b7dcb43a51e1"
+    },
+    "deep_ep/include/deep_ep/impls/dispatch.cuh": {
+      "upstream_sha256": "25c87cec958707b3ccf9f8d041621baeb6b963b94f11fb6c9986952e5e0a6095",
+      "sha256": "81e189fab1985fba3f8c772ecfe0b2efbfe4618744c0ae0195566ae20326ce6a"
+    },
+    "deep_ep/include/deep_ep/impls/dispatch_copy_epilogue.cuh": {
+      "upstream_sha256": "77eb7a54c2d645e5137255e399f465af550f56bcb2d8fd000d6de9a7f3d7c033",
+      "sha256": "0b573abeb0dc2bb8d4c65d9a3ce28f82537e129d3dc4cf5e3709dd4e9cbf85cf"
+    },
+    "deep_ep/include/deep_ep/impls/hybrid_combine.cuh": {
+      "upstream_sha256": "c9c628569eb49edbaabf1364a0ae8f0436b76cd6f9be4ab02daf5e4a8c2ae3b3",
+      "sha256": "a6fd0f17475bf1b1783a9671cbe09218e982ae904ad86ff2e6aa12efe2c9ee8a"
+    },
+    "deep_ep/include/deep_ep/impls/hybrid_dispatch.cuh": {
+      "upstream_sha256": "87ff341af541de4b11f88237b688705a35762229ae2f37ae488c7e3bfda949ac",
+      "sha256": "56ebe2ee6854380fa575881bf53e4a8d9392f7e4bf3ad1510c57b65854d1c313"
     }
   },
   "added_files": {
     "csrc/kernels/elastic/afdep_roles.hpp": {
-      "sha256": "40faf4c6463e05550f0e3c04b4bc0d8a80e1b17b441e718287b8a8813f866c4c"
+      "sha256": "af22ad6a205d994645700bf5d3ac3f921cf51b5bf426a7190a0b8f3600b3eb92"
+    },
+    "csrc/kernels/elastic/afdep_suites.hpp": {
+      "sha256": "dbaa59f65cd1e0cd4bb21f9f3d356c23baf2f6534385003b6f77897db63d9fc3"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_count_first.cuh": {
+      "sha256": "a7779f4bf9c270f2b6af935ec012b104a1968d4e71c989dad1c054a60a317694"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_ffn_dispatch.cuh": {
+      "sha256": "06761dee7ff8559fc6587d3fad597314138cc0a277c2b64c84eef4199fee3e90"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_ffn_hybrid_dispatch.cuh": {
+      "sha256": "2e6002f532be2269a7878c1d67d7a74d6eaf5d3eb5493f40270863e01550c1e5"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_ffn_stream_dispatch.cuh": {
+      "sha256": "882e306502ed48236af76bf8f0de02a25e2795f8373314b086addc4fb1840c80"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_ffn_stream_epilogue.cuh": {
+      "sha256": "40f9f963bcbca7b914f929a5a21895269a6192c658fc61a1bccb0d1d244d9ee7"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_hybrid_collect.cuh": {
+      "sha256": "92b0b5a514e3f5e409934c7851ccd5faf07357453c402985f651e7c9692309ce"
     },
     "deep_ep/include/deep_ep/impls/afdep_roles.cuh": {
-      "sha256": "bbf6eb2781fabe323093c183932c7f7678211c94ba7af8a99c325c059e3e246a"
+      "sha256": "4f7ed0d81d7215753c99dfe1364e4ba6e707101cb5ede0d1b139e8b1923e937a"
+    },
+    "deep_ep/include/deep_ep/impls/afdep_source_dispatch.cuh": {
+      "sha256": "11f7cb52282262888876c2e33b6c007e649a82f15ce19d7e6523d2536e558d8a"
     }
   },
   "scope": [
-    "Keep registered transport capacity, main barriers/credits, hybrid dispatch and all main combine kernels unchanged.",
+    "v1: keep registered transport capacity, main barriers/credits, hybrid dispatch and all main combine kernels unchanged; the v2.1 entries below record where the role path now differs.",
     "Validate full-width real expert IDs and duplicate experts before route-derived indexing in both direct-dispatch routing loops; preserve -1 padding and destination-rank deduplication.",
     "Fuse only noncached, nondeterministic role dispatch in one logical NVLink domain; deterministic and other logical paths retain the separate route guard and completion helpers.",
     "Assert every incoming source count is zero in the main notify phase; use existing normal stream events and tensor lifetimes instead of empty-side completion kernels on the fused path.",
     "Allocate no source receive rows; bound worker receive rows by explicit source count.",
     "Read actual device counts after reducing allocation bounds; preserve hybrid forwarding metadata.",
     "Known-empty sources return zero host counts without CPU polling or per-dispatch host counter clears; device counter resets and launch flags remain unchanged.",
-    "Expose compiled and loaded NCCL versions for startup compatibility checks."
+    "Expose compiled and loaded NCCL versions for startup compatibility checks.",
+    "v2.1: role-aware direct-NVLink dispatch and combine skip their entry barriers on every rank; ordered complete pairs, non-PDL main kernels and the unchanged exit barriers imply buffer, counter and count-inbox availability (proof in afdep_roles.hpp). AFDEP_KEEP_ENTRY_BARRIERS=1 restores them as a measurement control.",
+    "v2.1: role-aware direct-NVLink dispatch exchanges counts Attention->FFN only: sources reduce and send FFN rank/expert counts and wait for none; FFNs skip their zero-count reduction and wait only for source counts; prefix sums keep canonical positions. AFDEP_UNION_NOTIFY=1 restores the union exchange as a measurement control.",
+    "v2.1: role-aware direct-NVLink dispatch and combine replace their all-rank exit barriers with directed arrival: senders flush, grid-sync and release per-peer monotonic counters (unused scale-out channel-tail workspace in direct mode); only receivers wait. AFDEP_ALL_RANK_EXIT=1 restores the exit barriers as a measurement control.",
+    "v2.1: role-sized registered buffers. In one NVLink domain the role path sizes FFN dispatch inboxes for the Attention sources only (source s writes region s - F; the copy epilogue reads with the same offset) and, in the rank layout, Attention combine inboxes for the F FFN senders only; every rank registers the same maximum. AFDEP_UNION_BUFFERS=1 keeps union sizing as a measurement control.",
+    "v2.1: with directed exit, each sending CTA (Attention sources in dispatch, FFN ranks in combine) releases its own arrival after its TMA stores complete, without the sender grid sync; receivers wait for round x sender CTAs and the last source CTA resets the slot counters. AFDEP_GRID_SYNC_EXIT=1 keeps the grid-synced release as a measurement control.",
+    "v2.1: directional hybrid protocol when every scale-out (NVLink) domain holds one role: Attention domains send counts, payloads and finish tails to FFN domains only and skip forwarding and combine reduction; FFN domains skip scale-out sends, wait only for Attention domains, and signal combine arrival to Attention domains only. Both hybrid entry barriers keep only their scale-up half, and Attention domains (which then share no state) skip their scale-up barriers too. AFDEP_UNION_HYBRID=1 keeps the union hybrid protocol as a measurement control.",
+    "v2.1: directional hybrid dispatch validates full-width real expert IDs and duplicates in its notify and scale-out warps before route-derived indexing, stores or puts, as the direct path does, and drops the separate route-guard kernel ahead of each source dispatch; mixed-role (union hybrid) layouts keep the guard. AFDEP_HYBRID_ROUTE_GUARD=1 keeps the guard kernel as a measurement control.",
+    "v2.1: directional hybrid dispatch skips the entry grid sync on Attention domains, which run neither barrier half there; it guarded no cross-CTA state. AFDEP_ATTENTION_GRID_SYNC=1 keeps it as a measurement control.",
+    "v2.1: single-FFN reduction. With one FFN rank on the direct-NVLink role path every token's top-k rows are local, so the FFN combine's branch-free reduction prefix covers all top_k slots instead of ceil(top_k / union ranks), which counts the expert-free Attention ranks. AFDEP_UNION_REDUCE_PREFIX=1 keeps the union prefix as a measurement control.",
+    "v2.1 fix: directional hybrid staging no longer overlaps remotely written inboxes when a race is possible. With two or more FFN domains, Attention domains stage dispatch tokens at window offset 0 (their scale-up inboxes, unused in both phases in this mode) instead of over their combine scale-out inbox; with two or more Attention domains, FFN domains stage combine replies in a slice reserved at the window end (calculate_buffer_size adds it) instead of over their dispatch scale-out inbox. Without it, a destination that finished early could overwrite staging the NIC had not yet read for another domain. With one domain on the other side every reply or next request follows that domain's per-channel signals, each after the channel's puts, so the layout is unchanged there.",
+    "v2.1: direct dispatch over GIN (hybrid off across NVLink domains) instantiates the role dispatch with kAfdFfnRanks = F, so its notify and payload warps check full-width IDs and duplicates in-kernel and the separate route-guard kernel is skipped; its barrier, count and exit protocol stays union. AFDEP_HYBRID_ROUTE_GUARD=1 keeps the guard kernel as a measurement control.",
+    "v2.1: single-FFN collect view. With one FFN rank in one NVLink domain (rank layout), source_collect(view=True) returns a strided view of combine inbox region 0, where the FFN writes each token's final row, and skips the reduce epilogue; the source dispatch zeroes the rows of tokens with no valid route, which no FFN writes. The view is valid until the next source dispatch. Other layouts and calls with weights or bias return the ordinary result.",
+    "v2.1 role suites (csrc/kernels/elastic/afdep_suites.hpp): in one NVLink domain the FFN dispatch receive runs afdep_ffn_dispatch.cuh, dispatch.cuh generated by tests/role_kernels.py with the PDL trigger after the arrival wait (same template and launch shape); in directional hybrid the Attention dispatch launches the shared cubin without its forward warps, the FFN dispatch runs afdep_ffn_hybrid_dispatch.cuh (hybrid_dispatch.cuh without scale-out warps, generated) and the Attention combine runs the one-CTA afdep_hybrid_collect.cuh; channels, QPs, tails, signals, staging and protocol words are unchanged. Direct GIN keeps v2.1's shapes. AFDEP_SHARED_ROLE_KERNELS=1 and the per-kernel AFDEP_SHARED_FFN_RECEIVE / AFDEP_SHARED_HYBRID_SEND / FORWARD / COLLECT=1 keep the shared kernels; shared device sources are unchanged."
   ],
   "seed": {
     "version": "v2-source-host-count-skip",
     "source_manifest_sha256": "4211c4b4f72cf2c06d1e2177eb024438382968cbcb84414baa73c80b79304a4d"
   },
-  "scope_version": "afdEP v1 role specialization"
+  "scope_version": "afdEP v1 role specialization + v2.1 entry barriers, directional counts, directed exit, per-CTA arrival release, role-sized buffers and the directional hybrid protocol"
 }

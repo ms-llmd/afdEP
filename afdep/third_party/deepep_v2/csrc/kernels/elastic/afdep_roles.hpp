@@ -6,6 +6,103 @@
 
 namespace deep_ep::elastic {
 
+// Role-path entry barriers (dispatch Tag0, combine Tag0) are implied by order.
+// Each rank runs complete dispatch->combine pairs on one ordered stream; the
+// epilogues are PDL dependents that finish before the next main kernel starts.
+// Every remote write of exchange N+1 (FFN payload/count inboxes, Attention
+// count inboxes, atomic slot counters) is issued after its writer passes the
+// combine-N exit barrier, which each rank reaches only after finishing all
+// exchange-N inbox reads and counter clears. Combine-N writes into Attention
+// inboxes follow the dispatch-N exit barrier, which an Attention rank reaches
+// only after its combine-(N-1) reduce epilogue. Every rank skips together, so
+// the shared NVLink barrier phase stays aligned. Construction synchronizes all
+// ranks before the first exchange. AFDEP_KEEP_ENTRY_BARRIERS=1 restores them as
+// a measurement control.
+static bool afdep_skip_entry_barriers() {
+    return deep_ep::get_env<int>("AFDEP_KEEP_ENTRY_BARRIERS", 0) == 0;
+}
+
+// Role-path dispatch sends counts Attention->FFN only; FFN ranks never wait on or
+// reduce their own (zero) counts. AFDEP_UNION_NOTIFY=1 restores the all-to-all
+// count exchange as a measurement control.
+static bool afdep_directional_notify() {
+    return deep_ep::get_env<int>("AFDEP_UNION_NOTIFY", 0) == 0;
+}
+
+// Directed exit: dispatch sources and combine FFN ranks release per-peer arrival
+// counters; only receivers wait (ordering argument in afdep_skip_entry_barriers).
+// AFDEP_ALL_RANK_EXIT=1 restores the all-rank exit barriers as a measurement control.
+static bool afdep_directed_exit() {
+    return deep_ep::get_env<int>("AFDEP_ALL_RANK_EXIT", 0) == 0;
+}
+
+// Per-CTA exit: a sending role receives nothing in its phase, so with directed
+// exit each sending CTA releases its own arrival once its TMA stores complete,
+// without the sender grid sync; receivers wait for round x sender CTAs (every
+// rank uses the same transport SM count). The last source CTA resets the slot
+// counters. AFDEP_GRID_SYNC_EXIT=1 keeps the grid-synced release as a control.
+// Directional hybrid protocol: when every scale-out (NVLink) domain holds a single
+// role, dispatch traffic (counts, payloads, finish tails) flows Attention -> FFN
+// and combine traffic (payloads, finish signals) FFN -> Attention only; FFN
+// domains skip scale-out sends, Attention domains skip forwarding and combine
+// reduction. Every exchange-(N+1) cross-domain write then follows its reader's
+// exchange-N consumption: Attention writes into an FFN domain only after its
+// combine-N wait received that FFN rank's per-channel signals, sent after the
+// FFN's dispatch-N forwarders cleaned their tails and the notify cleaned its
+// counts; an FFN rank writes into an Attention domain only after its dispatch-
+// (N+1) forwarders saw that source's finish tails, sent after the source's
+// combine-N wait and reduce epilogue. The cross-domain half of both entry
+// barriers is dropped; the scale-up half still orders reuse inside a domain.
+// Returns the FFN scale-out domain count, or 0 (union protocol).
+// AFDEP_UNION_HYBRID=1 keeps the union protocol as a measurement control.
+static int afdep_directional_hybrid(const int afd_ffn_ranks, const int num_scaleout_ranks,
+                                    const int num_scaleup_ranks) {
+    if (afd_ffn_ranks <= 0 or num_scaleout_ranks <= 1 or afd_ffn_ranks % num_scaleup_ranks != 0 or
+        deep_ep::get_env<int>("AFDEP_UNION_HYBRID", 0) != 0)
+        return 0;
+    return afd_ffn_ranks / num_scaleup_ranks;
+}
+
+// Directional hybrid dispatch, and direct dispatch over GIN (hybrid off across
+// NVLink domains), validate each route in their notify and payload warps before
+// the first route-derived index, store or put, as the direct NVLink path does,
+// instead of a separate route-guard kernel ahead of every dispatch (the guard
+// exists only because the union world gives Attention ranks dummy expert slots).
+// AFDEP_HYBRID_ROUTE_GUARD=1 keeps the guard kernel as a control on both.
+static bool afdep_hybrid_routes_in_kernel() {
+    return deep_ep::get_env<int>("AFDEP_HYBRID_ROUTE_GUARD", 0) == 0;
+}
+
+// Directional hybrid: Attention domains run neither half of the dispatch entry
+// barrier, so its grid sync only holds their CTAs (and the first put) behind the
+// slowest CTA. AFDEP_ATTENTION_GRID_SYNC=1 keeps it as a measurement control.
+static bool afdep_skip_attention_entry_sync() {
+    return deep_ep::get_env<int>("AFDEP_ATTENTION_GRID_SYNC", 0) == 0;
+}
+
+// Single-FFN reduction: DeepEP's FFN combine reduces a token's local top-k rows
+// with a branch-free prefix of ceil(top_k / ranks) slots, an expected count for
+// tokens spread over every rank. On the role path the Attention ranks hold no
+// experts; with one FFN rank every token's top-k rows are local, so all top_k slots
+// are valid on every token and the whole reduction takes the branch-free path.
+// AFDEP_UNION_REDUCE_PREFIX=1 keeps the union prefix as a measurement control.
+static bool afdep_single_ffn_reduce() {
+    return deep_ep::get_env<int>("AFDEP_UNION_REDUCE_PREFIX", 0) == 0;
+}
+
+static bool afdep_per_cta_exit() {
+    return deep_ep::get_env<int>("AFDEP_GRID_SYNC_EXIT", 0) == 0;
+}
+
+// Role-sized registered buffers: in one NVLink domain only Attention sources
+// write FFN dispatch inboxes and only FFN ranks write Attention combine inboxes,
+// so the union window's FFN-source dispatch regions and Attention-source combine
+// regions are never written. Dispatch regions are indexed by source - FFN ranks.
+// AFDEP_UNION_BUFFERS=1 keeps upstream union sizing as a measurement control.
+static bool afdep_role_buffers() {
+    return deep_ep::get_env<int>("AFDEP_UNION_BUFFERS", 0) == 0;
+}
+
 class AfdEPRouteGuardRuntime final : public jit::LaunchRuntime<AfdEPRouteGuardRuntime> {
 public:
     struct Args {

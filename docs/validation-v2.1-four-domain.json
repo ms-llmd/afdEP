@@ -1,0 +1,373 @@
+{
+ "date": "2026-10-21",
+ "change": "four-domain validation: two FFN domains and two Attention domains (directional hybrid protocol with multiple FFN domains)",
+ "native_source_sha256": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee",
+ "topology": "4 single-GPU waldorf pods (H200): three on gf41fb2 and one on gf49e9c; NCCL treats each pod as its own domain (physical domain [4, 1]), so every peer pair communicates through InfiniBand GIN, including pods that share a node. Ranks 0-1 FFN, 2-3 Attention.",
+ "correctness": {
+  "cases": "BF16 small/large, FP8 small/large, generic control (--ffn-ranks 2, large with 32 experts per FFN)",
+  "result": "5/5 pass",
+  "logs": [
+   {
+    "pod": "afdep-v21-q1",
+    "log": "q-bf16-generic-n0.log",
+    "log_sha256": "b210d93645233fd221528f1a1e716895b54593c49f2d9f8bbf7762ad96b0f096"
+   },
+   {
+    "pod": "afdep-v21-q1",
+    "log": "q-bf16-large-n0.log",
+    "log_sha256": "81dfda66f002b8d14ba570f976040d370ac311b4a46b785a2038f7581c4122f8"
+   },
+   {
+    "pod": "afdep-v21-q1",
+    "log": "q-fp8-large-n0.log",
+    "log_sha256": "41f1d4d81a38033bbfddc626228c72c58214542b34a2232c5ff053e6c626cadc"
+   },
+   {
+    "pod": "afdep-v21-q1",
+    "log": "q-fp8-small-n0.log",
+    "log_sha256": "696ee1b0c981dc7e02bfb841e15b035db63e913913f57e40d48acfb4b5453546"
+   },
+   {
+    "pod": "afdep-v21-q1",
+    "log": "q-small-n0.log",
+    "log_sha256": "ba9761f69c97b33818d76cf4df714ecec6f1cc6c11aa3324b8e7bf860701f5d1"
+   },
+   {
+    "pod": "afdep-v21-q2",
+    "log": "q-bf16-generic-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q2",
+    "log": "q-bf16-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q2",
+    "log": "q-fp8-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q2",
+    "log": "q-fp8-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q2",
+    "log": "q-small-n1.log",
+    "log_sha256": "6dd2f376bf903fcfc806fcd489570db5391481bf71f17d29fb855cfbaf6ee0e0"
+   },
+   {
+    "pod": "afdep-v21-q3",
+    "log": "q-bf16-generic-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q3",
+    "log": "q-bf16-large-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q3",
+    "log": "q-fp8-large-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q3",
+    "log": "q-fp8-small-n2.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q3",
+    "log": "q-small-n2.log",
+    "log_sha256": "ba047b9cf9acc081a5e1ab23edac7d808caab0f3d0d5e8c6dd4bed55ffdde091"
+   },
+   {
+    "pod": "afdep-v21-q4",
+    "log": "q-bf16-generic-n3.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q4",
+    "log": "q-bf16-large-n3.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q4",
+    "log": "q-fp8-large-n3.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q4",
+    "log": "q-fp8-small-n3.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-q4",
+    "log": "q-small-n3.log",
+    "log_sha256": "715f7ce32e204e90d15fcc624f9f148f98a77a455ea66e9772371a3898991180"
+   }
+  ]
+ },
+ "screen": {
+  "native_source_sha256": {
+   "afd": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee",
+   "union_hybrid": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee",
+   "masked": "2c4456e0e7eb8d20cac168527fd8bd009f29f173553bf4bdd08c2f736c16abee"
+  },
+  "arms": {
+   "afd": {
+    "_label": "xh"
+   },
+   "union_hybrid": {
+    "_label": "xh",
+    "_env": {
+     "AFDEP_UNION_HYBRID": "1"
+    }
+   },
+   "masked": {
+    "_label": "xh",
+    "role_aware": false
+   }
+  },
+  "passthrough": [
+   "--payload",
+   "bf16",
+   "--routing",
+   "random",
+   "--hidden",
+   "2048",
+   "--ffn-ranks",
+   "2",
+   "--attention-ranks",
+   "2",
+   "--experts",
+   "128",
+   "--tokens",
+   "1",
+   "8",
+   "32",
+   "128",
+   "512",
+   "2048",
+   "--capacity",
+   "2048",
+   "--blocks",
+   "6",
+   "--hybrid",
+   "on"
+  ],
+  "processes": [
+   {
+    "order": [
+     "afd",
+     "union_hybrid",
+     "masked"
+    ],
+    "median_us": {
+     "afd": {
+      "1": 76.50367975234985,
+      "8": 81.82231903076172,
+      "32": 85.16616344451904,
+      "128": 129.5254421234131,
+      "512": 301.25864028930664,
+      "2048": 865.5881118774414
+     },
+     "union_hybrid": {
+      "1": 119.62495803833008,
+      "8": 127.02104091644287,
+      "32": 132.5224781036377,
+      "128": 159.93040084838867,
+      "512": 333.2686424255371,
+      "2048": 897.5391387939453
+     },
+     "masked": {
+      "1": 118.38583946228027,
+      "8": 125.39120197296143,
+      "32": 131.24776363372803,
+      "128": 159.23527717590332,
+      "512": 332.68503189086914,
+      "2048": 894.8555374145508
+     }
+    }
+   },
+   {
+    "order": [
+     "union_hybrid",
+     "masked",
+     "afd"
+    ],
+    "median_us": {
+     "union_hybrid": {
+      "1": 120.64671993255615,
+      "8": 126.87440395355225,
+      "32": 132.23575592041016,
+      "128": 160.20712852478027,
+      "512": 335.3923225402832,
+      "2048": 898.3669662475586
+     },
+     "masked": {
+      "1": 118.22247982025146,
+      "8": 125.8247184753418,
+      "32": 131.3701581954956,
+      "128": 158.93695831298828,
+      "512": 330.99863052368164,
+      "2048": 893.6635208129883
+     },
+     "afd": {
+      "1": 75.85808038711548,
+      "8": 81.20215892791748,
+      "32": 84.86039638519287,
+      "128": 129.14799690246582,
+      "512": 303.59503746032715,
+      "2048": 866.677360534668
+     }
+    }
+   },
+   {
+    "order": [
+     "masked",
+     "afd",
+     "union_hybrid"
+    ],
+    "median_us": {
+     "masked": {
+      "1": 118.54383945465088,
+      "8": 125.45695781707764,
+      "32": 131.30000114440918,
+      "128": 159.16903972625732,
+      "512": 332.09497451782227,
+      "2048": 893.0644989013672
+     },
+     "afd": {
+      "1": 77.07831859588623,
+      "8": 81.97760105133057,
+      "32": 85.43535709381104,
+      "128": 129.17367935180664,
+      "512": 301.93023681640625,
+      "2048": 866.2397766113281
+     },
+     "union_hybrid": {
+      "1": 119.91048336029053,
+      "8": 127.1506404876709,
+      "32": 132.5872802734375,
+      "128": 160.6049633026123,
+      "512": 333.7718391418457,
+      "2048": 898.7639999389648
+     }
+    }
+   }
+  ],
+  "table": [
+   {
+    "tokens": 1,
+    "afd": {
+     "median_us": 76.504,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 119.91,
+     "geomean_change_pct": 56.985,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 118.386,
+     "geomean_change_pct": 54.794,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 8,
+    "afd": {
+     "median_us": 81.822,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 127.021,
+     "geomean_change_pct": 55.529,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 125.457,
+     "geomean_change_pct": 53.744,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 32,
+    "afd": {
+     "median_us": 85.166,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 132.522,
+     "geomean_change_pct": 55.541,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 131.3,
+     "geomean_change_pct": 54.199,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 128,
+    "afd": {
+     "median_us": 129.174,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 160.207,
+     "geomean_change_pct": 23.951,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 159.169,
+     "geomean_change_pct": 23.075,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 512,
+    "afd": {
+     "median_us": 301.93,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 333.772,
+     "geomean_change_pct": 10.548,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 332.095,
+     "geomean_change_pct": 9.815,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 2048,
+    "afd": {
+     "median_us": 866.24,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "union_hybrid": {
+     "median_us": 898.367,
+     "geomean_change_pct": 3.701,
+     "repeats_faster": 0
+    },
+    "masked": {
+     "median_us": 893.664,
+     "geomean_change_pct": 3.197,
+     "repeats_faster": 0
+    }
+   }
+  ],
+  "note": "Single-GPU domains and same-node RDMA loopback make absolute latency unrepresentative of a deployment; the arms share the layout, so the paired comparison holds."
+ }
+}

@@ -1,0 +1,1656 @@
+{
+ "date": "2026-10-21",
+ "change": "Fix: directional hybrid staging no longer overlaps remotely written inboxes. With two or more FFN domains the Attention stages dispatch at window offset 0; with two or more Attention domains the FFN stages combine replies in a slice reserved at the window end.",
+ "commits": [
+  "abf3e23",
+  "663ed33"
+ ],
+ "native_source_sha256": "a32a12d1936159ae521850e54fdc288b76de2254680810dd233dd39f0aaf4a7e",
+ "bug": {
+  "introduced": "section 7 (directional hybrid protocol, 6f16106) dropped the cross-domain entry barriers, which had also ordered staging reuse",
+  "attention_side": "Attention dispatch staging (offset L*D*max*Td) overlapped its combine scale-out inbox region 0 (offset L*D*max*Tc); FFN domain 0 can write combine-N replies there while the NIC still reads staging for FFN domain 1",
+  "ffn_side": "FFN combine staging overlapped its dispatch scale-out inbox regions; Attention domain 1 can write dispatch N+1 there after its own combine-N signals while the NIC still reads staging for Attention domain 2",
+  "affected_layouts": "directional hybrid with two or more FFN domains (Attention side) or two or more Attention domains (FFN side); one FFN and one Attention domain are safe because every reply or next request follows the per-channel signals sent after that channel's puts on the same QP"
+ },
+ "fault_injection": {
+  "method": "scratch kernels defer the puts (and finish tail / signal) to the last destination domain until the end of the channel, behind a globaltimer spin: 3 ms for the Attention dispatch to the last FFN domain, 300 us for the FFN combine to the last Attention domain; patches below",
+  "patches": {
+   "hybrid_dispatch.cuh": "--- /private/tmp/claude-501/-Users-itayetelis-Work-AFD/6e4f396a-b4d9-4d43-b027-79856d300f4c/scratchpad/head_hybrid_dispatch.cuh\t2026-10-21 13:12:59\n+++ /private/tmp/claude-501/-Users-itayetelis-Work-AFD/6e4f396a-b4d9-4d43-b027-79856d300f4c/scratchpad/fault/afdep/third_party/deepep_v2/deep_ep/include/deep_ep/impls/hybrid_dispatch.cuh\t2026-10-21 13:08:50\n@@ -10,6 +10,13 @@\n \n \n namespace deep_ep::elastic {\n+\n+// FAULT INJECTION (scratch only)\n+__device__ __forceinline__ void afd_fault_spin(const unsigned long long ns) {\n+    unsigned long long t0, t;\n+    asm volatile(\"mov.u64 %0, %%globaltimer;\" : \"=l\"(t0));\n+    do { asm volatile(\"mov.u64 %0, %%globaltimer;\" : \"=l\"(t)); } while (t - t0 < ns);\n+}\n \n template <bool kDoCPUSync,\n           bool kReuseSlotIndices,\n@@ -372,8 +379,14 @@\n         // Channel metadata maintenance\n         EP_STATIC_ASSERT(kNumScaleoutRanks <= 32, \"Invalid number of scale-out ranks\");\n         int stored_scaleout_tail = 0, stored_old_scaleout_tail = 0;\n+        // FAULT: defer the last FFN domain's puts and tails to the end of the channel.\n+        constexpr int kFaultDomain = kAfdFfnScaleoutRanks >= 2 ? kAfdFfnScaleoutRanks - 1 : -1;\n+        int fault_phase = 0;  // 0/1: skip the delayed lane; 2: only the delayed lane\n+        int deferred_token[32], deferred_slot[32], num_deferred = 0;\n         const auto update_scaleout_tail = [&](const bool& finish_flag = false) {\n-            if (lane_idx < kNumScaleoutRanks and (not kAfdDirectional or lane_idx < kAfdFfnScaleoutRanks) and\n+            const bool fault_lane = lane_idx == kFaultDomain;\n+            if ((fault_phase == 2 ? fault_lane : not fault_lane) and\n+                lane_idx < kNumScaleoutRanks and (not kAfdDirectional or lane_idx < kAfdFfnScaleoutRanks) and\n                 (stored_scaleout_tail >= stored_old_scaleout_tail + kScaleoutUpdateInterval or finish_flag)) {\n                 const auto signaled_tail = math::pack2<int, int64_t>(finish_flag, stored_scaleout_tail);\n                 const auto ptr = workspace_layout.get_scaleout_channel_signaled_tail_ptr(channel_idx, scaleout_rank_idx);\n@@ -490,7 +503,10 @@\n             preload_next_token(token_idx + kNumChannels);\n \n             // Issue IBGDA requests\n-            if (stored_dst_slot_idx >= 0 and stored_dst_scaleout_rank_idx != scaleout_rank_idx) {\n+            if (stored_dst_slot_idx >= 0 and stored_dst_scaleout_rank_idx == kFaultDomain) {\n+                if (num_deferred < 32) { deferred_token[num_deferred] = token_idx; deferred_slot[num_deferred] = stored_dst_slot_idx; }\n+                ++ num_deferred;\n+            } else if (stored_dst_slot_idx >= 0 and stored_dst_scaleout_rank_idx != scaleout_rank_idx) {\n                 gin.put<ncclTeamTagRail>(\n                         scaleout_recv_buffer.get_token_buffer(stored_dst_slot_idx).get_base_ptr(),\n                         scaleout_send_buffer.get_token_buffer(token_idx).get_base_ptr(),\n@@ -504,8 +520,21 @@\n             update_scaleout_tail();\n         }\n \n-        // Flush unflushed tails\n+        // Flush unflushed tails (FAULT: on-time domains first, then the delayed one)\n+        fault_phase = 1;\n         update_scaleout_tail(true);\n+        if constexpr (kFaultDomain >= 0) {\n+            afd_fault_spin(3000000);\n+            EP_DEVICE_ASSERT(num_deferred <= 32);\n+            for (int k = 0; k < num_deferred; ++ k)\n+                gin.put<ncclTeamTagRail>(\n+                        scaleout_recv_buffer.get_token_buffer(deferred_slot[k]).get_base_ptr(),\n+                        scaleout_send_buffer.get_token_buffer(deferred_token[k]).get_base_ptr(),\n+                        tma_buffer.get_num_bytes<false>(), kFaultDomain, ncclGinOptFlagsAggregateRequests);\n+            __syncwarp();\n+        }\n+        fault_phase = 2;\n+        update_scaleout_tail(true);\n     } else if (kAfdDirectional and not afd_ffn_domain) {\n         // afdEP directional: Attention domains receive and forward nothing; the source\n         // finalize kernel ends their (empty) linked lists.\n",
+   "hybrid_combine.cuh": "--- /private/tmp/claude-501/-Users-itayetelis-Work-AFD/6e4f396a-b4d9-4d43-b027-79856d300f4c/scratchpad/head_hybrid_combine.cuh\t2026-10-21 13:13:00\n+++ /private/tmp/claude-501/-Users-itayetelis-Work-AFD/6e4f396a-b4d9-4d43-b027-79856d300f4c/scratchpad/fault/afdep/third_party/deepep_v2/deep_ep/include/deep_ep/impls/hybrid_combine.cuh\t2026-10-21 13:01:54\n@@ -8,6 +8,13 @@\n \n namespace deep_ep::elastic {\n \n+// FAULT INJECTION (scratch only)\n+__device__ __forceinline__ void afd_fault_spin(const unsigned long long ns) {\n+    unsigned long long t0, t;\n+    asm volatile(\"mov.u64 %0, %%globaltimer;\" : \"=l\"(t0));\n+    do { asm volatile(\"mov.u64 %0, %%globaltimer;\" : \"=l\"(t)); } while (t - t0 < ns);\n+}\n+\n template <bool kUseExpandedLayout, bool kAllowMultipleReduction,\n           int kNumSMs,\n           int kNumScaleupWarps, int kNumForwardWarps,\n@@ -373,12 +380,19 @@\n         int last_is_token_last_in_chunk = 0;\n         void* last_recv_token_buffer_ptr = nullptr;\n         void* last_send_token_buffer_ptr = nullptr;\n+        // FAULT: defer replies to the last Attention domain (when there are two or more).\n+        constexpr int kFaultDomain = (kAfdFfnScaleoutRanks > 0 and kNumScaleoutRanks - kAfdFfnScaleoutRanks >= 2) ?\n+            kNumScaleoutRanks - 1 : -1;\n+        void* deferred_recv[64]; void* deferred_send[64]; int num_deferred = 0;\n         const auto flush_last_tma_and_issue_rdma = [&]() {\n             if (last_src_scaleout_rank_idx >= 0 and ptx::elect_one_sync()) {\n                 ptx::tma_store_wait();\n \n                 // Issue only if not local rank\n-                if (last_src_scaleout_rank_idx != scaleout_rank_idx) {\n+                if (last_src_scaleout_rank_idx == kFaultDomain) {\n+                    if (num_deferred < 64) { deferred_recv[num_deferred] = last_recv_token_buffer_ptr; deferred_send[num_deferred] = last_send_token_buffer_ptr; }\n+                    ++ num_deferred;\n+                } else if (last_src_scaleout_rank_idx != scaleout_rank_idx) {\n                     gin.put<ncclTeamTagRail>(\n                         last_recv_token_buffer_ptr,\n                         last_send_token_buffer_ptr,\n@@ -590,7 +604,7 @@\n         }\n         __syncwarp();\n \n-        // Update, wait and clean\n+        // FAULT: after the on-time domains' signals below, wait, issue the deferred replies, then signal.\n         EP_STATIC_ASSERT(kNumScaleoutRanks <= 32, \"Invalid ranks\");\n         // afdEP directional: FFN domains signal Attention domains only, and only Attention\n         // domains wait (for FFN signals).\n@@ -599,7 +613,7 @@\n         if (lane_idx < kNumScaleoutRanks) {\n             // Update remote tails\n             const auto expected_signal = math::pack2<int, int64_t>(1, 0);\n-            if (afd_signal) {\n+            if (afd_signal and lane_idx != kFaultDomain) {\n                 gin.red_add_rel<ncclTeamTagRail>(\n                     workspace_layout.get_scaleout_channel_signaled_tail_ptr(channel_idx, scaleout_rank_idx),\n                     expected_signal, lane_idx);\n@@ -626,6 +640,24 @@\n             });\n         }\n         __syncwarp();\n+        if constexpr (kFaultDomain >= 0) {\n+            if (afd_ffn_domain) {\n+                afd_fault_spin(300000);\n+                if (ptx::elect_one_sync()) {\n+                    EP_DEVICE_ASSERT(num_deferred <= 64);\n+                    for (int k = 0; k < num_deferred; ++ k)\n+                        gin.put<ncclTeamTagRail>(deferred_recv[k], deferred_send[k], token_layout.get_num_bytes<false>(),\n+                                                 kFaultDomain, ncclGinOptFlagsAggregateRequests);\n+                }\n+                __syncwarp();\n+                if (lane_idx == kFaultDomain) {\n+                    gin.red_add_rel<ncclTeamTagRail>(\n+                        workspace_layout.get_scaleout_channel_signaled_tail_ptr(channel_idx, scaleout_rank_idx),\n+                        math::pack2<int, int64_t>(1, 0), lane_idx);\n+                }\n+                __syncwarp();\n+            }\n+        }\n     }\n \n     // No barrier at epilogue\n"
+  },
+  "before_fix": {
+   "native_source_sha256": "7d0e7f5c195f60015bc235de2cb0e1274b1b6527bdd16f3885a0e428d0045c06",
+   "ffn_side_2_attention_domains": "fails: replies at the second Attention domain mismatch 257,531 of 4,194,304 elements (6.1%), greatest absolute difference 4.5",
+   "attention_side_2_ffn_domains_3ms": "fails: the second FFN domain hits an illegal memory access from corrupted tokens and the Attention times out waiting for its replies",
+   "attention_side_2_ffn_domains_300us": "passes (FFN domain 0 had not yet replied)",
+   "without_injection": "both layouts pass (the race is timing-dependent)"
+  },
+  "after_fix": {
+   "first_fix_79e997e2": "both cases pass",
+   "gated_a32a12d1": "both cases pass"
+  }
+ },
+ "correctness": {
+  "cross_node": {
+   "topology": "waldorf: afdep-v21-xa (gf49e9c), afdep-v21-xb and afdep-v21-xc (gf48cf2), 2 x NVIDIA H200 each, InfiniBand GIN",
+   "result": "14/14 two-node cases; 10/10 three-pod cases (2 FFN + 1 Attention domains and 1 FFN + 2 Attention domains, BF16/FP8 small/large, generic controls); both fault-injection cases",
+   "summary": [
+    "afdep-v21-xc exit=0 afdep-v21-xb exit=0 afdep-v21-xa exit=0 ",
+    "afdep-v21-xa exit=0 afdep-v21-xc exit=0 afdep-v21-xb exit=0 ",
+    "bf16-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  bf16-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  bf16-direct-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  bf16-direct-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  bf16-generic: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-direct-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-direct-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  fp8-generic: afdep-v21-xb exit=0 afdep-v21-xa exit=0  f1-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  f3-hyb-small: afdep-v21-xb exit=0 afdep-v21-xa exit=0  f1-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  f3-hyb-large: afdep-v21-xb exit=0 afdep-v21-xa exit=0  done ",
+    "f2dom-small-bf16: afdep-v21-xc exit=0 afdep-v21-xa exit=0 afdep-v21-xb exit=0 ",
+    "f2dom-large-bf16: afdep-v21-xa exit=0 afdep-v21-xb exit=0 afdep-v21-xc exit=0 ",
+    "a2dom-small-bf16: afdep-v21-xc exit=0 afdep-v21-xa exit=0 afdep-v21-xb exit=0 ",
+    "a2dom-large-bf16: afdep-v21-xa exit=0 afdep-v21-xb exit=0 afdep-v21-xc exit=0 ",
+    "f2dom-small-fp8: afdep-v21-xa exit=0 afdep-v21-xb exit=0 afdep-v21-xc exit=0 ",
+    "f2dom-large-fp8: afdep-v21-xa exit=0 afdep-v21-xb exit=0 afdep-v21-xc exit=0 ",
+    "a2dom-small-fp8: afdep-v21-xa exit=0 afdep-v21-xb exit=0 afdep-v21-xc exit=0 ",
+    "a2dom-large-fp8: afdep-v21-xb exit=0 afdep-v21-xa exit=0 afdep-v21-xc exit=0 ",
+    "f2dom-generic: afdep-v21-xb exit=0 afdep-v21-xc exit=0 afdep-v21-xa exit=0 ",
+    "a2dom-generic: afdep-v21-xc exit=0 afdep-v21-xb exit=0 afdep-v21-xa exit=0 "
+   ],
+   "logs": [
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gf-a-n2.log",
+     "log_sha256": "5fe4ead6507b0362c75accdbce54c2bc211776ead4a17fd3541a1967e4b8118a"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gf-b-n0.log",
+     "log_sha256": "00d22b3c72356d8f9addd54251e2f852b69d033d03aef593de7e3660c060593b"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-bf16-direct-large-n0.log",
+     "log_sha256": "83e5c2803c55429098a76057d4bb379ed3bf4756da24ce86bd904b011c9bf660"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-bf16-direct-small-n0.log",
+     "log_sha256": "e94f40ecd84cfd63153ac5c0219c1d864b259790222c0484941de02aaba55de1"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-bf16-generic-n0.log",
+     "log_sha256": "d0f6dd5e5d04965c9e0824b34f894261d24df458e306405dbcdbe295a7c22073"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-bf16-hyb-large-n0.log",
+     "log_sha256": "e246bc5259385dd4dc9ad01f0e57e636dc7889b948b6a872b4bf0da21ceff425"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-bf16-hyb-small-n0.log",
+     "log_sha256": "050bde383b44febb74fdbd4cfe7738fd58af1eea21f8471407b7eeec7c6de712"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-f1-hyb-large-n0.log",
+     "log_sha256": "4ce1e7172d0ad4553e12c9af0b922602a2991b8a20a111e4d83595273d0b61f3"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-f1-hyb-small-n0.log",
+     "log_sha256": "6bcdf045265cc7043fd94b1e419a81e7c43160bdf9735236ecc9740f6be1d83e"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-f3-hyb-large-n0.log",
+     "log_sha256": "9777317877f3fecc8e57034edde65fba4568cb66a186d32d3e18979bfcab7f2f"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-f3-hyb-small-n0.log",
+     "log_sha256": "1af315839775f72be1d8f0bc6d856ce6a1636b2a3a6a9813e0ebcc3250a5d8fc"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-fp8-direct-large-n0.log",
+     "log_sha256": "70c9ef0ca8bdaa78df61c5cfa677e051fba96896f48c80a00e3d4b68962ef3c0"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-fp8-direct-small-n0.log",
+     "log_sha256": "b7ec1843e08efe1777a2ec3d6a773eb0ae5f211e6487aa75281cc200d847b858"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-fp8-generic-n0.log",
+     "log_sha256": "3770229dbea00cf7acd0b861e9ac31ac392a6d172d25d5ec5728da657bf99ec3"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-fp8-hyb-large-n0.log",
+     "log_sha256": "379fcc50d0b1e4d73c5acbcf816da45f688ea73cce14ce623402fc22f2e558f8"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gtm-fp8-hyb-small-n0.log",
+     "log_sha256": "044225a4ac6aa9c88f1997adf1e146d4fff7eb33bcdcff4d4cde7da74594da08"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-a2dom-generic-n0.log",
+     "log_sha256": "3ed93db6fbb02d2931ca8038db1e48a954d1f0ad2ec211e02038f9e44c9b5f99"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-a2dom-large-bf16-n0.log",
+     "log_sha256": "00d22b3c72356d8f9addd54251e2f852b69d033d03aef593de7e3660c060593b"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-a2dom-large-fp8-n0.log",
+     "log_sha256": "6de8eae5d803fcfa6e442148420ce0f1c802daaa0eda2d3b55627e0aa0e83e12"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-a2dom-small-bf16-n0.log",
+     "log_sha256": "b9862b1af903eb2b6f9ee3ce776cd777ad362a1ea122565a4123b8ba3239398b"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-a2dom-small-fp8-n0.log",
+     "log_sha256": "953ce2710f9d0c17bca2c3874e76d550c34b2ca518785e7fe3c6f5e341ca92d7"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-f2dom-generic-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-f2dom-large-bf16-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-f2dom-large-fp8-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-f2dom-small-bf16-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xa",
+     "log": "gt3-f2dom-small-fp8-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gf-a-n0.log",
+     "log_sha256": "a9f9b069105c00d608597e0410f9d7e6b3c9e728fab776db7c44fb81cefe4c95"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gf-b-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-bf16-direct-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-bf16-direct-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-bf16-generic-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-bf16-hyb-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-bf16-hyb-small-n1.log",
+     "log_sha256": "3a10a4ae33583026b3002e8a0bc6493da73b052ba41c3854e059b46b2c4a728b"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-f1-hyb-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-f1-hyb-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-f3-hyb-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-f3-hyb-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-fp8-direct-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-fp8-direct-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-fp8-generic-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-fp8-hyb-large-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gtm-fp8-hyb-small-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-a2dom-generic-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-a2dom-large-bf16-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-a2dom-large-fp8-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-a2dom-small-bf16-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-a2dom-small-fp8-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-f2dom-generic-n0.log",
+     "log_sha256": "80d0db79d2c8014233cbc81f5db3c9d6ec3d57f9ae2faeaa3e278fb2e1b5b221"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-f2dom-large-bf16-n0.log",
+     "log_sha256": "25b8382edbac8f2a512c7fb10a3a0a1b773af179fb22ce20ec024627a4345f78"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-f2dom-large-fp8-n0.log",
+     "log_sha256": "4824bc23535f5f394c8e7515d112c8cc8bab756bc0ec8cbc92c186cd2a46bab6"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-f2dom-small-bf16-n0.log",
+     "log_sha256": "04f8031315fe62717ca41789e2b3c9b8ff21fb222188adec566760631151c18e"
+    },
+    {
+     "pod": "afdep-v21-xb",
+     "log": "gt3-f2dom-small-fp8-n0.log",
+     "log_sha256": "ea3c90e04914b7de4fdcfc7b5c5f562a47db5e258145b7798a98db32b953dd73"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gf-a-n1.log",
+     "log_sha256": "51ceb183d98a131e445a46d52292051f1713260b411408b8ff0ef16a5b08e39b"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gf-b-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-a2dom-generic-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-a2dom-large-bf16-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-a2dom-large-fp8-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-a2dom-small-bf16-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-a2dom-small-fp8-n2.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-f2dom-generic-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-f2dom-large-bf16-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-f2dom-large-fp8-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-f2dom-small-bf16-n1.log",
+     "log_sha256": "7350f5ea2b13b11c18fdb2eb8109afcf62d96a4584c54c46ed88fc32c8149358"
+    },
+    {
+     "pod": "afdep-v21-xc",
+     "log": "gt3-f2dom-small-fp8-n1.log",
+     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+   ]
+  },
+  "single_domain": {
+   "topology": "pokprod 4 x NVIDIA H100 80GB HBM3",
+   "result": "GPU matrix 10/10, invalid-route 8/8, 3A:1F and 1A:3F small/large",
+   "summary": [
+    "bf16-direct-small exit=0 bf16-hybrid-small exit=0 bf16-generic-control exit=0 bf16-off-large exit=0 bf16-on-large exit=0 fp8-direct-small exit=0 fp8-hybrid-small exit=0 fp8-generic-control exit=0 fp8-off-large exit=0 fp8-on-large exit=0 invalid-eager-dummy exit=1 assertion=yes invalid-eager-duplicate exit=1 assertion=yes invalid-eager-negative exit=1 assertion=yes invalid-eager-wide exit=1 assertion=yes invalid-graph-dummy exit=1 assertion=yes invalid-graph-duplicate exit=1 assertion=yes invalid-graph-negative exit=1 assertion=yes invalid-graph-wide exit=1 assertion=yes done ",
+    "f1-small exit=0",
+    "f1-large exit=0",
+    "f3-small exit=0",
+    "f3-large exit=0"
+   ],
+   "logs": [
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-direct-small.log",
+     "log_sha256": "9787bb3e9c99e2653c7f0db22035e1276d5f336de136614ed5aa8674856f5e01"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-generic-control.log",
+     "log_sha256": "fa2e1fd2168f0b2a01cdbac2b0ddf22bf4f754f5a4d1b99e92b96efaa8eb95aa"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-hybrid-small.log",
+     "log_sha256": "4dca56574a4f30a5902525f27f4ba47410ad59ab3da0ee9123e418fadefec108"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-off-large.log",
+     "log_sha256": "08bf9b987f8fd5e9069c0b466ceb9ba4fd688b760027b9d6ace8121a5a7fb029"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "bf16-on-large.log",
+     "log_sha256": "2c1e9a2bec82923411743d77b4c0c4c57aff0b75010eaf4d4da6bc6b0cfd26e4"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "f1-large.log",
+     "log_sha256": "cf3f60bc462b20f4e4f28f344ce96457c71444da37b8d2aca92f113448475c7b"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "f1-small.log",
+     "log_sha256": "c8681009edbe0ccefe83fb76c819ad9d4175e9e8858032c345f15107b0a876e7"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "f3-large.log",
+     "log_sha256": "d12f554c5f6f0262a23486a0cca949c738b5287eb4eb237bc457657ef8336ada"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "f3-small.log",
+     "log_sha256": "1668b97d179f92febe712e2e708b12088a309ee82c5153db35015324f89acf7c"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-direct-small.log",
+     "log_sha256": "aab1b759ccece5d6d1b3b8ea2fb47c83a2fca4ceafeaedea75b9acf3e369c826"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-generic-control.log",
+     "log_sha256": "0ec3d7596a0e1bd27db48a41dd032678bf165c1287a8e160590ac626f4b66296"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-hybrid-small.log",
+     "log_sha256": "82f8cfc6dcb36473e80f81fe99fee9ea39ad4727e12440ea099bb7fbf4e391f2"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-off-large.log",
+     "log_sha256": "e140990c819d2e8c6ecfdad712b237c628823f834399ad5c5dc548bd06e1d44c"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "fp8-on-large.log",
+     "log_sha256": "e9929119f584cfb1f2b750396650886957e0b8672bf379b05fd3f808f3c93f40"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-eager-dummy.log",
+     "log_sha256": "d1d53891e35b830a1df06374d1756192bf685929a636f2c6a4ac8a878b0e2950"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-eager-duplicate.log",
+     "log_sha256": "44d3c7f4c38f62256bec5fe79a7ed6e3ef60faa4cdd7e18f309e11af051d767f"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-eager-negative.log",
+     "log_sha256": "a0277ed9baf990e655a6a9cb7d0b239bc667c0298af2ac4e4aafd950453b166b"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-eager-wide.log",
+     "log_sha256": "5dbde17aee60344ead7710d168444f99edf3284d0d75725cf87552be74c9ee3f"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-graph-dummy.log",
+     "log_sha256": "1813a1294a96180d334373e8154c9510f027a75c5b02cb0f31ca37754798f40b"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-graph-duplicate.log",
+     "log_sha256": "b5499bd14e39f1b3347c2b6e21713dae2640408bbcd50d20394ae278093dd084"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-graph-negative.log",
+     "log_sha256": "4d5a034ffc27c4588820e7b3b57fe00ae06358ceb07f329646eb4181c098d790"
+    },
+    {
+     "pod": "afdep-v21-h100-c",
+     "log": "invalid-graph-wide.log",
+     "log_sha256": "0b3010f89f07677076f6f6a395a3424d7cb43979e68d18e64b120b13255477c0"
+    }
+   ]
+  }
+ },
+ "latency": {
+  "first_fix_vs_previous": {
+   "2_nodes": {
+    "arms": {
+     "fix": {
+      "_label": "fix"
+     },
+     "head": {
+      "_label": "head2"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--tokens",
+     "1",
+     "32",
+     "128",
+     "512",
+     "2048",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--warmup",
+     "50",
+     "--iterations",
+     "200",
+     "--blocks",
+     "2"
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "fix": {
+       "median_us": 71.28007888793945,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 70.53240060806274,
+       "paired_change_pct": [
+        -1.0489302081892249,
+        -1.2184328371606101,
+        -0.8022999284734378
+       ],
+       "geomean_change_pct": -1.0233684205868343,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 32,
+      "fix": {
+       "median_us": 80.83856105804443,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 80.5186414718628,
+       "paired_change_pct": [
+        0.009302147250567216,
+        -0.47306286529887887,
+        -0.04594272734094185
+       ],
+       "geomean_change_pct": -0.17013408051715917,
+       "repeats_faster": 2
+      }
+     },
+     {
+      "tokens": 128,
+      "fix": {
+       "median_us": 102.85151958465576,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 102.50311851501465,
+       "paired_change_pct": [
+        -0.3387417814029958,
+        -0.38795256142231116,
+        -0.11272041390831822
+       ],
+       "geomean_change_pct": -0.2798768959229814,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 512,
+      "fix": {
+       "median_us": 199.7877597808838,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 199.55464363098145,
+       "paired_change_pct": [
+        -0.4592597086882422,
+        -0.2965675826388847,
+        -0.11668189790906558
+       ],
+       "geomean_change_pct": -0.29093455812515545,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 2048,
+      "fix": {
+       "median_us": 538.5391998291016,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 538.4382438659668,
+       "paired_change_pct": [
+        -0.018746260841695506,
+        -0.22748642739317537,
+        0.05508625110270948
+       ],
+       "geomean_change_pct": -0.0637871489519437,
+       "repeats_faster": 2
+      }
+     }
+    ],
+    "processes": [
+     {
+      "order": [
+       "fix",
+       "head"
+      ],
+      "median_us": {
+       "fix": {
+        "1": 71.28007888793945,
+        "32": 80.83856105804443,
+        "128": 102.85151958465576,
+        "512": 200.56535720825195,
+        "2048": 538.5391998291016
+       },
+       "head": {
+        "1": 70.53240060806274,
+        "32": 80.8460807800293,
+        "128": 102.50311851501465,
+        "512": 199.6442413330078,
+        "2048": 538.4382438659668
+       }
+      }
+     },
+     {
+      "order": [
+       "head",
+       "fix"
+      ],
+      "median_us": {
+       "head": {
+        "1": 70.44864177703857,
+        "32": 80.5186414718628,
+        "128": 102.72488117218018,
+        "512": 198.9203929901123,
+        "2048": 538.7553596496582
+       },
+       "fix": {
+        "1": 71.31759881973267,
+        "32": 80.9013557434082,
+        "128": 103.12495708465576,
+        "512": 199.51208114624023,
+        "2048": 539.9837493896484
+       }
+      }
+     },
+     {
+      "order": [
+       "fix",
+       "head"
+      ],
+      "median_us": {
+       "fix": {
+        "1": 71.10568046569824,
+        "32": 80.45760154724121,
+        "128": 102.33855724334717,
+        "512": 199.7877597808838,
+        "2048": 538.0688858032227
+       },
+       "head": {
+        "1": 70.5351996421814,
+        "32": 80.4206371307373,
+        "128": 102.22320079803467,
+        "512": 199.55464363098145,
+        "2048": 538.3652877807617
+       }
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "fix": "79e997e2768553b955cc489b3ab795a9655989577a4d2ef735e70cdaf0017b16",
+     "head": "7d0e7f5c195f60015bc235de2cb0e1274b1b6527bdd16f3885a0e428d0045c06"
+    },
+    "pods": [
+     "afdep-v21-xa",
+     "afdep-v21-xb"
+    ]
+   },
+   "1F_2A_domains": {
+    "arms": {
+     "fix": {
+      "_label": "fix"
+     },
+     "head": {
+      "_label": "head2"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--ffn-ranks",
+     "2",
+     "--attention-ranks",
+     "4",
+     "--tokens",
+     "1",
+     "32",
+     "128",
+     "512",
+     "2048",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--warmup",
+     "50",
+     "--iterations",
+     "200",
+     "--blocks",
+     "2"
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "fix": {
+       "median_us": 85.30856132507324,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 83.60047817230225,
+       "paired_change_pct": [
+        -3.094368173682327,
+        -2.2878541337704505,
+        -1.177244719269921
+       ],
+       "geomean_change_pct": -2.1896434029186063,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 32,
+      "fix": {
+       "median_us": 103.71016025543213,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 101.62623882293701,
+       "paired_change_pct": [
+        -2.413106780783114,
+        -2.3627521243507754,
+        -1.7746812394879186
+       ],
+       "geomean_change_pct": -2.183942144440254,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 128,
+      "fix": {
+       "median_us": 139.60312366485596,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 137.79664039611816,
+       "paired_change_pct": [
+        -1.011341214618755,
+        -1.3329654978386563,
+        -1.3855293475944497
+       ],
+       "geomean_change_pct": -1.2434170977766779,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 512,
+      "fix": {
+       "median_us": 331.67064666748047,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 326.86927795410156,
+       "paired_change_pct": [
+        -1.0980783009337358,
+        -1.3839030493240423,
+        -1.6748486148847053
+       ],
+       "geomean_change_pct": -1.38589111659011,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 2048,
+      "fix": {
+       "median_us": 933.1657791137695,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 932.3034286499023,
+       "paired_change_pct": [
+        -0.23933618846744276,
+        -0.034925081406311786,
+        -0.09241128245038865
+       ],
+       "geomean_change_pct": -0.12226128157634131,
+       "repeats_faster": 3
+      }
+     }
+    ],
+    "processes": [
+     {
+      "order": [
+       "fix",
+       "head"
+      ],
+      "median_us": {
+       "fix": {
+        "1": 85.30856132507324,
+        "32": 103.71016025543213,
+        "128": 139.4662380218506,
+        "512": 330.49840927124023,
+        "2048": 933.8777542114258
+       },
+       "head": {
+        "1": 82.6688003540039,
+        "32": 101.20752334594727,
+        "128": 138.05575847625732,
+        "512": 326.86927795410156,
+        "2048": 931.6426467895508
+       }
+      }
+     },
+     {
+      "order": [
+       "head",
+       "fix"
+      ],
+      "median_us": {
+       "head": {
+        "1": 83.60047817230225,
+        "32": 101.62623882293701,
+        "128": 137.79664039611816,
+        "512": 327.5655937194824,
+        "2048": 932.4570083618164
+       },
+       "fix": {
+        "1": 85.55791854858398,
+        "32": 104.08552169799805,
+        "128": 139.65823650360107,
+        "512": 332.1623992919922,
+        "2048": 932.7827835083008
+       }
+      }
+     },
+     {
+      "order": [
+       "fix",
+       "head"
+      ],
+      "median_us": {
+       "fix": {
+        "1": 85.2567195892334,
+        "32": 103.55888366699219,
+        "128": 139.60312366485596,
+        "512": 331.67064666748047,
+        "2048": 933.1657791137695
+       },
+       "head": {
+        "1": 84.25303936004639,
+        "32": 101.72104358673096,
+        "128": 137.6688814163208,
+        "512": 326.115665435791,
+        "2048": 932.3034286499023
+       }
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "fix": "79e997e2768553b955cc489b3ab795a9655989577a4d2ef735e70cdaf0017b16",
+     "head": "7d0e7f5c195f60015bc235de2cb0e1274b1b6527bdd16f3885a0e428d0045c06"
+    },
+    "pods": [
+     "afdep-v21-xa",
+     "afdep-v21-xb",
+     "afdep-v21-xc"
+    ]
+   },
+   "2F_1A_domains": {
+    "arms": {
+     "fix": {
+      "_label": "fix"
+     },
+     "head": {
+      "_label": "head2"
+     }
+    },
+    "passthrough": [
+     "--payload",
+     "bf16",
+     "--routing",
+     "random",
+     "--hidden",
+     "2048",
+     "--ffn-ranks",
+     "4",
+     "--attention-ranks",
+     "2",
+     "--tokens",
+     "1",
+     "32",
+     "128",
+     "512",
+     "2048",
+     "--capacity",
+     "2048",
+     "--hybrid",
+     "on",
+     "--warmup",
+     "50",
+     "--iterations",
+     "200",
+     "--blocks",
+     "2"
+    ],
+    "table": [
+     {
+      "tokens": 1,
+      "fix": {
+       "median_us": 77.92752027511597,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 76.14752054214478,
+       "paired_change_pct": [
+        -2.1232044342065715,
+        -2.017516682536513,
+        -2.7321241269829044
+       ],
+       "geomean_change_pct": -2.291456649145429,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 32,
+      "fix": {
+       "median_us": 90.58232307434082,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 87.7405595779419,
+       "paired_change_pct": [
+        -3.0824349333445022,
+        -3.1909044156042343,
+        -1.8066232235534052
+       ],
+       "geomean_change_pct": -2.6953449182995137,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 128,
+      "fix": {
+       "median_us": 124.59191799163818,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 123.18967819213867,
+       "paired_change_pct": [
+        -1.1003218108629254,
+        -1.3822400468999407,
+        -1.3782440835741983
+       ],
+       "geomean_change_pct": -1.2870234683166615,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 512,
+      "fix": {
+       "median_us": 284.4781684875488,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 281.38360023498535,
+       "paired_change_pct": [
+        -0.8485096263804781,
+        -1.347003244887024,
+        -0.9045595820575514
+       ],
+       "geomean_change_pct": -1.0336088866209292,
+       "repeats_faster": 3
+      }
+     },
+     {
+      "tokens": 2048,
+      "fix": {
+       "median_us": 857.8529357910156,
+       "paired_change_pct": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "geomean_change_pct": 0.0,
+       "repeats_faster": 0
+      },
+      "head": {
+       "median_us": 856.1954498291016,
+       "paired_change_pct": [
+        -0.018028261904612375,
+        -0.3297879033012818,
+        -0.19321329947838972
+       ],
+       "geomean_change_pct": -0.18042470076164996,
+       "repeats_faster": 3
+      }
+     }
+    ],
+    "processes": [
+     {
+      "order": [
+       "fix",
+       "head"
+      ],
+      "median_us": {
+       "fix": {
+        "1": 77.92752027511597,
+        "32": 90.0275182723999,
+        "128": 124.56024169921875,
+        "512": 283.79159927368164,
+        "2048": 856.9613647460938
+       },
+       "head": {
+        "1": 76.27295970916748,
+        "32": 87.25247859954834,
+        "128": 123.18967819213867,
+        "512": 281.38360023498535,
+        "2048": 856.8068695068359
+       }
+      }
+     },
+     {
+      "order": [
+       "head",
+       "fix"
+      ],
+      "median_us": {
+       "head": {
+        "1": 76.04248046875,
+        "32": 87.7405595779419,
+        "128": 122.86975860595703,
+        "512": 280.64623832702637,
+        "2048": 855.1848602294922
+       },
+       "fix": {
+        "1": 77.60823965072632,
+        "32": 90.63255786895752,
+        "128": 124.59191799163818,
+        "512": 284.4781684875488,
+        "2048": 858.0144882202148
+       }
+      }
+     },
+     {
+      "order": [
+       "fix",
+       "head"
+      ],
+      "median_us": {
+       "fix": {
+        "1": 78.28640222549438,
+        "32": 90.58232307434082,
+        "128": 125.16799926757812,
+        "512": 284.56631660461426,
+        "2048": 857.8529357910156
+       },
+       "head": {
+        "1": 76.14752054214478,
+        "32": 88.9458417892456,
+        "128": 123.44287872314453,
+        "512": 281.992244720459,
+        "2048": 856.1954498291016
+       }
+      }
+     }
+    ],
+    "native_source_sha256": {
+     "fix": "79e997e2768553b955cc489b3ab795a9655989577a4d2ef735e70cdaf0017b16",
+     "head": "7d0e7f5c195f60015bc235de2cb0e1274b1b6527bdd16f3885a0e428d0045c06"
+    },
+    "pods": [
+     "afdep-v21-xb",
+     "afdep-v21-xc",
+     "afdep-v21-xa"
+    ]
+   },
+   "reading": "the previous (racy) layout was 1.0% faster at one token across two nodes and 1-2.7% faster up to 512 tokens on the three-pod layouts"
+  },
+  "gated_vs_previous_2_nodes": {
+   "arms": {
+    "gated": {
+     "_label": "gated"
+    },
+    "head": {
+     "_label": "head2"
+    }
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--tokens",
+    "1",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--capacity",
+    "2048",
+    "--hybrid",
+    "on",
+    "--warmup",
+    "50",
+    "--iterations",
+    "200",
+    "--blocks",
+    "2"
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "gated": {
+      "median_us": 70.49968004226685,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "head": {
+      "median_us": 70.34816026687622,
+      "paired_change_pct": [
+       0.1753551497348571,
+       -0.04232371715258143,
+       -0.7200834369470388
+      ],
+      "geomean_change_pct": -0.19641340436856725,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 32,
+     "gated": {
+      "median_us": 80.43295860290527,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "head": {
+      "median_us": 80.53624153137207,
+      "paired_change_pct": [
+       0.12840871486115013,
+       0.7505396942028009,
+       0.18554213446926315
+      ],
+      "geomean_change_pct": 0.3544378901723766,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "gated": {
+      "median_us": 102.60279655456543,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "head": {
+      "median_us": 102.2602367401123,
+      "paired_change_pct": [
+       -0.9047836582266822,
+       -0.0875183751858466,
+       -0.33386986120884643
+      ],
+      "geomean_change_pct": -0.44264636335356045,
+      "repeats_faster": 3
+     }
+    },
+    {
+     "tokens": 512,
+     "gated": {
+      "median_us": 199.5584774017334,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "head": {
+      "median_us": 199.76240158081055,
+      "paired_change_pct": [
+       0.1021876803893651,
+       0.159080297860692,
+       0.16003240533062346
+      ],
+      "geomean_change_pct": 0.1404298082533284,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 2048,
+     "gated": {
+      "median_us": 539.3632125854492,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "head": {
+      "median_us": 538.5598373413086,
+      "paired_change_pct": [
+       -0.09310363338272953,
+       -0.16376941114011334,
+       -0.17161643548126992
+      ],
+      "geomean_change_pct": -0.14283606763072498,
+      "repeats_faster": 3
+     }
+    }
+   ],
+   "processes": [
+    {
+     "order": [
+      "gated",
+      "head"
+     ],
+     "median_us": {
+      "gated": {
+       "1": 70.16520023345947,
+       "32": 80.43295860290527,
+       "128": 103.1495189666748,
+       "512": 199.5584774017334,
+       "2048": 539.3632125854492
+      },
+      "head": {
+       "1": 70.28823852539062,
+       "32": 80.53624153137207,
+       "128": 102.2162389755249,
+       "512": 199.76240158081055,
+       "2048": 538.8610458374023
+      }
+     }
+    },
+    {
+     "order": [
+      "head",
+      "gated"
+     ],
+     "median_us": {
+      "head": {
+       "1": 70.46984195709229,
+       "32": 81.10055923461914,
+       "128": 102.47136116027832,
+       "512": 199.96055603027344,
+       "2048": 538.014965057373
+      },
+      "gated": {
+       "1": 70.49968004226685,
+       "32": 80.4964017868042,
+       "128": 102.56112098693848,
+       "512": 199.64296340942383,
+       "2048": 538.8975143432617
+      }
+     }
+    },
+    {
+     "order": [
+      "gated",
+      "head"
+     ],
+     "median_us": {
+      "gated": {
+       "1": 70.85839986801147,
+       "32": 80.28319835662842,
+       "128": 102.60279655456543,
+       "512": 199.41463470458984,
+       "2048": 539.4856834411621
+      },
+      "head": {
+       "1": 70.34816026687622,
+       "32": 80.43215751647949,
+       "128": 102.2602367401123,
+       "512": 199.73376274108887,
+       "2048": 538.5598373413086
+      }
+     }
+    }
+   ],
+   "native_source_sha256": {
+    "gated": "a32a12d1936159ae521850e54fdc288b76de2254680810dd233dd39f0aaf4a7e",
+    "head": "7d0e7f5c195f60015bc235de2cb0e1274b1b6527bdd16f3885a0e428d0045c06"
+   },
+   "pods": [
+    "afdep-v21-xa",
+    "afdep-v21-xb"
+   ]
+  },
+  "gated_vs_first_fix_1F_2A": {
+   "arms": {
+    "gated": {
+     "_label": "gated"
+    },
+    "fix": {
+     "_label": "fix"
+    }
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--ffn-ranks",
+    "2",
+    "--attention-ranks",
+    "4",
+    "--tokens",
+    "1",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--capacity",
+    "2048",
+    "--hybrid",
+    "on",
+    "--warmup",
+    "50",
+    "--iterations",
+    "200",
+    "--blocks",
+    "2"
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "gated": {
+      "median_us": 85.87160110473633,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "fix": {
+      "median_us": 85.61880111694336,
+      "paired_change_pct": [
+       0.3576104961905413,
+       -0.2943930060004707,
+       -0.4412449344491365
+      ],
+      "geomean_change_pct": -0.12661174541297449,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 32,
+     "gated": {
+      "median_us": 103.94807815551758,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "fix": {
+      "median_us": 103.86303901672363,
+      "paired_change_pct": [
+       -0.2122915813118409,
+       0.8386525704360492,
+       -0.07089874983079447
+      ],
+      "geomean_change_pct": 0.18407397005235637,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 128,
+     "gated": {
+      "median_us": 139.80695724487305,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "fix": {
+      "median_us": 139.9455976486206,
+      "paired_change_pct": [
+       0.03951648160764876,
+       0.2095489290388386,
+       -0.021239561125963036
+      ],
+      "geomean_change_pct": 0.07589429861503127,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 512,
+     "gated": {
+      "median_us": 331.41592025756836,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "fix": {
+      "median_us": 332.0805549621582,
+      "paired_change_pct": [
+       0.2799623406964269,
+       0.13829271214635952,
+       -0.06239734609273517
+      ],
+      "geomean_change_pct": 0.1185206905062186,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 2048,
+     "gated": {
+      "median_us": 935.2957534790039,
+      "paired_change_pct": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "fix": {
+      "median_us": 934.09423828125,
+      "paired_change_pct": [
+       -0.17511879057071633,
+       -0.22509385572369034,
+       -0.08472513947168636
+      ],
+      "geomean_change_pct": -0.16166282698723,
+      "repeats_faster": 3
+     }
+    }
+   ],
+   "processes": [
+    {
+     "order": [
+      "gated",
+      "fix"
+     ],
+     "median_us": {
+      "gated": {
+       "1": 85.61215877532959,
+       "32": 104.08400058746338,
+       "128": 139.89031791687012,
+       "512": 331.15345001220703,
+       "2048": 935.7748794555664
+      },
+      "fix": {
+       "1": 85.91831684112549,
+       "32": 103.86303901672363,
+       "128": 139.9455976486206,
+       "512": 332.0805549621582,
+       "2048": 934.1361618041992
+      }
+     }
+    },
+    {
+     "order": [
+      "fix",
+      "gated"
+     ],
+     "median_us": {
+      "fix": {
+       "1": 85.61880111694336,
+       "32": 104.8198413848877,
+       "128": 140.09992122650146,
+       "512": 332.57335662841797,
+       "2048": 933.1904602050781
+      },
+      "gated": {
+       "1": 85.87160110473633,
+       "32": 103.94807815551758,
+       "128": 139.80695724487305,
+       "512": 332.1140670776367,
+       "2048": 935.2957534790039
+      }
+     }
+    },
+    {
+     "order": [
+      "gated",
+      "fix"
+     ],
+     "median_us": {
+      "gated": {
+       "1": 85.97432136535645,
+       "32": 103.91736030578613,
+       "128": 139.73144054412842,
+       "512": 331.41592025756836,
+       "2048": 934.8863220214844
+      },
+      "fix": {
+       "1": 85.59496402740479,
+       "32": 103.84368419647217,
+       "128": 139.70176219940186,
+       "512": 331.2091255187988,
+       "2048": 934.09423828125
+      }
+     }
+    }
+   ],
+   "native_source_sha256": {
+    "gated": "a32a12d1936159ae521850e54fdc288b76de2254680810dd233dd39f0aaf4a7e",
+    "fix": "79e997e2768553b955cc489b3ab795a9655989577a4d2ef735e70cdaf0017b16"
+   },
+   "pods": [
+    "afdep-v21-xa",
+    "afdep-v21-xb",
+    "afdep-v21-xc"
+   ]
+  },
+  "reading": "gated: two nodes within +/-0.4% of the previous layout (repeats split); three pods identical to the first fix; layouts where the race exists pay 1-2.7% at decode sizes"
+ },
+ "scope": "communication only; no serving claim"
+}

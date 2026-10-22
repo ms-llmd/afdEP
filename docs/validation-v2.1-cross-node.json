@@ -1,0 +1,335 @@
+{
+ "date": "2026-10-21",
+ "change": "role-aware buffers across NVLink domains (GIN required)",
+ "native_source_sha256": "3d68dba2908a071fa732163a66a697d010c62d6227e0868db2672dfb8683e199",
+ "topology": "2 waldorf nodes x 2 NVIDIA H200 (NVLink within a node), InfiniBand GIN between nodes; physical domain [2, 2]. Ranks 0-1 (FFN) on one node and 2-3 (Attention) on the other for 2A2F; 3:1 and 1:3 place both roles in one domain.",
+ "correctness": {
+  "runner": "tests.gpu.deepep across two pods (torchrun --nnodes 2)",
+  "cases": "BF16/FP8 x hybrid on/off x small/large (capacity 2048, H2048, top-k 8, 24 SMs), generic controls, --ffn-ranks 1 and 3 small and large (32 experts per FFN)",
+  "result": "14/14 pass",
+  "logs": [
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-bf16-direct-large-n0.log",
+    "log_sha256": "83e5c2803c55429098a76057d4bb379ed3bf4756da24ce86bd904b011c9bf660"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-bf16-direct-small-n0.log",
+    "log_sha256": "e94f40ecd84cfd63153ac5c0219c1d864b259790222c0484941de02aaba55de1"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-bf16-generic-n0.log",
+    "log_sha256": "d0f6dd5e5d04965c9e0824b34f894261d24df458e306405dbcdbe295a7c22073"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-bf16-hyb-large-n0.log",
+    "log_sha256": "e246bc5259385dd4dc9ad01f0e57e636dc7889b948b6a872b4bf0da21ceff425"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-bf16-hyb-small-n0.log",
+    "log_sha256": "60f79fd0882e186f4382aa745cd1beed379a2c149d847ada582191450e8d9e45"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-f1-hyb-large-n0.log",
+    "log_sha256": "4ce1e7172d0ad4553e12c9af0b922602a2991b8a20a111e4d83595273d0b61f3"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-f1-hyb-small-n0.log",
+    "log_sha256": "6bcdf045265cc7043fd94b1e419a81e7c43160bdf9735236ecc9740f6be1d83e"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-f3-hyb-large-n0.log",
+    "log_sha256": "9777317877f3fecc8e57034edde65fba4568cb66a186d32d3e18979bfcab7f2f"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-f3-hyb-small-n0.log",
+    "log_sha256": "1af315839775f72be1d8f0bc6d856ce6a1636b2a3a6a9813e0ebcc3250a5d8fc"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-fp8-direct-large-n0.log",
+    "log_sha256": "70c9ef0ca8bdaa78df61c5cfa677e051fba96896f48c80a00e3d4b68962ef3c0"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-fp8-direct-small-n0.log",
+    "log_sha256": "b7ec1843e08efe1777a2ec3d6a773eb0ae5f211e6487aa75281cc200d847b858"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-fp8-generic-n0.log",
+    "log_sha256": "3770229dbea00cf7acd0b861e9ac31ac392a6d172d25d5ec5728da657bf99ec3"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-fp8-hyb-large-n0.log",
+    "log_sha256": "379fcc50d0b1e4d73c5acbcf816da45f688ea73cce14ce623402fc22f2e558f8"
+   },
+   {
+    "pod": "afdep-v21-xa",
+    "log": "xp-fp8-hyb-small-n0.log",
+    "log_sha256": "044225a4ac6aa9c88f1997adf1e146d4fff7eb33bcdcff4d4cde7da74594da08"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-bf16-direct-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-bf16-direct-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-bf16-generic-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-bf16-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-bf16-hyb-small-n1.log",
+    "log_sha256": "26d9ca8138d75c5def09527b3412e804eb7c763c68ff3f5bf7d523f5298c09c1"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-f1-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-f1-hyb-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-f3-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-f3-hyb-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-fp8-direct-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-fp8-direct-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-fp8-generic-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-fp8-hyb-large-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "pod": "afdep-v21-xb",
+    "log": "xp-fp8-hyb-small-n1.log",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   }
+  ]
+ },
+ "latency": {
+  "note": "Paired comm-only screen, same native digest; scratch tree differed only by an environment gate on the removed Python check. Nodes were shared with other workloads.",
+  "passthrough": [
+   "--payload",
+   "bf16",
+   "--routing",
+   "random",
+   "--hidden",
+   "2048",
+   "--tokens",
+   "1",
+   "8",
+   "32",
+   "128",
+   "512",
+   "2048",
+   "--capacity",
+   "2048",
+   "--blocks",
+   "6",
+   "--hybrid",
+   "on"
+  ],
+  "processes": [
+   {
+    "order": [
+     "masked",
+     "afd"
+    ],
+    "median_us": {
+     "masked": {
+      "1": 88.27000141143799,
+      "8": 98.3522367477417,
+      "32": 103.84928226470947,
+      "128": 121.2824821472168,
+      "512": 216.22360229492188,
+      "2048": 550.0367164611816
+     },
+     "afd": {
+      "1": 89.11399841308594,
+      "8": 98.8916015625,
+      "32": 104.87895965576172,
+      "128": 122.24567890167236,
+      "512": 218.1980037689209,
+      "2048": 553.6791229248047
+     }
+    }
+   },
+   {
+    "order": [
+     "afd",
+     "masked"
+    ],
+    "median_us": {
+     "afd": {
+      "1": 88.99415969848633,
+      "8": 98.94711971282959,
+      "32": 105.18280029296875,
+      "128": 122.12303638458252,
+      "512": 218.34263801574707,
+      "2048": 554.4879913330078
+     },
+     "masked": {
+      "1": 88.15591812133789,
+      "8": 98.05319786071777,
+      "32": 104.22215938568115,
+      "128": 121.03408336639404,
+      "512": 215.58207511901855,
+      "2048": 550.6040000915527
+     }
+    }
+   },
+   {
+    "order": [
+     "masked",
+     "afd"
+    ],
+    "median_us": {
+     "masked": {
+      "1": 88.01904201507568,
+      "8": 98.44559669494629,
+      "32": 104.26392078399658,
+      "128": 120.96287727355957,
+      "512": 216.06815338134766,
+      "2048": 550.3884887695312
+     },
+     "afd": {
+      "1": 89.14455890655518,
+      "8": 99.5091199874878,
+      "32": 105.34063816070557,
+      "128": 122.23143577575684,
+      "512": 218.4182357788086,
+      "2048": 555.3876876831055
+     }
+    }
+   }
+  ],
+  "table": [
+   {
+    "tokens": 1,
+    "masked": {
+     "median_us": 88.156,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd": {
+     "median_us": 89.114,
+     "geomean_change_pct": 1.062,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 8,
+    "masked": {
+     "median_us": 98.352,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd": {
+     "median_us": 98.947,
+     "geomean_change_pct": 0.847,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 32,
+    "masked": {
+     "median_us": 104.222,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd": {
+     "median_us": 105.183,
+     "geomean_change_pct": 0.982,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 128,
+    "masked": {
+     "median_us": 121.034,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd": {
+     "median_us": 122.231,
+     "geomean_change_pct": 0.914,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 512,
+    "masked": {
+     "median_us": 216.068,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd": {
+     "median_us": 218.343,
+     "geomean_change_pct": 1.094,
+     "repeats_faster": 0
+    }
+   },
+   {
+    "tokens": 2048,
+    "masked": {
+     "median_us": 550.388,
+     "geomean_change_pct": 0.0,
+     "repeats_faster": 0
+    },
+    "afd": {
+     "median_us": 554.488,
+     "geomean_change_pct": 0.759,
+     "repeats_faster": 0
+    }
+   }
+  ]
+ },
+ "unsafe_scratch_attempts": [
+  "Removing both hybrid entry barriers (grid sync only): combine scale-up waits time out; hybrid combine clears scale-up tails before its barrier.",
+  "Keeping only the scale-up half of both entry barriers: small suite passed, but the capacity-2048 benchmark hit an illegal memory access. Hybrid dispatch still sends finish-flagged tails from every rank to every scale-out peer (FFN to Attention included) and dispatch and combine share the receive region, so the cross-node barrier is required until the hybrid protocol itself is made directional."
+ ]
+}

@@ -1,0 +1,591 @@
+{
+ "date": "2026-10-21",
+ "change": "per-CTA arrival release in directed exit (no sender grid sync)",
+ "native_source_sha256": "bd4db4da3bde4584d6679135eb23ff17d7553e3517d4e27b294701ad9b409670",
+ "scope": "4 x H100, 2A2F, one NVLink domain",
+ "correctness": {
+  "matrix": "BF16/FP8 direct/hybrid small, large and generic controls; 8 invalid-route assertions",
+  "ratios": "--ffn-ranks 1 and 3, BF16/FP8 small and large (32 experts per FFN)",
+  "result": "all pass",
+  "logs": [
+   {
+    "log": "matrix/bf16-direct-small.log",
+    "log_sha256": "c41fb44683b7042b3076f8960ff03046f2ac668a12bac504d5cd2ab4df36b924"
+   },
+   {
+    "log": "matrix/bf16-generic-control.log",
+    "log_sha256": "fa2e1fd2168f0b2a01cdbac2b0ddf22bf4f754f5a4d1b99e92b96efaa8eb95aa"
+   },
+   {
+    "log": "matrix/bf16-hybrid-small.log",
+    "log_sha256": "4dca56574a4f30a5902525f27f4ba47410ad59ab3da0ee9123e418fadefec108"
+   },
+   {
+    "log": "matrix/bf16-off-large.log",
+    "log_sha256": "08bf9b987f8fd5e9069c0b466ceb9ba4fd688b760027b9d6ace8121a5a7fb029"
+   },
+   {
+    "log": "matrix/bf16-on-large.log",
+    "log_sha256": "2c1e9a2bec82923411743d77b4c0c4c57aff0b75010eaf4d4da6bc6b0cfd26e4"
+   },
+   {
+    "log": "matrix/fp8-direct-small.log",
+    "log_sha256": "aab1b759ccece5d6d1b3b8ea2fb47c83a2fca4ceafeaedea75b9acf3e369c826"
+   },
+   {
+    "log": "matrix/fp8-generic-control.log",
+    "log_sha256": "0ec3d7596a0e1bd27db48a41dd032678bf165c1287a8e160590ac626f4b66296"
+   },
+   {
+    "log": "matrix/fp8-hybrid-small.log",
+    "log_sha256": "82f8cfc6dcb36473e80f81fe99fee9ea39ad4727e12440ea099bb7fbf4e391f2"
+   },
+   {
+    "log": "matrix/fp8-off-large.log",
+    "log_sha256": "e140990c819d2e8c6ecfdad712b237c628823f834399ad5c5dc548bd06e1d44c"
+   },
+   {
+    "log": "matrix/fp8-on-large.log",
+    "log_sha256": "e9929119f584cfb1f2b750396650886957e0b8672bf379b05fd3f808f3c93f40"
+   },
+   {
+    "log": "matrix/invalid-eager-dummy.log",
+    "log_sha256": "8e04deb3d2e466b12a4b2520f638c169fb287800af7a970609fc6c240d558269"
+   },
+   {
+    "log": "matrix/invalid-eager-duplicate.log",
+    "log_sha256": "d5cda895d2409b3c8d2f053ce5d649c26e843578d8a6f9368de7efe12c3295a6"
+   },
+   {
+    "log": "matrix/invalid-eager-negative.log",
+    "log_sha256": "c03ee12965c7d18c66f71af21e73fab096d681f22ea36140d85df10d282933f6"
+   },
+   {
+    "log": "matrix/invalid-eager-wide.log",
+    "log_sha256": "df946ff8f82f760322b8b2301887b26ef7261597763e91f6c65bc9c48cdc03a0"
+   },
+   {
+    "log": "matrix/invalid-graph-dummy.log",
+    "log_sha256": "036975087725e0c1061cd1bbaf1575ac68e6b0155346f403ebc1323f13d5ea8a"
+   },
+   {
+    "log": "matrix/invalid-graph-duplicate.log",
+    "log_sha256": "b172c01c6e95d068c9f8a232221dce1550ae081af5e9b6fb242ca920a608e38c"
+   },
+   {
+    "log": "matrix/invalid-graph-negative.log",
+    "log_sha256": "a7ff5dd1ef4a297e63566c81f52bc1206eeb7e173b15381a905a7515ca2a012d"
+   },
+   {
+    "log": "matrix/invalid-graph-wide.log",
+    "log_sha256": "47fa6997d56a0ac858a67dd389b708099780abc25264979a5459641f0f6f0909"
+   },
+   {
+    "log": "f1-bf16-large.log",
+    "log_sha256": "cf3f60bc462b20f4e4f28f344ce96457c71444da37b8d2aca92f113448475c7b"
+   },
+   {
+    "log": "f1-bf16-small.log",
+    "log_sha256": "c8681009edbe0ccefe83fb76c819ad9d4175e9e8858032c345f15107b0a876e7"
+   },
+   {
+    "log": "f1-fp8-large.log",
+    "log_sha256": "c2ecbe40a08bcb2ae365ad6f579faec199dc4c686d7367cba45b8a3fc3104426"
+   },
+   {
+    "log": "f1-fp8-small.log",
+    "log_sha256": "89719f31a5ed4c1e700388d7173098e6771fca84a48418f462319cb6976d8ff4"
+   },
+   {
+    "log": "f3-bf16-large.log",
+    "log_sha256": "d12f554c5f6f0262a23486a0cca949c738b5287eb4eb237bc457657ef8336ada"
+   },
+   {
+    "log": "f3-bf16-small.log",
+    "log_sha256": "1668b97d179f92febe712e2e708b12088a309ee82c5153db35015324f89acf7c"
+   },
+   {
+    "log": "f3-fp8-large.log",
+    "log_sha256": "05c5159c9c6f0a29c5cd5c647e94b4e141cafce85115fa0c31c18c2116a1e00f"
+   },
+   {
+    "log": "f3-fp8-small.log",
+    "log_sha256": "e49c251c41e3962e8f789f417ab644363a693366ede9afa690a0fc5daede8f0e"
+   },
+   {
+    "log": "quick.log",
+    "log_sha256": "76412f48b5e7168c5baaa5561810da8f0648defb7c02c2797e47411547f40193"
+   }
+  ]
+ },
+ "screens": [
+  {
+   "name": "h2048",
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--blocks",
+    "6"
+   ],
+   "processes": [
+    {
+     "order": [
+      "afd",
+      "grid_sync_exit",
+      "masked"
+     ],
+     "median_us": {
+      "afd": {
+       "1": 20.832239389419556,
+       "8": 24.94655966758728,
+       "32": 26.067999601364136,
+       "128": 35.39656043052673,
+       "512": 70.57384014129639,
+       "2048": 193.0519199371338
+      },
+      "grid_sync_exit": {
+       "1": 22.838159799575806,
+       "8": 26.838001012802124,
+       "32": 27.733759880065918,
+       "128": 36.96624040603638,
+       "512": 72.3420786857605,
+       "2048": 194.9127197265625
+      },
+      "masked": {
+       "1": 31.547119617462158,
+       "8": 34.320000410079956,
+       "32": 35.90999960899353,
+       "128": 44.530320167541504,
+       "512": 78.67599964141846,
+       "2048": 201.4132022857666
+      }
+     }
+    },
+    {
+     "order": [
+      "grid_sync_exit",
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "grid_sync_exit": {
+       "1": 22.656959295272827,
+       "8": 26.742559671401978,
+       "32": 28.234879970550537,
+       "128": 36.76991939544678,
+       "512": 72.2273588180542,
+       "2048": 194.5634365081787
+      },
+      "masked": {
+       "1": 31.3647198677063,
+       "8": 34.69480037689209,
+       "32": 35.599679946899414,
+       "128": 44.08015966415405,
+       "512": 78.62567901611328,
+       "2048": 200.88175773620605
+      },
+      "afd": {
+       "1": 20.571999549865723,
+       "8": 25.12943983078003,
+       "32": 26.21664047241211,
+       "128": 35.493279695510864,
+       "512": 70.64088106155396,
+       "2048": 192.28639602661133
+      }
+     }
+    },
+    {
+     "order": [
+      "masked",
+      "afd",
+      "grid_sync_exit"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 31.674399375915527,
+       "8": 36.028480529785156,
+       "32": 35.87727904319763,
+       "128": 44.30191993713379,
+       "512": 78.76303911209106,
+       "2048": 200.92360496520996
+      },
+      "afd": {
+       "1": 20.741440057754517,
+       "8": 25.946240425109863,
+       "32": 26.337599754333496,
+       "128": 35.54983973503113,
+       "512": 70.57584047317505,
+       "2048": 192.98968315124512
+      },
+      "grid_sync_exit": {
+       "1": 22.677680253982544,
+       "8": 26.236239671707153,
+       "32": 28.031519651412964,
+       "128": 36.97136044502258,
+       "512": 72.1290397644043,
+       "2048": 193.99663925170898
+      }
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "afd": {
+      "median_us": 20.741,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 22.678,
+      "geomean_change_pct": 9.699,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 31.547,
+      "geomean_change_pct": 52.202,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 8,
+     "afd": {
+      "median_us": 25.129,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 26.743,
+      "geomean_change_pct": 5.002,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 34.695,
+      "geomean_change_pct": 38.165,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "afd": {
+      "median_us": 26.217,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 28.032,
+      "geomean_change_pct": 6.838,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 35.877,
+      "geomean_change_pct": 36.586,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "afd": {
+      "median_us": 35.493,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 36.966,
+      "geomean_change_pct": 4.009,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 44.302,
+      "geomean_change_pct": 24.87,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "afd": {
+      "median_us": 70.576,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 72.227,
+      "geomean_change_pct": 2.317,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 78.676,
+      "geomean_change_pct": 11.461,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 2048,
+     "afd": {
+      "median_us": 192.99,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 194.563,
+      "geomean_change_pct": 0.89,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 200.924,
+      "geomean_change_pct": 4.304,
+      "repeats_faster": 0
+     }
+    }
+   ]
+  },
+  {
+   "name": "h4096",
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "4096",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--blocks",
+    "6"
+   ],
+   "processes": [
+    {
+     "order": [
+      "afd",
+      "grid_sync_exit",
+      "masked"
+     ],
+     "median_us": {
+      "afd": {
+       "1": 28.091039657592773,
+       "8": 37.10263967514038,
+       "32": 44.79343891143799,
+       "128": 61.13255977630615,
+       "512": 126.77992343902588,
+       "2048": 383.84639739990234
+      },
+      "grid_sync_exit": {
+       "1": 30.336079597473145,
+       "8": 38.98256063461304,
+       "32": 43.223280906677246,
+       "128": 63.44072103500366,
+       "512": 128.466796875,
+       "2048": 385.3357696533203
+      },
+      "masked": {
+       "1": 38.83311986923218,
+       "8": 46.43903970718384,
+       "32": 55.30616044998169,
+       "128": 68.83848190307617,
+       "512": 135.9064817428589,
+       "2048": 392.9755973815918
+      }
+     }
+    },
+    {
+     "order": [
+      "grid_sync_exit",
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "grid_sync_exit": {
+       "1": 30.43608069419861,
+       "8": 42.31175899505615,
+       "32": 48.01367998123169,
+       "128": 62.680559158325195,
+       "512": 129.0068817138672,
+       "2048": 384.9986267089844
+      },
+      "masked": {
+       "1": 38.55679988861084,
+       "8": 47.440481185913086,
+       "32": 56.02112054824829,
+       "128": 68.58832120895386,
+       "512": 136.16583824157715,
+       "2048": 393.1755828857422
+      },
+      "afd": {
+       "1": 28.62727999687195,
+       "8": 41.377198696136475,
+       "32": 46.350321769714355,
+       "128": 61.444878578186035,
+       "512": 127.11415767669678,
+       "2048": 383.3262252807617
+      }
+     }
+    },
+    {
+     "order": [
+      "masked",
+      "afd",
+      "grid_sync_exit"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 38.60856056213379,
+       "8": 48.096721172332764,
+       "32": 54.817681312561035,
+       "128": 68.87592077255249,
+       "512": 136.32887840270996,
+       "2048": 392.58544921875
+      },
+      "afd": {
+       "1": 28.37231993675232,
+       "8": 37.56432056427002,
+       "32": 43.51992130279541,
+       "128": 62.04655885696411,
+       "512": 127.44103908538818,
+       "2048": 383.4668731689453
+      },
+      "grid_sync_exit": {
+       "1": 30.340479612350464,
+       "8": 40.826239585876465,
+       "32": 47.95624017715454,
+       "128": 62.69943952560425,
+       "512": 128.7281608581543,
+       "2048": 385.1414489746094
+      }
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "afd": {
+      "median_us": 28.372,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 30.34,
+      "geomean_change_pct": 7.08,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 38.609,
+      "geomean_change_pct": 36.327,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 8,
+     "afd": {
+      "median_us": 37.564,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 40.826,
+      "geomean_change_pct": 5.304,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 47.44,
+      "geomean_change_pct": 22.481,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 32,
+     "afd": {
+      "median_us": 44.793,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 47.956,
+      "geomean_change_pct": 3.274,
+      "repeats_faster": 1
+     },
+     "masked": {
+      "median_us": 55.306,
+      "geomean_change_pct": 23.414,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 128,
+     "afd": {
+      "median_us": 61.445,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 62.699,
+      "geomean_change_pct": 2.273,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 68.838,
+      "geomean_change_pct": 11.744,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 512,
+     "afd": {
+      "median_us": 127.114,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 128.728,
+      "geomean_change_pct": 1.276,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 136.166,
+      "geomean_change_pct": 7.098,
+      "repeats_faster": 0
+     }
+    },
+    {
+     "tokens": 2048,
+     "afd": {
+      "median_us": 383.467,
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "grid_sync_exit": {
+      "median_us": 385.141,
+      "geomean_change_pct": 0.42,
+      "repeats_faster": 0
+     },
+     "masked": {
+      "median_us": 392.976,
+      "geomean_change_pct": 2.442,
+      "repeats_faster": 0
+     }
+    }
+   ]
+  }
+ ],
+ "arms": {
+  "afd": "role path with per-CTA exit",
+  "grid_sync_exit": "AFDEP_GRID_SYNC_EXIT=1",
+  "masked": "role_aware=False"
+ },
+ "history": "An earlier screen of this change (validation-v2.1-cta-exit-rejected.json) ran HEAD in both arms and is void; a tree-isolated re-run (PYTHONSAFEPATH=1, distinct digests 3d68dba2 vs 7f2dece7) first measured -9.4% at one token."
+}

@@ -7,6 +7,7 @@
 #include <deep_ep/common/math.cuh>
 #include <deep_ep/common/ptx.cuh>
 
+#include <deep_ep/impls/afdep_roles.cuh>
 #include <deep_ep/impls/combine_utils.cuh>
 
 
@@ -20,6 +21,14 @@ template <bool kIsScaleupNVLink,
           int kNumMaxTokensPerRank,
           int kNumExperts, int kNumTopk,
           int kNumQPs, int64_t kNumTimeoutCycles,
+          // afdEP: role path only; ordering proof in csrc/kernels/elastic/afdep_roles.hpp.
+          bool kAfdSkipEntryBarrier = false,
+          // afdEP: FFN ranks [0, kAfdDirectedFfnRanks) signal Attention receivers; 0 keeps the all-rank exit.
+          int kAfdDirectedFfnRanks = 0,
+          // afdEP: with directed exit, every FFN CTA releases its own arrival (no sender grid sync).
+          bool kAfdPerCtaExit = false,
+          // afdEP: with one FFN rank, every token's top-k rows are local, so all kNumTopk slots are valid.
+          bool kAfdSingleFfnReduce = false,
           int kNumThreads = kNumWarps * 32,
           int kNumHiddenBytes = kHidden * sizeof(nv_bfloat16),
           bool kUseRankLayout = use_rank_layout<kAllowMultipleReduction, kNumRanks, kNumTopk>(),
@@ -75,9 +84,11 @@ combine_impl(nv_bfloat16* x,
 
     // Full barrier to ensure the remote buffer is available
     const auto workspace_layout = layout::WorkspaceLayout(workspace, 1, kNumRanks, kNumExperts);
-    comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
-                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kCombineTag0, false, false, true>(
-        gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    if constexpr (not kAfdSkipEntryBarrier) {
+        comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
+                          kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kCombineTag0, false, false, true>(
+            gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    }
 
     // Do TMA writes into the remote buffers
     int num_tokens_per_warp = math::ceil_div(num_reduced_tokens, kNumSMs * kNumWarps);
@@ -154,7 +165,10 @@ combine_impl(nv_bfloat16* x,
 
             // Reduce into shared memory
             constexpr int kUnrollFactor = get_max_unroll_factor<kHiddenVec, 4>();
-            combine_reduce<kHiddenVec, kUnrollFactor, math::constexpr_ceil_div(kNumTopk, kNumRanks)>(
+            // The branch-free prefix is the expected valid-slot count: top-k / ranks for union
+            // ranks, but with one FFN rank (dummy Attention ranks hold no experts) all of top-k.
+            constexpr int kNumExpectedTopk = kAfdSingleFfnReduce ? kNumTopk : math::constexpr_ceil_div(kNumTopk, kNumRanks);
+            combine_reduce<kHiddenVec, kUnrollFactor, kNumExpectedTopk>(
                 lane_idx, topk_slot_idx, static_cast<combine_vec_t*>(tma_buffer.get_base_ptr()),
                 /* Get source base */ [=](const int& slot_idx) {
                     return math::advance_ptr<combine_vec_t>(
@@ -231,9 +245,24 @@ combine_impl(nv_bfloat16* x,
     }
 
     // Final barrier to ensure data arrival
-    comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
-                      kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kCombineTag1, true, true, false>(
-        gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    EP_STATIC_ASSERT(not kAfdPerCtaExit or kAfdDirectedFfnRanks > 0, "Per-CTA exit requires directed exit");
+    if constexpr (kAfdDirectedFfnRanks > 0) {
+        EP_STATIC_ASSERT(kIsScaleupNVLink, "Directed exit requires one NVLink domain");
+        // FFN ranks publish reply arrival to Attention ranks, which send nothing.
+        if (rank_idx < kAfdDirectedFfnRanks) {
+            afdep_signal_receivers<kNumRanks, team_t, kAfdPerCtaExit>(gin, workspace_layout, kAfdepCombinePhase, rank_idx,
+                                                      kAfdDirectedFfnRanks, kNumRanks - kAfdDirectedFfnRanks,
+                                                      sm_idx, thread_idx);
+        } else {
+            afdep_wait_senders<kNumRanks, kNumTimeoutCycles, kAfdPerCtaExit ? kNumSMs : 1>(
+                workspace_layout, kAfdepCombinePhase, rank_idx,
+                                                              0, kAfdDirectedFfnRanks, sm_idx, thread_idx);
+        }
+    } else {
+        comm::gpu_barrier<kIsScaleupNVLink, 1, kNumRanks,
+                          kNumSMs, kNumThreads, kNumQPs, kNumTimeoutCycles, comm::kCombineTag1, true, true, false>(
+            gin, workspace_layout, 0, rank_idx, sm_idx, thread_idx);
+    }
 }
 
 }  // deep_ep::elastic
