@@ -1,0 +1,1821 @@
+{
+ "date": "2026-10-22",
+ "question": "Is afdEP's Masked arm (vendored DeepEP V2 with role_aware=False) the same as Masked DeepEP as deployed by afd-plugin?",
+ "reference": "afd-plugin deepep_m2n DeepEPElasticBuffer (ms-llmd/afd-plugin fastafd-connector line, local checkout at 7cc7ebd): FastAFD 3c71619 DeepEP V2 snapshot plus the plugin's patches, specialize_roles off; copied into a scratch package 'pm' with only its import paths rewritten",
+ "afdep_native_source_sha256": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
+ "setup": "4 x H200 (kermit), BF16, hidden 2048, top-k 8 of 128 experts, capacity 2048, CUDA graphs, num_sms default (24), hybrid allowed (one NVLink domain), random routes with the same seeds; 3 interleaved fresh-process repeats per arm",
+ "driver": "\"\"\"Time afd-plugin's Masked DeepEP (deepep_m2n: FastAFD 3c71619 DeepEP V2 + plugin patches, specialize_roles off)\nexactly as afdEP's benchmarks/comm.py times its arms: same routes and seeds, bucket = tokens, warmup, iterations and\nblocks, CUDA graph replay, metric = per block max over Attention ranks of CUDA-event us per exchange.\nRun with torchrun; PYTHONPATH must contain the scratch package root holding `pm` (buffer.py, jit_build.py, layout.py, csrc/).\"\"\"\n\nimport argparse\nimport json\nimport os\nimport statistics\n\nimport torch\nimport torch.distributed as dist\n\nfrom pm.buffer import DeepEPElasticBuffer\nfrom pm.layout import DeepEPM2NLayout\n\n\ndef routes(args, rank, n):\n    \"\"\"Identical to afdEP benchmarks/comm.py routes() for --routing random.\"\"\"\n    source = max(rank - args.ffn_ranks, 0)\n    generator = torch.Generator(device=\"cuda\").manual_seed(args.routing_seed + source)\n    return torch.rand((n, args.experts), generator=generator, device=\"cuda\").topk(args.top_k, dim=1).indices\n\n\ndef timed(exchange, iterations):\n    start, end = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)\n    start.record()\n    for _ in range(iterations):\n        exchange()\n    end.record()\n    end.synchronize()\n    return start.elapsed_time(end) * 1000 / iterations\n\n\ndef main():\n    p = argparse.ArgumentParser()\n    p.add_argument(\"--ffn-ranks\", type=int, default=2)\n    p.add_argument(\"--attention-ranks\", type=int, default=2)\n    p.add_argument(\"--hidden\", type=int, default=2048)\n    p.add_argument(\"--experts\", type=int, default=128)\n    p.add_argument(\"--top-k\", type=int, default=8)\n    p.add_argument(\"--capacity\", type=int, default=2048)\n    p.add_argument(\"--tokens\", type=int, nargs=\"+\", default=[1, 8, 32, 128, 512, 2048])\n    p.add_argument(\"--hybrid\", choices=[\"on\", \"off\"], default=\"on\")\n    p.add_argument(\"--num-sms\", type=int, default=0)\n    p.add_argument(\"--routing-seed\", type=int, default=49001)\n    p.add_argument(\"--warmup\", type=int, default=200)\n    p.add_argument(\"--iterations\", type=int, default=200)\n    p.add_argument(\"--blocks\", type=int, default=10)\n    p.add_argument(\"--output\", required=True)\n    args = p.parse_args()\n    rank = int(os.environ[\"RANK\"])\n    torch.cuda.set_device(int(os.environ[\"LOCAL_RANK\"]))\n    dist.init_process_group(\"gloo\")\n    world = dist.get_world_size()\n    assert world == args.ffn_ranks + args.attention_ranks\n    layout = DeepEPM2NLayout(ffn_size=args.ffn_ranks, attn_size=args.attention_ranks, num_experts=args.experts)\n    buf = DeepEPElasticBuffer(\n        group=dist.group.WORLD, capacity_tokens_per_rank=args.capacity, hidden_size=args.hidden,\n        num_experts=layout.deepep_num_experts, top_k=args.top_k, allow_hybrid_mode=args.hybrid == \"on\",\n        rdma_traffic_class=0, cpu_timeout_s=120, gpu_timeout_s=120, use_fp8_dispatch=False, num_sms=args.num_sms)\n    ffn = rank < args.ffn_ranks\n    cells = []\n    for n in args.tokens:\n        if ffn:\n            x = torch.empty((0, args.hidden), dtype=torch.bfloat16, device=\"cuda\")\n            ids = torch.empty((0, args.top_k), dtype=torch.long, device=\"cuda\")\n            weights = torch.empty((0, args.top_k), device=\"cuda\")\n        else:\n            x = torch.ones((n, args.hidden), dtype=torch.bfloat16, device=\"cuda\")\n            ids = routes(args, rank, n)\n            weights = torch.full((n, args.top_k), 1 / args.top_k, device=\"cuda\")\n        state = {\"expert\": None, \"result\": None}\n\n        def step():\n            r = buf.dispatch(x, None, ids, weights, bucket=n, expert_alignment=128, do_cpu_sync=False)\n            if state[\"expert\"] is None:\n                # Filled once outside capture/timing: FFN rows contribute one each; Attention contributes zero rows.\n                fill = torch.ones if ffn else torch.zeros\n                state[\"expert\"] = fill(r.handle.recv_shape, dtype=torch.bfloat16, device=\"cuda\")\n            state[\"result\"] = buf.combine(state[\"expert\"], r.handle)\n\n        for _ in range(2):\n            step()\n        torch.cuda.synchronize()\n        dist.barrier()\n        graph = torch.cuda.CUDAGraph()\n        with torch.cuda.graph(graph):\n            step()\n        for _ in range(args.warmup):\n            graph.replay()\n        torch.cuda.synchronize()\n        if not ffn:\n            torch.testing.assert_close(state[\"result\"], torch.full_like(state[\"result\"], args.top_k), rtol=0, atol=0)\n        dist.barrier()\n        blocks = []\n        for _ in range(args.blocks):\n            dist.barrier()\n            us = timed(graph.replay, args.iterations)\n            gathered = [None] * world\n            dist.all_gather_object(gathered, {\"rank\": rank, \"attention\": not ffn, \"us\": us})\n            blocks.append(max(g[\"us\"] for g in gathered if g[\"attention\"]))\n        if not ffn:\n            torch.testing.assert_close(state[\"result\"], torch.full_like(state[\"result\"], args.top_k), rtol=0, atol=0)\n        del graph\n        torch.cuda.synchronize()\n        dist.barrier()\n        cells.append({\"tokens\": n, \"median_us\": statistics.median(blocks), \"blocks_us\": blocks})\n        if rank == 0:\n            print(json.dumps({\"tokens\": n, \"plugin_masked_us\": round(statistics.median(blocks), 2)}), flush=True)\n    if rank == 0:\n        json.dump({\"args\": vars(args), \"cells\": cells,\n                   \"metric\": \"per block: max Attention-rank CUDA-event us per exchange (as benchmarks/comm.py)\"},\n                  open(args.output, \"w\"), indent=1)\n    buf.destroy()\n    dist.destroy_process_group()\n\n\nif __name__ == \"__main__\":\n    main()\n",
+ "runner": "#!/usr/bin/env bash\n# pm-compare.sh: plugin Masked DeepEP (FastAFD snapshot) vs afdEP Masked arm vs afdEP role path, same pod, interleaved fresh processes.\nexport AFDEP_NCCL_ROOT=/work/nccl/nvidia/nccl LD_LIBRARY_PATH=/work/nccl/nvidia/nccl/lib LD_PRELOAD=/work/nccl/nvidia/nccl/lib/libnccl.so.2 \\\n  AFDEP_CACHE_DIR=/work/cache/afdep EP_JIT_CACHE_DIR=/work/cache/deepep-jit XDG_CACHE_HOME=/work/cache HOME=/work \\\n  EP_DISABLE_GIN=1 MAX_JOBS=16 OMP_NUM_THREADS=1 PYTHONSAFEPATH=1\nR=/work/results/pm; mkdir -p $R\nA='{\"masked\":{\"role_aware\":false},\"afd\":{}}'\nP=\"--payload bf16 --routing random --hidden 2048 --capacity 2048 --tokens 1 8 32 128 512 2048\"\nfor lay in \"2a2f 2 2\" \"3a1f 1 3\"; do set -- $lay; tag=$1 f=$2 a=$3\n  for r in 0 1 2; do\n    (cd /work/pm-root && PYTHONPATH=/work/pm-root:/work/nccl timeout 1800 torchrun --standalone --nproc-per-node=4 /work/pm_masked.py --ffn-ranks $f --attention-ranks $a --output $R/pm-$tag-r$r.json > $R/pm-$tag-r$r.log 2>&1)\n    (cd /work/src-cf && PYTHONPATH=/work/src-cf python -m benchmarks.screen --repeats 1 --arms \"$A\" --output $R/af-$tag-r$r.json -- $P --ffn-ranks $f --attention-ranks $a > $R/af-$tag-r$r.txt 2>&1)\n  done\ndone\necho done > $R/DONE\n",
+ "plugin_masked": {
+  "2a2f-r0": {
+   "args": {
+    "ffn_ranks": 2,
+    "attention_ranks": 2,
+    "hidden": 2048,
+    "experts": 128,
+    "top_k": 8,
+    "capacity": 2048,
+    "tokens": [
+     1,
+     8,
+     32,
+     128,
+     512,
+     2048
+    ],
+    "hybrid": "on",
+    "num_sms": 0,
+    "routing_seed": 49001,
+    "warmup": 200,
+    "iterations": 200,
+    "blocks": 10,
+    "output": "/work/results/pm/pm-2a2f-r0.json"
+   },
+   "cells": [
+    {
+     "tokens": 1,
+     "median_us": 28.21560025215149,
+     "blocks_us": [
+      29.595201015472412,
+      28.18416118621826,
+      28.268799781799316,
+      28.160319328308105,
+      28.267040252685547,
+      28.177599906921387,
+      28.247840404510498,
+      28.195359706878662,
+      28.235840797424316,
+      28.176000118255615
+     ]
+    },
+    {
+     "tokens": 8,
+     "median_us": 31.26680016517639,
+     "blocks_us": [
+      31.27135992050171,
+      31.266560554504395,
+      31.378560066223145,
+      31.419520378112793,
+      31.227200031280518,
+      31.26703977584839,
+      31.248319149017334,
+      31.16544008255005,
+      31.221280097961426,
+      31.292479038238525
+     ]
+    },
+    {
+     "tokens": 32,
+     "median_us": 32.321680784225464,
+     "blocks_us": [
+      32.61951923370361,
+      32.60224103927612,
+      32.274720668792725,
+      32.3305606842041,
+      32.16383934020996,
+      32.306880950927734,
+      32.35584020614624,
+      32.312800884246826,
+      32.248640060424805,
+      32.41600036621094
+     ]
+    },
+    {
+     "tokens": 128,
+     "median_us": 39.616079330444336,
+     "blocks_us": [
+      40.58512210845947,
+      40.15823841094971,
+      40.02352237701416,
+      39.988160133361816,
+      39.607839584350586,
+      39.624319076538086,
+      39.49343919754028,
+      39.47567939758301,
+      39.56559896469116,
+      39.35631990432739
+     ]
+    },
+    {
+     "tokens": 512,
+     "median_us": 73.23312044143677,
+     "blocks_us": [
+      73.45359802246094,
+      73.61487865447998,
+      73.43935966491699,
+      73.24384212493896,
+      73.15728187561035,
+      73.36544036865234,
+      73.07695865631104,
+      72.80240058898926,
+      72.95455932617188,
+      73.22239875793457
+     ]
+    },
+    {
+     "tokens": 2048,
+     "median_us": 191.42352104187012,
+     "blocks_us": [
+      191.73711776733398,
+      191.63328170776367,
+      191.70143127441406,
+      191.33920669555664,
+      191.38912200927734,
+      191.4276885986328,
+      191.3390350341797,
+      191.41935348510742,
+      191.86304092407227,
+      191.24895095825195
+     ]
+    }
+   ],
+   "metric": "per block: max Attention-rank CUDA-event us per exchange (as benchmarks/comm.py)"
+  },
+  "2a2f-r1": {
+   "args": {
+    "ffn_ranks": 2,
+    "attention_ranks": 2,
+    "hidden": 2048,
+    "experts": 128,
+    "top_k": 8,
+    "capacity": 2048,
+    "tokens": [
+     1,
+     8,
+     32,
+     128,
+     512,
+     2048
+    ],
+    "hybrid": "on",
+    "num_sms": 0,
+    "routing_seed": 49001,
+    "warmup": 200,
+    "iterations": 200,
+    "blocks": 10,
+    "output": "/work/results/pm/pm-2a2f-r1.json"
+   },
+   "cells": [
+    {
+     "tokens": 1,
+     "median_us": 28.16775918006897,
+     "blocks_us": [
+      29.97215986251831,
+      28.512160778045654,
+      28.213438987731934,
+      28.11408042907715,
+      28.1606388092041,
+      28.19295883178711,
+      28.13375949859619,
+      28.111999034881592,
+      28.140480518341064,
+      28.174879550933838
+     ]
+    },
+    {
+     "tokens": 8,
+     "median_us": 31.43712043762207,
+     "blocks_us": [
+      31.616640090942383,
+      31.431519985198975,
+      31.6046404838562,
+      31.442720890045166,
+      31.449599266052246,
+      31.570720672607422,
+      31.419999599456787,
+      31.43120050430298,
+      31.42159938812256,
+      31.40336036682129
+     ]
+    },
+    {
+     "tokens": 32,
+     "median_us": 32.14895963668823,
+     "blocks_us": [
+      32.01728105545044,
+      32.17952013015747,
+      32.12064027786255,
+      32.008960247039795,
+      32.03743934631348,
+      32.2324800491333,
+      32.22016096115112,
+      32.20383882522583,
+      32.177278995513916,
+      32.07535982131958
+     ]
+    },
+    {
+     "tokens": 128,
+     "median_us": 39.58552002906799,
+     "blocks_us": [
+      40.13728141784668,
+      40.03824234008789,
+      39.84911918640137,
+      39.70112085342407,
+      39.72111940383911,
+      39.469919204711914,
+      39.44000005722046,
+      39.29375886917114,
+      39.3939208984375,
+      39.17936086654663
+     ]
+    },
+    {
+     "tokens": 512,
+     "median_us": 73.16080093383789,
+     "blocks_us": [
+      73.15904140472412,
+      73.26015949249268,
+      73.21455955505371,
+      73.17759990692139,
+      73.01455974578857,
+      73.18528175354004,
+      73.16256046295166,
+      73.03423881530762,
+      72.81744003295898,
+      73.07744026184082
+     ]
+    },
+    {
+     "tokens": 2048,
+     "median_us": 191.42696380615234,
+     "blocks_us": [
+      191.53631210327148,
+      191.05392456054688,
+      191.32144927978516,
+      191.05039596557617,
+      191.68256759643555,
+      191.5398406982422,
+      191.49728775024414,
+      192.08623886108398,
+      191.35663986206055,
+      191.13632202148438
+     ]
+    }
+   ],
+   "metric": "per block: max Attention-rank CUDA-event us per exchange (as benchmarks/comm.py)"
+  },
+  "2a2f-r2": {
+   "args": {
+    "ffn_ranks": 2,
+    "attention_ranks": 2,
+    "hidden": 2048,
+    "experts": 128,
+    "top_k": 8,
+    "capacity": 2048,
+    "tokens": [
+     1,
+     8,
+     32,
+     128,
+     512,
+     2048
+    ],
+    "hybrid": "on",
+    "num_sms": 0,
+    "routing_seed": 49001,
+    "warmup": 200,
+    "iterations": 200,
+    "blocks": 10,
+    "output": "/work/results/pm/pm-2a2f-r2.json"
+   },
+   "cells": [
+    {
+     "tokens": 1,
+     "median_us": 27.899680137634277,
+     "blocks_us": [
+      29.233601093292236,
+      27.97840118408203,
+      27.90560007095337,
+      27.893760204315186,
+      28.01919937133789,
+      27.809278964996338,
+      27.974720001220703,
+      27.780160903930664,
+      27.790238857269287,
+      27.84640073776245
+     ]
+    },
+    {
+     "tokens": 8,
+     "median_us": 31.128079891204834,
+     "blocks_us": [
+      31.144800186157227,
+      31.14288091659546,
+      31.119039058685303,
+      31.217920780181885,
+      31.084160804748535,
+      31.089439392089844,
+      31.13408088684082,
+      31.2555193901062,
+      31.122078895568848,
+      31.0644793510437
+     ]
+    },
+    {
+     "tokens": 32,
+     "median_us": 32.55735993385315,
+     "blocks_us": [
+      32.52079963684082,
+      32.485759258270264,
+      32.5711989402771,
+      32.506399154663086,
+      32.5435209274292,
+      32.488319873809814,
+      32.67855882644653,
+      32.96528100967407,
+      32.87055969238281,
+      32.86911964416504
+     ]
+    },
+    {
+     "tokens": 128,
+     "median_us": 39.939119815826416,
+     "blocks_us": [
+      40.66751956939697,
+      40.29695987701416,
+      40.1475191116333,
+      39.945759773254395,
+      39.93247985839844,
+      40.2235221862793,
+      39.87488031387329,
+      39.60896015167236,
+      39.68015909194946,
+      39.70128059387207
+     ]
+    },
+    {
+     "tokens": 512,
+     "median_us": 73.35455894470215,
+     "blocks_us": [
+      73.45920085906982,
+      73.5433578491211,
+      73.47280025482178,
+      73.3134412765503,
+      73.3406400680542,
+      73.26255798339844,
+      73.23455810546875,
+      73.3684778213501,
+      73.61711978912354,
+      73.05247783660889
+     ]
+    },
+    {
+     "tokens": 2048,
+     "median_us": 191.26495361328125,
+     "blocks_us": [
+      191.06496810913086,
+      191.28911972045898,
+      190.95775604248047,
+      191.27487182617188,
+      191.80719375610352,
+      191.70560836791992,
+      191.54912948608398,
+      191.21135711669922,
+      191.10687255859375,
+      191.25503540039062
+     ]
+    }
+   ],
+   "metric": "per block: max Attention-rank CUDA-event us per exchange (as benchmarks/comm.py)"
+  },
+  "3a1f-r0": {
+   "args": {
+    "ffn_ranks": 1,
+    "attention_ranks": 3,
+    "hidden": 2048,
+    "experts": 128,
+    "top_k": 8,
+    "capacity": 2048,
+    "tokens": [
+     1,
+     8,
+     32,
+     128,
+     512,
+     2048
+    ],
+    "hybrid": "on",
+    "num_sms": 0,
+    "routing_seed": 49001,
+    "warmup": 200,
+    "iterations": 200,
+    "blocks": 10,
+    "output": "/work/results/pm/pm-3a1f-r0.json"
+   },
+   "cells": [
+    {
+     "tokens": 1,
+     "median_us": 32.32143998146057,
+     "blocks_us": [
+      34.198880195617676,
+      32.61183977127075,
+      32.300639152526855,
+      32.39120006561279,
+      32.394559383392334,
+      32.264320850372314,
+      32.30976104736328,
+      32.323360443115234,
+      32.29856014251709,
+      32.31951951980591
+     ]
+    },
+    {
+     "tokens": 8,
+     "median_us": 34.70639944076538,
+     "blocks_us": [
+      35.02464056015015,
+      34.96623992919922,
+      34.78832006454468,
+      34.73151922225952,
+      34.76736068725586,
+      34.68127965927124,
+      34.56784009933472,
+      34.51263904571533,
+      34.62575912475586,
+      34.4814395904541
+     ]
+    },
+    {
+     "tokens": 32,
+     "median_us": 39.074000120162964,
+     "blocks_us": [
+      39.60400104522705,
+      39.689600467681885,
+      39.23743963241577,
+      39.238879680633545,
+      39.03696060180664,
+      38.99967908859253,
+      38.85472059249878,
+      39.11103963851929,
+      38.78191947937012,
+      38.821918964385986
+     ]
+    },
+    {
+     "tokens": 128,
+     "median_us": 50.37567853927612,
+     "blocks_us": [
+      50.880799293518066,
+      50.80319881439209,
+      50.67535877227783,
+      50.39743900299072,
+      50.4750394821167,
+      50.35391807556152,
+      50.30496120452881,
+      50.15247821807861,
+      50.20415782928467,
+      50.31439781188965
+     ]
+    },
+    {
+     "tokens": 512,
+     "median_us": 110.30672073364258,
+     "blocks_us": [
+      110.29376029968262,
+      110.44143676757812,
+      110.31968116760254,
+      110.21759986877441,
+      110.34928321838379,
+      110.19904136657715,
+      110.2558422088623,
+      110.47136306762695,
+      110.28672218322754,
+      110.40528297424316
+     ]
+    },
+    {
+     "tokens": 2048,
+     "median_us": 341.37121200561523,
+     "blocks_us": [
+      340.90015411376953,
+      341.25118255615234,
+      341.3070297241211,
+      341.6795349121094,
+      341.3139343261719,
+      341.5273666381836,
+      341.44718170166016,
+      341.59423828125,
+      341.4284896850586,
+      341.22161865234375
+     ]
+    }
+   ],
+   "metric": "per block: max Attention-rank CUDA-event us per exchange (as benchmarks/comm.py)"
+  },
+  "3a1f-r1": {
+   "args": {
+    "ffn_ranks": 1,
+    "attention_ranks": 3,
+    "hidden": 2048,
+    "experts": 128,
+    "top_k": 8,
+    "capacity": 2048,
+    "tokens": [
+     1,
+     8,
+     32,
+     128,
+     512,
+     2048
+    ],
+    "hybrid": "on",
+    "num_sms": 0,
+    "routing_seed": 49001,
+    "warmup": 200,
+    "iterations": 200,
+    "blocks": 10,
+    "output": "/work/results/pm/pm-3a1f-r1.json"
+   },
+   "cells": [
+    {
+     "tokens": 1,
+     "median_us": 32.233359813690186,
+     "blocks_us": [
+      34.07711982727051,
+      32.45824098587036,
+      32.22032070159912,
+      32.18575954437256,
+      32.38607883453369,
+      32.34447956085205,
+      32.22879886627197,
+      32.1777606010437,
+      32.184319496154785,
+      32.2379207611084
+     ]
+    },
+    {
+     "tokens": 8,
+     "median_us": 35.600959062576294,
+     "blocks_us": [
+      35.8243203163147,
+      35.65232038497925,
+      35.68655967712402,
+      35.825440883636475,
+      35.63119888305664,
+      35.57071924209595,
+      35.417280197143555,
+      35.44111967086792,
+      35.445759296417236,
+      35.44640064239502
+     ]
+    },
+    {
+     "tokens": 32,
+     "median_us": 39.29327964782715,
+     "blocks_us": [
+      39.77535963058472,
+      39.47088003158569,
+      39.6395206451416,
+      39.252800941467285,
+      39.266560077667236,
+      39.327359199523926,
+      39.31999921798706,
+      39.01072025299072,
+      38.99983882904053,
+      39.10671949386597
+     ]
+    },
+    {
+     "tokens": 128,
+     "median_us": 50.53864002227783,
+     "blocks_us": [
+      50.933918952941895,
+      50.698561668395996,
+      50.57663917541504,
+      50.71455955505371,
+      50.46000003814697,
+      50.67200183868408,
+      50.500640869140625,
+      50.36416053771973,
+      50.37600040435791,
+      50.43504238128662
+     ]
+    },
+    {
+     "tokens": 512,
+     "median_us": 110.34952163696289,
+     "blocks_us": [
+      110.25312423706055,
+      110.31744003295898,
+      110.43760299682617,
+      110.37296295166016,
+      110.26384353637695,
+      110.37039756774902,
+      110.38224220275879,
+      110.09424209594727,
+      110.35200119018555,
+      110.34704208374023
+     ]
+    },
+    {
+     "tokens": 2048,
+     "median_us": 341.50768280029297,
+     "blocks_us": [
+      341.7001724243164,
+      341.33697509765625,
+      341.6334533691406,
+      341.45198822021484,
+      341.44847869873047,
+      341.6571044921875,
+      341.49024963378906,
+      341.65504455566406,
+      341.4780807495117,
+      341.5251159667969
+     ]
+    }
+   ],
+   "metric": "per block: max Attention-rank CUDA-event us per exchange (as benchmarks/comm.py)"
+  },
+  "3a1f-r2": {
+   "args": {
+    "ffn_ranks": 1,
+    "attention_ranks": 3,
+    "hidden": 2048,
+    "experts": 128,
+    "top_k": 8,
+    "capacity": 2048,
+    "tokens": [
+     1,
+     8,
+     32,
+     128,
+     512,
+     2048
+    ],
+    "hybrid": "on",
+    "num_sms": 0,
+    "routing_seed": 49001,
+    "warmup": 200,
+    "iterations": 200,
+    "blocks": 10,
+    "output": "/work/results/pm/pm-3a1f-r2.json"
+   },
+   "cells": [
+    {
+     "tokens": 1,
+     "median_us": 32.24928021430969,
+     "blocks_us": [
+      34.017438888549805,
+      32.44623899459839,
+      32.20047950744629,
+      32.20576047897339,
+      32.23632097244263,
+      32.27583885192871,
+      32.192161083221436,
+      32.2216010093689,
+      32.26223945617676,
+      32.26736068725586
+     ]
+    },
+    {
+     "tokens": 8,
+     "median_us": 36.07143998146057,
+     "blocks_us": [
+      36.3921594619751,
+      36.2993597984314,
+      36.121439933776855,
+      36.095359325408936,
+      36.03487968444824,
+      36.13503932952881,
+      36.04752063751221,
+      36.044960021972656,
+      35.99584102630615,
+      35.94239950180054
+     ]
+    },
+    {
+     "tokens": 32,
+     "median_us": 38.868480920791626,
+     "blocks_us": [
+      39.71168041229248,
+      39.28384065628052,
+      39.17504072189331,
+      39.033920764923096,
+      38.92352104187012,
+      38.813440799713135,
+      38.76496076583862,
+      38.70431900024414,
+      38.67919921875,
+      38.577120304107666
+     ]
+    },
+    {
+     "tokens": 128,
+     "median_us": 50.11096000671387,
+     "blocks_us": [
+      50.44320106506348,
+      50.34560203552246,
+      50.128960609436035,
+      50.16176223754883,
+      50.0929594039917,
+      50.01904010772705,
+      50.188961029052734,
+      50.039358139038086,
+      50.05296230316162,
+      49.97935771942139
+     ]
+    },
+    {
+     "tokens": 512,
+     "median_us": 109.9018383026123,
+     "blocks_us": [
+      109.89631652832031,
+      109.92079734802246,
+      109.91168022155762,
+      109.8744010925293,
+      109.86543655395508,
+      109.8971176147461,
+      109.90655899047852,
+      109.87135887145996,
+      109.99664306640625,
+      109.9510383605957
+     ]
+    },
+    {
+     "tokens": 2048,
+     "median_us": 341.0949516296387,
+     "blocks_us": [
+      341.0588836669922,
+      341.0300827026367,
+      341.1012649536133,
+      340.9017562866211,
+      341.0513687133789,
+      341.9740676879883,
+      341.18030548095703,
+      341.59488677978516,
+      341.08863830566406,
+      341.1240005493164
+     ]
+    }
+   ],
+   "metric": "per block: max Attention-rank CUDA-event us per exchange (as benchmarks/comm.py)"
+  }
+ },
+ "afdep_screens": {
+  "2a2f-r0": {
+   "arms": {
+    "masked": {
+     "role_aware": false
+    },
+    "afd": {}
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--capacity",
+    "2048",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--ffn-ranks",
+    "2",
+    "--attention-ranks",
+    "2"
+   ],
+   "processes": [
+    {
+     "order": [
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 28.036400079727173,
+       "8": 31.579760313034058,
+       "32": 31.992080211639404,
+       "128": 39.87040042877197,
+       "512": 73.80183935165405,
+       "2048": 191.5622329711914
+      },
+      "afd": {
+       "1": 19.76480007171631,
+       "8": 23.34656000137329,
+       "32": 23.706400394439697,
+       "128": 32.1780800819397,
+       "512": 66.79920196533203,
+       "2048": 184.4542407989502
+      }
+     },
+     "native_source_sha256": {
+      "masked": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
+      "afd": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "masked": {
+      "median_us": 28.036400079727173,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 19.76480007171631,
+      "paired_change_pct": [
+       -29.50307451915687
+      ],
+      "geomean_change_pct": -29.50307451915687,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 8,
+     "masked": {
+      "median_us": 31.579760313034058,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 23.34656000137329,
+      "paired_change_pct": [
+       -26.071129831414964
+      ],
+      "geomean_change_pct": -26.071129831414964,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 32,
+     "masked": {
+      "median_us": 31.992080211639404,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 23.706400394439697,
+      "paired_change_pct": [
+       -25.899159299385598
+      ],
+      "geomean_change_pct": -25.899159299385598,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 128,
+     "masked": {
+      "median_us": 39.87040042877197,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 32.1780800819397,
+      "paired_change_pct": [
+       -19.293310987870615
+      ],
+      "geomean_change_pct": -19.293310987870615,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 512,
+     "masked": {
+      "median_us": 73.80183935165405,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 66.79920196533203,
+      "paired_change_pct": [
+       -9.488432060555517
+      ],
+      "geomean_change_pct": -9.488432060555517,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 2048,
+     "masked": {
+      "median_us": 191.5622329711914,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 184.4542407989502,
+      "paired_change_pct": [
+       -3.7105394220948384
+      ],
+      "geomean_change_pct": -3.7105394220948384,
+      "repeats_faster": 1
+     }
+    }
+   ],
+   "pod": "afdep-v21-k4b",
+   "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  },
+  "2a2f-r1": {
+   "arms": {
+    "masked": {
+     "role_aware": false
+    },
+    "afd": {}
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--capacity",
+    "2048",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--ffn-ranks",
+    "2",
+    "--attention-ranks",
+    "2"
+   ],
+   "processes": [
+    {
+     "order": [
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 28.411920070648193,
+       "8": 31.57904028892517,
+       "32": 32.20687985420227,
+       "128": 40.08056163787842,
+       "512": 73.5645604133606,
+       "2048": 191.0691261291504
+      },
+      "afd": {
+       "1": 20.188239812850952,
+       "8": 23.169519901275635,
+       "32": 24.510960578918457,
+       "128": 32.67087936401367,
+       "512": 67.18143939971924,
+       "2048": 184.83448028564453
+      }
+     },
+     "native_source_sha256": {
+      "masked": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
+      "afd": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "masked": {
+      "median_us": 28.411920070648193,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 20.188239812850952,
+      "paired_change_pct": [
+       -28.944472029164146
+      ],
+      "geomean_change_pct": -28.944472029164146,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 8,
+     "masked": {
+      "median_us": 31.57904028892517,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 23.169519901275635,
+      "paired_change_pct": [
+       -26.63006953570648
+      ],
+      "geomean_change_pct": -26.63006953570648,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 32,
+     "masked": {
+      "median_us": 32.20687985420227,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 24.510960578918457,
+      "paired_change_pct": [
+       -23.89526495619124
+      ],
+      "geomean_change_pct": -23.89526495619124,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 128,
+     "masked": {
+      "median_us": 40.08056163787842,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 32.67087936401367,
+      "paired_change_pct": [
+       -18.486972165734763
+      ],
+      "geomean_change_pct": -18.486972165734763,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 512,
+     "masked": {
+      "median_us": 73.5645604133606,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 67.18143939971924,
+      "paired_change_pct": [
+       -8.676896834256176
+      ],
+      "geomean_change_pct": -8.676896834256176,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 2048,
+     "masked": {
+      "median_us": 191.0691261291504,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 184.83448028564453,
+      "paired_change_pct": [
+       -3.263031537230998
+      ],
+      "geomean_change_pct": -3.263031537230998,
+      "repeats_faster": 1
+     }
+    }
+   ],
+   "pod": "afdep-v21-k4b",
+   "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  },
+  "2a2f-r2": {
+   "arms": {
+    "masked": {
+     "role_aware": false
+    },
+    "afd": {}
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--capacity",
+    "2048",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--ffn-ranks",
+    "2",
+    "--attention-ranks",
+    "2"
+   ],
+   "processes": [
+    {
+     "order": [
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 28.36176037788391,
+       "8": 31.63032054901123,
+       "32": 32.5652801990509,
+       "128": 40.07784128189087,
+       "512": 74.09280061721802,
+       "2048": 191.67799949645996
+      },
+      "afd": {
+       "1": 19.767520427703857,
+       "8": 23.36535930633545,
+       "32": 24.351680278778076,
+       "128": 32.61631965637207,
+       "512": 66.83160066604614,
+       "2048": 184.37432289123535
+      }
+     },
+     "native_source_sha256": {
+      "masked": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
+      "afd": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "masked": {
+      "median_us": 28.36176037788391,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 19.767520427703857,
+      "paired_change_pct": [
+       -30.302209156529358
+      ],
+      "geomean_change_pct": -30.302209156529358,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 8,
+     "masked": {
+      "median_us": 31.63032054901123,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 23.36535930633545,
+      "paired_change_pct": [
+       -26.12986874372396
+      ],
+      "geomean_change_pct": -26.12986874372396,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 32,
+     "masked": {
+      "median_us": 32.5652801990509,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 24.351680278778076,
+      "paired_change_pct": [
+       -25.221953780432106
+      ],
+      "geomean_change_pct": -25.221953780432106,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 128,
+     "masked": {
+      "median_us": 40.07784128189087,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 32.61631965637207,
+      "paired_change_pct": [
+       -18.617573668795085
+      ],
+      "geomean_change_pct": -18.617573668795085,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 512,
+     "masked": {
+      "median_us": 74.09280061721802,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 66.83160066604614,
+      "paired_change_pct": [
+       -9.800142376430143
+      ],
+      "geomean_change_pct": -9.800142376430143,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 2048,
+     "masked": {
+      "median_us": 191.67799949645996,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 184.37432289123535,
+      "paired_change_pct": [
+       -3.810388581063784
+      ],
+      "geomean_change_pct": -3.810388581063784,
+      "repeats_faster": 1
+     }
+    }
+   ],
+   "pod": "afdep-v21-k4b",
+   "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  },
+  "3a1f-r0": {
+   "arms": {
+    "masked": {
+     "role_aware": false
+    },
+    "afd": {}
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--capacity",
+    "2048",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--ffn-ranks",
+    "1",
+    "--attention-ranks",
+    "3"
+   ],
+   "processes": [
+    {
+     "order": [
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 32.67255902290344,
+       "8": 35.266159772872925,
+       "32": 39.05464053153992,
+       "128": 50.29400110244751,
+       "512": 110.32632350921631,
+       "2048": 341.2740707397461
+      },
+      "afd": {
+       "1": 20.2292001247406,
+       "8": 21.74031972885132,
+       "32": 25.275440216064453,
+       "128": 37.09207892417908,
+       "512": 98.30272197723389,
+       "2048": 325.560245513916
+      }
+     },
+     "native_source_sha256": {
+      "masked": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
+      "afd": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "masked": {
+      "median_us": 32.67255902290344,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 20.2292001247406,
+      "paired_change_pct": [
+       -38.08504528047545
+      ],
+      "geomean_change_pct": -38.08504528047545,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 8,
+     "masked": {
+      "median_us": 35.266159772872925,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 21.74031972885132,
+      "paired_change_pct": [
+       -38.353594865823226
+      ],
+      "geomean_change_pct": -38.353594865823226,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 32,
+     "masked": {
+      "median_us": 39.05464053153992,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 25.275440216064453,
+      "paired_change_pct": [
+       -35.28185160057381
+      ],
+      "geomean_change_pct": -35.28185160057381,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 128,
+     "masked": {
+      "median_us": 50.29400110244751,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 37.09207892417908,
+      "paired_change_pct": [
+       -26.24949673694975
+      ],
+      "geomean_change_pct": -26.24949673694975,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 512,
+     "masked": {
+      "median_us": 110.32632350921631,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 98.30272197723389,
+      "paired_change_pct": [
+       -10.898216445124277
+      ],
+      "geomean_change_pct": -10.898216445124277,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 2048,
+     "masked": {
+      "median_us": 341.2740707397461,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 325.560245513916,
+      "paired_change_pct": [
+       -4.604459164380337
+      ],
+      "geomean_change_pct": -4.604459164380337,
+      "repeats_faster": 1
+     }
+    }
+   ],
+   "pod": "afdep-v21-k4b",
+   "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  },
+  "3a1f-r1": {
+   "arms": {
+    "masked": {
+     "role_aware": false
+    },
+    "afd": {}
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--capacity",
+    "2048",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--ffn-ranks",
+    "1",
+    "--attention-ranks",
+    "3"
+   ],
+   "processes": [
+    {
+     "order": [
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 32.21368074417114,
+       "8": 35.69775938987732,
+       "32": 39.10680055618286,
+       "128": 50.312559604644775,
+       "512": 110.07791996002197,
+       "2048": 341.18526458740234
+      },
+      "afd": {
+       "1": 20.25279998779297,
+       "8": 21.859439611434937,
+       "32": 25.558160543441772,
+       "128": 37.07823991775513,
+       "512": 98.15392017364502,
+       "2048": 325.6345748901367
+      }
+     },
+     "native_source_sha256": {
+      "masked": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
+      "afd": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "masked": {
+      "median_us": 32.21368074417114,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 20.25279998779297,
+      "paired_change_pct": [
+       -37.12981714622108
+      ],
+      "geomean_change_pct": -37.12981714622108,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 8,
+     "masked": {
+      "median_us": 35.69775938987732,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 21.859439611434937,
+      "paired_change_pct": [
+       -38.76523349072285
+      ],
+      "geomean_change_pct": -38.76523349072285,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 32,
+     "masked": {
+      "median_us": 39.10680055618286,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 25.558160543441772,
+      "paired_change_pct": [
+       -34.64522747974846
+      ],
+      "geomean_change_pct": -34.64522747974846,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 128,
+     "masked": {
+      "median_us": 50.312559604644775,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 37.07823991775513,
+      "paired_change_pct": [
+       -26.304206724692015
+      ],
+      "geomean_change_pct": -26.304206724692015,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 512,
+     "masked": {
+      "median_us": 110.07791996002197,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 98.15392017364502,
+      "paired_change_pct": [
+       -10.832326583485141
+      ],
+      "geomean_change_pct": -10.832326583485141,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 2048,
+     "masked": {
+      "median_us": 341.18526458740234,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 325.6345748901367,
+      "paired_change_pct": [
+       -4.557843292579234
+      ],
+      "geomean_change_pct": -4.557843292579234,
+      "repeats_faster": 1
+     }
+    }
+   ],
+   "pod": "afdep-v21-k4b",
+   "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  },
+  "3a1f-r2": {
+   "arms": {
+    "masked": {
+     "role_aware": false
+    },
+    "afd": {}
+   },
+   "passthrough": [
+    "--payload",
+    "bf16",
+    "--routing",
+    "random",
+    "--hidden",
+    "2048",
+    "--capacity",
+    "2048",
+    "--tokens",
+    "1",
+    "8",
+    "32",
+    "128",
+    "512",
+    "2048",
+    "--ffn-ranks",
+    "1",
+    "--attention-ranks",
+    "3"
+   ],
+   "processes": [
+    {
+     "order": [
+      "masked",
+      "afd"
+     ],
+     "median_us": {
+      "masked": {
+       "1": 32.26032018661499,
+       "8": 35.90512037277222,
+       "32": 39.07312035560608,
+       "128": 50.267438888549805,
+       "512": 110.11672019958496,
+       "2048": 341.0922431945801
+      },
+      "afd": {
+       "1": 19.88160014152527,
+       "8": 22.083359956741333,
+       "32": 25.175280570983887,
+       "128": 37.221280336380005,
+       "512": 98.20192337036133,
+       "2048": 325.62591552734375
+      }
+     },
+     "native_source_sha256": {
+      "masked": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
+      "afd": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663"
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "masked": {
+      "median_us": 32.26032018661499,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 19.88160014152527,
+      "paired_change_pct": [
+       -38.371348993075806
+      ],
+      "geomean_change_pct": -38.371348993075806,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 8,
+     "masked": {
+      "median_us": 35.90512037277222,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 22.083359956741333,
+      "paired_change_pct": [
+       -38.49523486491995
+      ],
+      "geomean_change_pct": -38.49523486491996,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 32,
+     "masked": {
+      "median_us": 39.07312035560608,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 25.175280570983887,
+      "paired_change_pct": [
+       -35.568799364210946
+      ],
+      "geomean_change_pct": -35.568799364210946,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 128,
+     "masked": {
+      "median_us": 50.267438888549805,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 37.221280336380005,
+      "paired_change_pct": [
+       -25.95349761322637
+      ],
+      "geomean_change_pct": -25.95349761322637,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 512,
+     "masked": {
+      "median_us": 110.11672019958496,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 98.20192337036133,
+      "paired_change_pct": [
+       -10.820152296243691
+      ],
+      "geomean_change_pct": -10.820152296243691,
+      "repeats_faster": 1
+     }
+    },
+    {
+     "tokens": 2048,
+     "masked": {
+      "median_us": 341.0922431945801,
+      "paired_change_pct": [
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "afd": {
+      "median_us": 325.62591552734375,
+      "paired_change_pct": [
+       -4.534353382645929
+      ],
+      "geomean_change_pct": -4.534353382645929,
+      "repeats_faster": 1
+     }
+    }
+   ],
+   "pod": "afdep-v21-k4b",
+   "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  }
+ },
+ "result": "afdEP's Masked arm matches the plugin's Masked DeepEP within -0.4..+1.2% (2A2F) and -0.2..+0.3% (3A:1F) at 1-2,048 tokens; the role path is 29.8% (2A2F) and 37.3% (3A:1F) faster at one token and 3.6% / 4.6% at 2,048",
+ "scope": "communication only; no serving claim"
+}
