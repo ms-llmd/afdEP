@@ -1,7 +1,7 @@
 {
  "date": "2026-10-22",
  "change": "opt-in sparse directional hybrid across NVLink domains: AFDEP_HYBRID_STAGGER, AFDEP_HYBRID_SPARSE_DISPATCH, AFDEP_HYBRID_SPARSE_COMBINE (docs/v2.1.md section 17); off by default",
- "decision": "opt-in until reviewed; recommended setting: all three switches. Communication-only evidence, no serving claim. Open: whether the same idea would speed up Masked (union hybrid) as well (unmeasured).",
+ "decision": "opt-in until reviewed; recommended setting: all three switches. Communication-only evidence, no serving claim. Open: whether the same idea would speed up Masked (union hybrid) as well (unmeasured). The DONE witness (7b8ed8b5) costs +6.5% (5 us) at 8 tokens on kermit 4F:20A and is within 1.2% elsewhere.",
  "native_source_sha256": {
   "control_v2_1": "958652a3538af7478544b8259a6f108b1838e1e14d77ea95e0940f8805218663",
   "stagger_only": "e551ab70f1ec7398fa1667f82150b72a2578e8c1ba5cb6acb79472ac1f64a2b7",
@@ -10,7 +10,8 @@
   "stagger_bound": "0c22f278c76b9b69adcf0f7541f12fda2fb7819907391031ac729b51613e9e39",
   "final": "200944ce4bd63f6ebc6a96000fbb062cc0b769956ea4fe4285be48a34d141464",
   "fault_collect_waits_channel_0_only": "f92c479c",
-  "final_agreement_gated": "2d22e5e93f92a26fab05812b2ef26a706f6e25186d8e0564f74b42899c01b72d"
+  "final_agreement_gated": "2d22e5e93f92a26fab05812b2ef26a706f6e25186d8e0564f74b42899c01b72d",
+  "done_witness": "7b8ed8b5"
  },
  "setup": "12 pods x 2 H200 (CoreWeave piggy, InfiniBand, NCCL GIN): 2 FFN ranks in one NVLink domain, 22 Attention ranks in 11 domains (11:1, directional hybrid), FP8, hidden 2048, top-k 8 of 128 experts, capacity 2048, 24 transport SMs (C = 192 channels), CUDA graphs; benchmarks.comm via cscreen (2 fresh processes per arm, rotated order, max over Attention ranks, each Attention rank's round trip checked, per-arm digest checked)",
  "screens": {
@@ -3067,6 +3068,244 @@
     }
    ],
    "setup": "kermit, 6 pods x 4 H200; FFN domain holds 2 FFN + 2 Attention GPUs (union hybrid)"
+  },
+  "done_witness_cost": {
+   "arms": {
+    "v21": {
+     "_label": "cf"
+    },
+    "pushed": {
+     "_label": "xd",
+     "_env": {
+      "AFDEP_HYBRID_STAGGER": "1",
+      "AFDEP_HYBRID_SPARSE_DISPATCH": "1",
+      "AFDEP_HYBRID_SPARSE_COMBINE": "1"
+     }
+    },
+    "fixed": {
+     "_label": "xg",
+     "_env": {
+      "AFDEP_HYBRID_STAGGER": "1",
+      "AFDEP_HYBRID_SPARSE_DISPATCH": "1",
+      "AFDEP_HYBRID_SPARSE_COMBINE": "1"
+     }
+    }
+   },
+   "processes": [
+    {
+     "order": [
+      "v21",
+      "pushed",
+      "fixed"
+     ],
+     "median_us": {
+      "v21": {
+       "1": 137.81936168670654,
+       "8": 155.59887886047363,
+       "32": 164.58264350891113,
+       "128": 235.0158405303955,
+       "512": 604.206714630127
+      },
+      "pushed": {
+       "1": 70.98775863647461,
+       "8": 77.19504117965698,
+       "32": 97.82240390777588,
+       "128": 229.29896354675293,
+       "512": 604.997673034668
+      },
+      "fixed": {
+       "1": 70.47032117843628,
+       "8": 82.65672206878662,
+       "32": 97.4519157409668,
+       "128": 226.35015487670898,
+       "512": 603.5747146606445
+      }
+     }
+    },
+    {
+     "order": [
+      "pushed",
+      "fixed",
+      "v21"
+     ],
+     "median_us": {
+      "pushed": {
+       "1": 70.54359912872314,
+       "8": 77.31247901916504,
+       "32": 97.43680000305176,
+       "128": 229.78928565979004,
+       "512": 604.94873046875
+      },
+      "fixed": {
+       "1": 70.91032028198242,
+       "8": 81.97304248809814,
+       "32": 97.87360191345215,
+       "128": 227.25296020507812,
+       "512": 604.1015243530273
+      },
+      "v21": {
+       "1": 138.24039936065674,
+       "8": 155.33055782318115,
+       "32": 164.6174430847168,
+       "128": 235.4413604736328,
+       "512": 604.4463920593262
+      }
+     }
+    }
+   ],
+   "table": [
+    {
+     "tokens": 1,
+     "v21": {
+      "median_us": 138.02988052368164,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "pushed": {
+      "median_us": 70.76567888259888,
+      "paired_change_pct": [
+       -48.492172821228664,
+       -48.970344808769504
+      ],
+      "geomean_change_pct": -48.731816293317046,
+      "repeats_faster": 2
+     },
+     "fixed": {
+      "median_us": 70.69032073020935,
+      "paired_change_pct": [
+       -48.86761894991889,
+       -48.70506696310694
+      ],
+      "geomean_change_pct": -48.78640744899055,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 8,
+     "v21": {
+      "median_us": 155.4647183418274,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "pushed": {
+      "median_us": 77.25376009941101,
+      "paired_change_pct": [
+       -50.388433551068054,
+       -50.22712845261725
+      ],
+      "geomean_change_pct": -50.30784645311562,
+      "repeats_faster": 2
+     },
+     "fixed": {
+      "median_us": 82.31488227844238,
+      "paired_change_pct": [
+       -46.87833056759659,
+       -47.22671209266417
+      ],
+      "geomean_change_pct": -47.0528078641129,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 32,
+     "v21": {
+      "median_us": 164.60004329681396,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "pushed": {
+      "median_us": 97.62960195541382,
+      "paired_change_pct": [
+       -40.563353569855984,
+       -40.81016071127528
+      ],
+      "geomean_change_pct": -40.686885513733316,
+      "repeats_faster": 2
+     },
+     "fixed": {
+      "median_us": 97.66275882720947,
+      "paired_change_pct": [
+       -40.78846124762215,
+       -40.5448170744071
+      ],
+      "geomean_change_pct": -40.666764222499566,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 128,
+     "v21": {
+      "median_us": 235.22860050201416,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "pushed": {
+      "median_us": 229.54412460327148,
+      "paired_change_pct": [
+       -2.4325496403733604,
+       -2.4006295251066345
+      ],
+      "geomean_change_pct": -2.4165908878975073,
+      "repeats_faster": 2
+     },
+     "fixed": {
+      "median_us": 226.80155754089355,
+      "paired_change_pct": [
+       -3.6872772635790696,
+       -3.4778937108085994
+      ],
+      "geomean_change_pct": -3.5826423253248363,
+      "repeats_faster": 2
+     }
+    },
+    {
+     "tokens": 512,
+     "v21": {
+      "median_us": 604.3265533447266,
+      "paired_change_pct": [
+       0.0,
+       0.0
+      ],
+      "geomean_change_pct": 0.0,
+      "repeats_faster": 0
+     },
+     "pushed": {
+      "median_us": 604.973201751709,
+      "paired_change_pct": [
+       0.13090857572233272,
+       0.0831071896570279
+      ],
+      "geomean_change_pct": 0.10700502952711854,
+      "repeats_faster": 0
+     },
+     "fixed": {
+      "median_us": 603.8381195068359,
+      "paired_change_pct": [
+       -0.10459995795798482,
+       -0.057055135216188546
+      ],
+      "geomean_change_pct": -0.08083037451057651,
+      "repeats_faster": 2
+     }
+    }
+   ],
+   "setup": "kermit 6 x 4 H200, 4 FFN + 20 Attention ranks, FP8, hidden 2048, top-8 of 128, capacity 2048, 24 SMs, all three switches"
   }
  },
  "gpu_suite": {
@@ -3091,5 +3330,10 @@
   "rejected_2d22e5e9": "kermit, all three switches with FFN-only AFDEP_SHARED_HYBRID_FORWARD=1: agreement ValueError on all 6 pods"
  },
  "unit": "tests/unit 41/41 on 200944ce and 2d22e5e9; Ruff check and format clean",
- "scope": "Directional hybrid only (one role per NVLink domain, afd_ffn_scaleout_ranks > 0). Not screened: union hybrid, BF16, other hidden sizes. Shared kernels and every default unchanged."
+ "scope": "Directional hybrid only (one role per NVLink domain, afd_ffn_scaleout_ranks > 0). Not screened: union hybrid, BF16, other hidden sizes. Shared kernels and every default unchanged.",
+ "done_witness": {
+  "finding": "The channel-0 witness of the sparse combine followed channel 0's forward warp only; a source that waits for its own channels and channel 0 could write its next dispatch into a forwarder's dispatch scale-out inbox while other forward warps still read the overlapping combine scale-up inbox (found by an independent design review). Fixed: every forward warp releases a rank-local DONE count and channel 0 waits for all C before the witness.",
+  "fault_injection": "Three runs on kermit 4F:20A (FP8, hidden 2048, capacity 2048, 24 SMs, all three switches; GPU suite with a one-small-source case): forward warps of channels 5 mod 8, then of every channel but 0, delayed ~200 us before their reads; mixed then spread routing. The tree without DONE (2d22e5e9 + fault) passed all three, so the gap is argued from the layout and the code, not reproduced. The tree with DONE passed with and without the fault.",
+  "gpu_suite_7b8ed8b5": "kermit 4F:20A, all three switches, capacity 2048, hidden 2048, FP8, 24 SMs, with the one-small-source case (spread routing): passes on 24 ranks"
+ }
 }

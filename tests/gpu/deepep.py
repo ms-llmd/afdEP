@@ -53,6 +53,12 @@ def inputs(case: Case, source: int, rows: int, config: Config):
     if case.routing == "skew":
         ids = (tokens[:, None] + slots) % config.experts_per_rank
         ids = torch.where(slots < config.experts_per_rank, ids, -1)
+    elif case.routing == "spread":
+        # Top-k experts a stride apart: a token reaches every FFN rank (top_k >= F).
+        stride = max(1, config.num_experts // config.top_k)
+        ids = (
+            tokens[:, None] + slots * stride + source + case.epoch
+        ) % config.num_experts
     else:
         ids = (tokens[:, None] + slots + source + case.epoch) % config.num_experts
     weights = (
@@ -484,6 +490,10 @@ def main() -> None:
     # Source 1 (or the only source) is inactive; prefixes differ per source.
     inactive = tuple(0 if i == min(1, sources - 1) else n for i in range(sources))
     prefix = tuple(min((3, 1, 2)[i % 3], n) for i in range(sources))
+    # Source 0 has one token and the rest are full: with sparse combine it waits on few
+    # channels (with the stagger, only channel 0) while its rail forwarder still reduces
+    # the full sources' rows, and its next dispatch lands low in the forwarder's inbox.
+    one_small = tuple(1 if i == 0 else n for i in range(sources))
     cases = [
         Case("mixed", full, 1),
         Case("changed_routes", full, 2),
@@ -492,6 +502,7 @@ def main() -> None:
         Case("all_skipped", full, 5, "skip"),
         Case("all_empty", empty, 6),
         Case("partial_prefix", prefix, 7),
+        Case("one_small_source", one_small, 8, "spread"),
     ]
     for host_counts in (False, True):
         for case in cases:

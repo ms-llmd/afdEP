@@ -577,11 +577,21 @@ FFN_SPARSE_HYBRID_DISPATCH_EDITS = (
 
 # Sparse combine, FFN: signal a source on a channel only if this channel replied to it
 # (it received the source's tokens there in dispatch), and on channel 0 always.
+# Channel 0's signal is the done witness, so it must also certify that every forward
+# warp of this rank has finished reading the combine scale-up inbox: that inbox can
+# overlap the dispatch inbox a source writes next, and a source waits only for its own
+# channels and channel 0. Each forward warp releases a rank-local DONE count, and
+# channel 0 waits for all C first.
 FFN_SPARSE_HYBRID_COMBINE_EDITS = (
     (
         "#pragma once\n",
         "#pragma once  // afdEP: generated from hybrid_combine.cuh by "
         "tests/role_kernels.py; do not edit\n",
+    ),
+    (
+        "#include <deep_ep/impls/combine_utils.cuh>\n",
+        "#include <deep_ep/impls/combine_utils.cuh>\n"
+        "#include <deep_ep/impls/afdep_sparse_hybrid.cuh>\n",
     ),
     ("hybrid_combine_impl(", "afdep_ffn_sparse_hybrid_combine_impl("),
     (
@@ -602,6 +612,35 @@ FFN_SPARSE_HYBRID_COMBINE_EDITS = (
         "            if (src_token_global_idx < 0)\n                break;\n",
         "            if (src_token_global_idx < 0)\n                break;\n"
         "            afd_replied_domains |= 1u << src_scaleout_rank_idx;\n",
+    ),
+    (
+        "        // Update, wait and clean\n",
+        "        // afdEP sparse combine: this warp has read its last partial;"
+        " channel 0's witness\n"
+        "        // waits for every forward warp of this rank\n"
+        "        if (ptx::elect_one_sync())\n"
+        "            ptx::red_add_rel_sys(afdep_sparse_done_ptr(workspace_layout),"
+        " 1);\n"
+        "        __syncwarp();\n"
+        "        if (channel_idx == 0) {\n"
+        "            const auto done_ptr = afdep_sparse_done_ptr(workspace_layout);\n"
+        "            comm::timeout_while<kNumTimeoutCycles>([=](const bool&"
+        " is_last_check) {\n"
+        "                if (ptx::ld_acquire_sys<int>(done_ptr) == kNumChannels)\n"
+        "                    return true;\n"
+        "                if (is_last_check)\n"
+        '                    printf("afdEP sparse combine done-witness timeout,'
+        " scale-out: "
+        '%d, scale-up: %d\\n",\n'
+        "                           scaleout_rank_idx, scaleup_rank_idx);\n"
+        "                return false;\n"
+        "            });\n"
+        "            __syncwarp();\n"
+        "            if (lane_idx == 0)\n"
+        "                *done_ptr = 0;\n"
+        "        }\n"
+        "        __syncwarp();\n\n"
+        "        // Update, wait and clean\n",
     ),
     (
         "            if (afd_signal) {\n",

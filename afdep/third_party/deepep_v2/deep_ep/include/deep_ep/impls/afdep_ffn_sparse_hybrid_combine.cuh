@@ -5,6 +5,7 @@
 #include <deep_ep/common/math.cuh>
 #include <deep_ep/common/ptx.cuh>
 #include <deep_ep/impls/combine_utils.cuh>
+#include <deep_ep/impls/afdep_sparse_hybrid.cuh>
 
 namespace deep_ep::elastic {
 
@@ -603,6 +604,27 @@ afdep_ffn_sparse_hybrid_combine_impl(nv_bfloat16* x,
             const auto k = j * 32 + lane_idx;
             if (j < (kNumScaleupRanksPerLane - 1) or k < kNumScaleupRanks)
                 *workspace_layout.get_channel_scaleup_tail_ptr(channel_idx, k) = 0;
+        }
+        __syncwarp();
+
+        // afdEP sparse combine: this warp has read its last partial; channel 0's witness
+        // waits for every forward warp of this rank
+        if (ptx::elect_one_sync())
+            ptx::red_add_rel_sys(afdep_sparse_done_ptr(workspace_layout), 1);
+        __syncwarp();
+        if (channel_idx == 0) {
+            const auto done_ptr = afdep_sparse_done_ptr(workspace_layout);
+            comm::timeout_while<kNumTimeoutCycles>([=](const bool& is_last_check) {
+                if (ptx::ld_acquire_sys<int>(done_ptr) == kNumChannels)
+                    return true;
+                if (is_last_check)
+                    printf("afdEP sparse combine done-witness timeout, scale-out: %d, scale-up: %d\n",
+                           scaleout_rank_idx, scaleup_rank_idx);
+                return false;
+            });
+            __syncwarp();
+            if (lane_idx == 0)
+                *done_ptr = 0;
         }
         __syncwarp();
 

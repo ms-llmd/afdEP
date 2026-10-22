@@ -22,19 +22,26 @@ namespace deep_ep::elastic {
 //   SENT(c)    Attention  bit f: this rank's dispatch put a token for FFN domain f on channel c;
 //                         written for every channel by the source dispatch, read by the collect
 //                         (sparse combine: the FFN replies, and signals, on exactly those channels)
+//   DONE       FFN        sparse combine: forward warps that finished reading this rank's combine
+//                         scale-up inbox; channel 0's warp waits for all C, clears it, then sends
+//                         the witness (an int on its own 128-byte line)
 constexpr int64_t kAfdSparseRegionWords =
     static_cast<int64_t>(layout::WorkspaceLayout::kNumMaxRanks) * deep_ep::kNumMaxChannels;
 constexpr int kAfdSparseMaxDomains = 32;
 constexpr int64_t kAfdSparseTokens = kAfdSparseRegionWords - 4096;
 constexpr int64_t kAfdSparseSent = kAfdSparseTokens + kAfdSparseMaxDomains;
+constexpr int64_t kAfdSparseDone = kAfdSparseSent + deep_ep::kNumMaxChannels;
 EP_STATIC_ASSERT(kAfdSparseTokens >= static_cast<int64_t>(deep_ep::kNumMaxChannels) * kAfdSparseMaxDomains,
                  "Sparse hybrid words overlap the hybrid tails");
-EP_STATIC_ASSERT(kAfdSparseSent + deep_ep::kNumMaxChannels <= kAfdSparseRegionWords,
-                 "Sparse hybrid words exceed the signaled-tail region");
+EP_STATIC_ASSERT(kAfdSparseDone + 16 <= kAfdSparseRegionWords, "Sparse hybrid words exceed the signaled-tail region");
 
 __device__ __forceinline__ int64_t* afdep_sparse_tokens_ptr(const layout::WorkspaceLayout& workspace,
                                                              const int domain) {
     return workspace.get_scaleout_channel_signaled_tail_ptr(0, 0) + kAfdSparseTokens + domain;
+}
+
+__device__ __forceinline__ int* afdep_sparse_done_ptr(const layout::WorkspaceLayout& workspace) {
+    return reinterpret_cast<int*>(workspace.get_scaleout_channel_signaled_tail_ptr(0, 0) + kAfdSparseDone);
 }
 
 __device__ __forceinline__ int64_t* afdep_sparse_sent_ptr(const layout::WorkspaceLayout& workspace,
